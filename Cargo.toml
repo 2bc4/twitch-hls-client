@@ -1,0 +1,24 @@
+[package]
+name = "twitch-hls-client"
+version = "0.2.0"
+authors = ["2bc4 <119853089+2bc4@users.noreply.github.com>"]
+description = "Lightweight CLI client for watching low latency Twitch streams with ad blocking"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/2bc4/twitch-hls-client"
+categories = ["command-line-utilities, multimedia::video"]
+edition = "2021"
+
+[profile.release]
+codegen-units = 1
+lto = true
+panic = "abort"
+
+[dependencies]
+anyhow = "1.0.70"
+clap = { version = "4.2.1", features = ["derive"] }
+is-terminal = "0.4.6"
+log = "0.4.17"
+percent-encoding = "2.2.0"
+simplelog = "0.12.1"
+ureq = { version = "2.6.2", features = ["native-certs"] }
+url = "2.3.1"
