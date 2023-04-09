@@ -29,13 +29,14 @@ use clap::Parser;
 use is_terminal::IsTerminal;
 use log::{info, warn};
 use simplelog::{ColorChoice, ConfigBuilder, LevelFilter, TermLogger, TerminalMode};
+use ureq::AgentBuilder;
 
 mod iothread;
 mod playlist;
 use iothread::IOThread;
 use playlist::{MediaPlaylist, PlaylistError};
 
-pub(crate) const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36";
+const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36";
 
 #[derive(Parser)]
 #[command(version, next_line_help = true)]
@@ -124,9 +125,13 @@ fn main() -> Result<()> {
     }
 
     let player_args = args.player_args.unwrap_or_default();
+    let agent = AgentBuilder::new().user_agent(USER_AGENT).build();
     loop {
-        let io_thread = IOThread::new(spawn_player_or_stdout(&args.player_path, &player_args)?)?;
-        let playlist = MediaPlaylist::new(&args.server, &args.channel, &args.quality)?;
+        let io_thread = IOThread::new(
+            &agent,
+            spawn_player_or_stdout(&args.player_path, &player_args)?,
+        )?;
+        let playlist = MediaPlaylist::new(&agent, &args.server, &args.channel, &args.quality)?;
 
         let mut segment = playlist.catch_up()?;
         io_thread.send_url(&segment.url)?;

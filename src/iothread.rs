@@ -23,9 +23,7 @@ use std::{
 
 use anyhow::{bail, Context, Result};
 use log::{error, info};
-use ureq::AgentBuilder;
-
-use crate::USER_AGENT;
+use ureq::Agent;
 
 enum ExitReason {
     Killed,
@@ -37,21 +35,24 @@ pub struct IOThread {
 }
 
 impl IOThread {
-    pub fn new(pipe: Box<dyn Write + Send>) -> Result<Self> {
+    pub fn new(agent: &Agent, pipe: Box<dyn Write + Send>) -> Result<Self> {
         let (url_sender, url_receiver): (Sender<String>, Receiver<String>) = channel();
 
+        let agent = agent.clone(); //ureq uses an ARC to store state
         thread::Builder::new()
             .name("IO Thread".to_owned())
-            .spawn(move || match Self::thread_main(pipe, &url_receiver) {
-                Ok(reason) => match reason {
-                    ExitReason::Killed => (),
-                    ExitReason::PipeClosed => process::exit(0),
+            .spawn(
+                move || match Self::thread_main(&agent, pipe, &url_receiver) {
+                    Ok(reason) => match reason {
+                        ExitReason::Killed => (),
+                        ExitReason::PipeClosed => process::exit(0),
+                    },
+                    Err(e) => {
+                        error!("Error: {}", e);
+                        process::exit(1);
+                    }
                 },
-                Err(e) => {
-                    error!("Error: {}", e);
-                    process::exit(1);
-                }
-            })
+            )
             .context("Error spawning IO thread")?;
 
         Ok(Self { url_sender })
@@ -66,11 +67,10 @@ impl IOThread {
     }
 
     fn thread_main(
+        agent: &Agent,
         mut pipe: Box<dyn Write + Send>,
         url_receiver: &Receiver<String>,
     ) -> Result<ExitReason> {
-        let agent = AgentBuilder::new().user_agent(USER_AGENT).build();
-
         loop {
             let Ok(url) = url_receiver.recv() else { return Ok(ExitReason::Killed) };
 

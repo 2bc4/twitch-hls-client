@@ -18,10 +18,8 @@ use std::fmt;
 use anyhow::{anyhow, bail, Context, Result};
 use log::{error, info};
 use percent_encoding::{percent_encode, AsciiSet, CONTROLS};
-use ureq::{Agent, AgentBuilder, Error};
+use ureq::{Agent, Error};
 use url::Url;
-
-use crate::USER_AGENT;
 
 #[derive(Debug)]
 pub enum PlaylistError {
@@ -81,13 +79,13 @@ pub struct MediaPlaylist {
 }
 
 impl MediaPlaylist {
-    pub fn new(server: &str, channel: &str, quality: &str) -> Result<Self> {
+    pub fn new(agent: &Agent, server: &str, channel: &str, quality: &str) -> Result<Self> {
         //TODO: Store for fallback servers on discontinuity
         let master_playlist = MasterPlaylist::new(server, channel, quality)?;
 
         Ok(Self {
-            agent: AgentBuilder::new().user_agent(USER_AGENT).build(),
-            url: master_playlist.fetch()?,
+            agent: agent.clone(), //ureq uses an ARC to store state
+            url: master_playlist.fetch(agent)?,
         })
     }
 
@@ -129,7 +127,6 @@ impl MediaPlaylist {
 }
 
 struct MasterPlaylist {
-    agent: Agent, //only for user agent
     servers: Vec<Url>,
     quality: String,
     channel: String,
@@ -158,14 +155,13 @@ impl MasterPlaylist {
             .collect();
 
         Ok(Self {
-            agent: AgentBuilder::new().user_agent(USER_AGENT).build(),
             servers: servers.context("Invalid server URL")?,
             quality: quality.to_owned(),
             channel,
         })
     }
 
-    pub fn fetch(&self) -> Result<String> {
+    pub fn fetch(&self, agent: &Agent) -> Result<String> {
         info!("Fetching playlist for channel {}", self.channel);
         let playlist = self
             .servers
@@ -178,12 +174,12 @@ impl MasterPlaylist {
                     let mut url = s.clone();
                     url.set_path(&("/playlist/".to_owned() + &self.channel + ".m3u8"));
 
-                    self.agent
+                    agent
                         .get(&percent_encode(url.as_str().as_bytes(), ENCODE_SET).to_string())
                         .set("x-donate-to", "https://ttv.lol/donate")
                         .call()
                 } else {
-                    self.agent.request_url("GET", s).call()
+                    agent.request_url("GET", s).call()
                 };
 
                 match request {
