@@ -144,7 +144,7 @@ fn main() -> Result<()> {
                     }
                     Some(PlaylistError::DiscontinuityError) => {
                         //TODO: Use fallback servers
-                        warn!("{}. Restarting player and fetching a new playlist", e);
+                        warn!("{}. Resetting", e);
                         break;
                     }
                     _ => bail!(e),
