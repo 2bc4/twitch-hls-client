@@ -147,6 +147,12 @@ impl MasterPlaylist {
             .servers
             .iter()
             .find_map(|s| {
+                info!(
+                    "Using server {}://{}",
+                    s.scheme(),
+                    s.host().expect("Somehow invalid host?")
+                );
+
                 let request = if s.path() == "/[ttvlol]" {
                     info!("Trying TTVLOL API");
                     const ENCODE_SET: &AsciiSet = &CONTROLS.add(b'?').add(b'=').add(b'&');
@@ -163,14 +169,7 @@ impl MasterPlaylist {
                 };
 
                 match request {
-                    Ok(res) => {
-                        info!(
-                            "Using server {}://{}",
-                            s.scheme(),
-                            s.host().expect("Somehow invalid host?")
-                        );
-                        res.into_string().ok()
-                    }
+                    Ok(res) => res.into_string().ok(),
                     Err(e) => {
                         error!("{}", e);
                         None
