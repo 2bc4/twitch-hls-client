@@ -13,37 +13,15 @@
 //    You should have received a copy of the GNU General Public License
 //    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-use std::fmt;
-
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{anyhow, Context, Result};
 use log::{error, info};
 use percent_encoding::{percent_encode, AsciiSet, CONTROLS};
-use ureq::{Agent, Error};
+use ureq::Agent;
 use url::Url;
-
-#[derive(Debug)]
-pub enum PlaylistError {
-    NotFoundError,
-    DiscontinuityError,
-}
-
-impl std::error::Error for PlaylistError {}
-
-impl fmt::Display for PlaylistError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::NotFoundError => write!(f, "Media playlist not found"),
-            Self::DiscontinuityError => {
-                write!(f, "Discontinuity encountered in media playlist")
-            }
-        }
-    }
-}
 
 pub struct Segment {
     pub url: String,
-    pub media_sequence: u64,
-    pub has_discontinuity: bool,
+    pub sequence: u64,
 }
 
 impl Segment {
@@ -54,15 +32,14 @@ impl Segment {
                 .last()
                 .context("Malformed media playlist")?
                 .replace("#EXT-X-TWITCH-PREFETCH:", ""),
-            media_sequence: Self::parse_media_sequence(playlist)?,
-            has_discontinuity: playlist.contains("#EXT-X-DISCONTINUITY"),
+            sequence: Self::parse_sequence(playlist)?,
         })
     }
 
-    fn parse_media_sequence(playlist: &str) -> Result<u64> {
+    fn parse_sequence(playlist: &str) -> Result<u64> {
         playlist
             .lines()
-            .skip_while(|s| !s.contains("#EXT-X-MEDIA-SEQUENCE:"))
+            .skip_while(|s| !s.contains("#EXT-X-MEDIA-SEQUENCE"))
             .nth(1)
             .context("Malformed media playlist")?
             .split(':')
@@ -73,6 +50,12 @@ impl Segment {
     }
 }
 
+pub struct PlaylistReload {
+    pub segment: Segment,
+    pub ad: bool,
+    pub discontinuity: bool,
+}
+
 pub struct MediaPlaylist {
     agent: Agent,
     url: String,
@@ -80,7 +63,7 @@ pub struct MediaPlaylist {
 
 impl MediaPlaylist {
     pub fn new(agent: &Agent, server: &str, channel: &str, quality: &str) -> Result<Self> {
-        //TODO: Store for fallback servers on discontinuity
+        //TODO: Store for fallback servers on ad
         let master_playlist = MasterPlaylist::new(server, channel, quality)?;
 
         Ok(Self {
@@ -93,36 +76,33 @@ impl MediaPlaylist {
         info!("Catching up to latest segment");
 
         let mut segment = Segment::new(&self.fetch()?)?;
-        let first = segment.media_sequence;
-        while segment.media_sequence == first {
+        let first = segment.sequence;
+        while segment.sequence == first {
             segment = Segment::new(&self.fetch()?)?;
         }
 
         Ok(())
     }
 
-    pub fn reload(&self) -> Result<Segment> {
-        let segment = Segment::new(&self.fetch()?)?;
-        if segment.has_discontinuity {
-            return Err(PlaylistError::DiscontinuityError.into());
-        }
-
-        Ok(segment)
+    pub fn reload(&self) -> Result<PlaylistReload> {
+        let playlist = self.fetch()?;
+        Ok(PlaylistReload {
+            segment: Segment::new(&playlist)?,
+            ad: playlist.contains("Amazon"),
+            discontinuity: playlist.contains("#EXT-X-DISCONTINUITY"),
+        })
     }
 
     fn fetch(&self) -> Result<String> {
-        match self
+        Ok(self
             .agent
             .get(&self.url)
             .set("referer", "https://player.twitch.tv")
             .set("origin", "https://player.twitch.tv")
             .set("connection", "keep-alive")
             .call()
-        {
-            Ok(response) => Ok(response.into_string()?),
-            Err(Error::Status(code, _)) if code == 404 => Err(PlaylistError::NotFoundError.into()),
-            Err(e) => bail!(e),
-        }
+            .context("Failed to fetch media playlist")?
+            .into_string()?)
     }
 }
 

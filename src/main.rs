@@ -34,7 +34,7 @@ use ureq::AgentBuilder;
 mod iothread;
 mod playlist;
 use iothread::IOThread;
-use playlist::{MediaPlaylist, PlaylistError};
+use playlist::MediaPlaylist;
 
 const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36";
 
@@ -135,32 +135,35 @@ fn main() -> Result<()> {
         let playlist = MediaPlaylist::new(&agent, &args.server, &args.channel, &args.quality)?;
         playlist.catch_up()?;
 
-        let mut prev_media_sequence: u64 = 0;
+        let mut prev_sequence: u64 = 0;
         loop {
             let time = Instant::now();
-
             let segment = match playlist.reload() {
-                Ok(segment) => segment,
-                Err(e) => match e.downcast_ref::<PlaylistError>() {
-                    Some(PlaylistError::NotFoundError) => {
-                        info!("{}. Stream likely ended, exiting...", e);
-                        return Ok(());
+                Ok(reload) => {
+                    if reload.ad {
+                        warn!("Encountered an embedded ad segment, resetting");
+                        break; //TODO: Use fallback servers
+                    } else if reload.discontinuity {
+                        warn!("Encountered an discontinuity, stream may be broken");
                     }
-                    Some(PlaylistError::DiscontinuityError) => {
-                        //TODO: Use fallback servers
-                        warn!("{}. Resetting", e);
-                        break;
+
+                    reload.segment
+                }
+                Err(e) => match e.downcast_ref::<ureq::Error>() {
+                    Some(ureq::Error::Status(code, _)) if *code == 404 => {
+                        info!("Playlist not found. Stream likely ended, exiting...");
+                        return Ok(());
                     }
                     _ => bail!(e),
                 },
             };
 
-            match segment.media_sequence.cmp(&prev_media_sequence) {
+            match segment.sequence.cmp(&prev_sequence) {
                 Ordering::Greater => {
                     const SEGMENT_DURATION: Duration = Duration::from_secs(2);
 
                     io_thread.send_url(&segment.url)?;
-                    prev_media_sequence = segment.media_sequence;
+                    prev_sequence = segment.sequence;
 
                     let elapsed = time.elapsed();
                     if elapsed < SEGMENT_DURATION {
