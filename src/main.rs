@@ -131,16 +131,15 @@ fn main() -> Result<()> {
             &agent,
             spawn_player_or_stdout(&args.player_path, &player_args)?,
         )?;
+
         let playlist = MediaPlaylist::new(&agent, &args.server, &args.channel, &args.quality)?;
+        playlist.catch_up()?;
 
-        let mut segment = playlist.catch_up()?;
-        io_thread.send_url(&segment.url)?;
-
+        let mut prev_media_sequence: u64 = 0;
         loop {
             let time = Instant::now();
-            let prev_media_sequence = segment.media_sequence;
 
-            segment = match playlist.reload() {
+            let segment = match playlist.reload() {
                 Ok(segment) => segment,
                 Err(e) => match e.downcast_ref::<PlaylistError>() {
                     Some(PlaylistError::NotFoundError) => {
@@ -161,6 +160,7 @@ fn main() -> Result<()> {
                     const SEGMENT_DURATION: Duration = Duration::from_secs(2);
 
                     io_thread.send_url(&segment.url)?;
+                    prev_media_sequence = segment.media_sequence;
 
                     let elapsed = time.elapsed();
                     if elapsed < SEGMENT_DURATION {

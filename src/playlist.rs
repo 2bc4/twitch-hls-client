@@ -89,7 +89,7 @@ impl MediaPlaylist {
         })
     }
 
-    pub fn catch_up(&self) -> Result<Segment> {
+    pub fn catch_up(&self) -> Result<()> {
         info!("Catching up to latest segment");
 
         let mut segment = Segment::new(&self.fetch()?)?;
@@ -98,7 +98,7 @@ impl MediaPlaylist {
             segment = Segment::new(&self.fetch()?)?;
         }
 
-        Ok(segment)
+        Ok(())
     }
 
     pub fn reload(&self) -> Result<Segment> {
