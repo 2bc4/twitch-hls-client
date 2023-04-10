@@ -27,7 +27,7 @@ use std::{
 use anyhow::{bail, ensure, Context, Result};
 use clap::Parser;
 use is_terminal::IsTerminal;
-use log::{info, warn};
+use log::{debug, info, warn};
 use simplelog::{ColorChoice, ConfigBuilder, LevelFilter, TermLogger, TerminalMode};
 use ureq::AgentBuilder;
 
@@ -147,6 +147,7 @@ fn main() -> Result<()> {
                         warn!("Encountered a discontinuity, stream may be broken");
                     }
 
+                    debug!("Playlist reload took {:?}", time.elapsed());
                     reload.segment
                 }
                 Err(e) => match e.downcast_ref::<ureq::Error>() {
@@ -163,6 +164,8 @@ fn main() -> Result<()> {
                     const SEGMENT_DURATION: Duration = Duration::from_secs(2);
 
                     io_thread.send_url(&segment.url)?;
+
+                    debug!("Sequence: {} -> {}", prev_sequence, segment.sequence);
                     prev_sequence = segment.sequence;
 
                     let elapsed = time.elapsed();
@@ -172,8 +175,8 @@ fn main() -> Result<()> {
                         warn!("Took longer than segment duration, stream may be broken");
                     }
                 }
-                Ordering::Equal => continue,
                 Ordering::Less => bail!("Out of order media sequence"),
+                Ordering::Equal => debug!("Sequence {} is the same as previous", segment.sequence), //try again immediately
             }
         }
     }
