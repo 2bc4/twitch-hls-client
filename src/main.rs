@@ -144,7 +144,7 @@ fn main() -> Result<()> {
                         warn!("Encountered an embedded ad segment, resetting");
                         break; //TODO: Use fallback servers
                     } else if reload.discontinuity {
-                        warn!("Encountered an discontinuity, stream may be broken");
+                        warn!("Encountered a discontinuity, stream may be broken");
                     }
 
                     reload.segment
