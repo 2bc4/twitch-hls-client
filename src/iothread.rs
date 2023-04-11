@@ -25,11 +25,6 @@ use anyhow::{bail, Context, Result};
 use log::{error, info};
 use ureq::Agent;
 
-enum ExitReason {
-    Killed,
-    PipeClosed,
-}
-
 pub struct IOThread {
     url_sender: Sender<String>,
 }
@@ -41,18 +36,12 @@ impl IOThread {
         let agent = agent.clone(); //ureq uses an ARC to store state
         thread::Builder::new()
             .name("IO Thread".to_owned())
-            .spawn(
-                move || match Self::thread_main(&agent, pipe, &url_receiver) {
-                    Ok(reason) => match reason {
-                        ExitReason::Killed => (),
-                        ExitReason::PipeClosed => process::exit(0),
-                    },
-                    Err(e) => {
-                        error!("Error: {}", e);
-                        process::exit(1);
-                    }
-                },
-            )
+            .spawn(move || {
+                if let Err(e) = Self::thread_main(&agent, pipe, &url_receiver) {
+                    error!("Error: {}", e);
+                    process::exit(1);
+                }
+            })
             .context("Error spawning IO thread")?;
 
         Ok(Self { url_sender })
@@ -70,9 +59,9 @@ impl IOThread {
         agent: &Agent,
         mut pipe: Box<dyn Write + Send>,
         url_receiver: &Receiver<String>,
-    ) -> Result<ExitReason> {
+    ) -> Result<()> {
         loop {
-            let Ok(url) = url_receiver.recv() else { return Ok(ExitReason::Killed) };
+            let Ok(url) = url_receiver.recv() else { return Ok(()); };
 
             let mut reader = agent
                 .get(&url)
@@ -87,7 +76,7 @@ impl IOThread {
             match io::copy(&mut reader, &mut pipe) {
                 Err(ref e) if e.kind() == BrokenPipe => {
                     info!("Pipe closed, exiting...");
-                    return Ok(ExitReason::PipeClosed);
+                    process::exit(0);
                 }
                 Err(e) => bail!(e),
                 _ => (),
