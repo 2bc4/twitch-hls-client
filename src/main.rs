@@ -104,6 +104,50 @@ fn spawn_player_or_stdout(
     }
 }
 
+fn reload_loop(
+    io_thread: &IOThread,
+    playlist: &MediaPlaylist,
+    disable_reset_on_ad: bool,
+) -> Result<()> {
+    let mut prev_sequence: u64 = 0;
+    loop {
+        let time = Instant::now();
+
+        let reload = playlist.reload()?;
+        if !disable_reset_on_ad && reload.ad {
+            warn!("Encountered an embedded ad segment, resetting");
+            return Ok(()); //TODO: Use fallback servers
+        } else if reload.discontinuity {
+            warn!("Encountered a discontinuity, stream may be broken");
+        }
+
+        debug!("Playlist reload took {:?}", time.elapsed());
+
+        match reload.segment.sequence.cmp(&prev_sequence) {
+            Ordering::Greater => {
+                const SEGMENT_DURATION: Duration = Duration::from_secs(2);
+
+                io_thread.send_url(&reload.segment.url)?;
+
+                debug!("Sequence: {} -> {}", prev_sequence, reload.segment.sequence);
+                prev_sequence = reload.segment.sequence;
+
+                let elapsed = time.elapsed();
+                if elapsed < SEGMENT_DURATION {
+                    thread::sleep(SEGMENT_DURATION - elapsed);
+                } else {
+                    warn!("Took longer than segment duration, stream may be broken");
+                }
+            }
+            Ordering::Less => bail!("Out of order media sequence"),
+            Ordering::Equal => debug!(
+                "Sequence {} is the same as previous",
+                reload.segment.sequence
+            ), //try again immediately
+        }
+    }
+}
+
 fn main() -> Result<()> {
     let args = Args::parse();
     if args.debug {
@@ -135,48 +179,13 @@ fn main() -> Result<()> {
         let playlist = MediaPlaylist::new(&agent, &args.server, &args.channel, &args.quality)?;
         playlist.catch_up()?;
 
-        let mut prev_sequence: u64 = 0;
-        loop {
-            let time = Instant::now();
-            let segment = match playlist.reload() {
-                Ok(reload) => {
-                    if !args.disable_reset_on_ad && reload.ad {
-                        warn!("Encountered an embedded ad segment, resetting");
-                        break; //TODO: Use fallback servers
-                    } else if reload.discontinuity {
-                        warn!("Encountered a discontinuity, stream may be broken");
-                    }
-
-                    debug!("Playlist reload took {:?}", time.elapsed());
-                    reload.segment
+        if let Err(e) = reload_loop(&io_thread, &playlist, args.disable_reset_on_ad) {
+            match e.downcast_ref::<ureq::Error>() {
+                Some(ureq::Error::Status(code, _)) if *code == 404 => {
+                    info!("Playlist not found. Stream likely ended, exiting...");
+                    return Ok(());
                 }
-                Err(e) => match e.downcast_ref::<ureq::Error>() {
-                    Some(ureq::Error::Status(code, _)) if *code == 404 => {
-                        info!("Playlist not found. Stream likely ended, exiting...");
-                        return Ok(());
-                    }
-                    _ => bail!(e),
-                },
-            };
-
-            match segment.sequence.cmp(&prev_sequence) {
-                Ordering::Greater => {
-                    const SEGMENT_DURATION: Duration = Duration::from_secs(2);
-
-                    io_thread.send_url(&segment.url)?;
-
-                    debug!("Sequence: {} -> {}", prev_sequence, segment.sequence);
-                    prev_sequence = segment.sequence;
-
-                    let elapsed = time.elapsed();
-                    if elapsed < SEGMENT_DURATION {
-                        thread::sleep(SEGMENT_DURATION - elapsed);
-                    } else {
-                        warn!("Took longer than segment duration, stream may be broken");
-                    }
-                }
-                Ordering::Less => bail!("Out of order media sequence"),
-                Ordering::Equal => debug!("Sequence {} is the same as previous", segment.sequence), //try again immediately
+                _ => bail!(e),
             }
         }
     }
