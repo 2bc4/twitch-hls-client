@@ -62,6 +62,10 @@ struct Args {
     )]
     player_args: Option<String>,
 
+    /// Disables resetting the player and stream when encountering an embedded advertisement
+    #[arg(long)]
+    disable_reset_on_ad: bool,
+
     /// Enable debug logging
     #[arg(short, long)]
     debug: bool,
@@ -140,7 +144,7 @@ fn main() -> Result<()> {
             let time = Instant::now();
             let segment = match playlist.reload() {
                 Ok(reload) => {
-                    if reload.ad {
+                    if !args.disable_reset_on_ad && reload.ad {
                         warn!("Encountered an embedded ad segment, resetting");
                         break; //TODO: Use fallback servers
                     } else if reload.discontinuity {
