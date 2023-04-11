@@ -28,7 +28,7 @@ use anyhow::{bail, ensure, Context, Result};
 use clap::Parser;
 use is_terminal::IsTerminal;
 use log::{debug, info, warn};
-use simplelog::{ColorChoice, ConfigBuilder, LevelFilter, TermLogger, TerminalMode};
+use simplelog::{ColorChoice, Config, ConfigBuilder, LevelFilter, TermLogger, TerminalMode};
 use ureq::AgentBuilder;
 
 mod iothread;
@@ -109,10 +109,7 @@ fn main() -> Result<()> {
     if args.debug {
         TermLogger::init(
             LevelFilter::Debug,
-            ConfigBuilder::new()
-                .set_max_level(LevelFilter::Error)
-                .set_time_level(LevelFilter::Error)
-                .build(),
+            Config::default(),
             TerminalMode::Stderr,
             ColorChoice::Auto,
         )?;
@@ -120,7 +117,6 @@ fn main() -> Result<()> {
         TermLogger::init(
             LevelFilter::Info,
             ConfigBuilder::new()
-                .set_max_level(LevelFilter::Error)
                 .set_time_level(LevelFilter::Off)
                 .build(),
             TerminalMode::Stderr,
