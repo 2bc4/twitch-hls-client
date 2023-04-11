@@ -50,7 +50,7 @@ struct Args {
 
     /// Path to the player that the stream will be piped to,
     /// if not specified will write stream to stdout
-    #[arg(short, long, value_name = "PATH")]
+    #[arg(short, long = "player", value_name = "PATH")]
     player_path: Option<String>,
 
     /// Arguments to pass to the player
