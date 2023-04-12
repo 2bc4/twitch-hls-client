@@ -18,7 +18,7 @@
 use std::{
     cmp::{Ord, Ordering},
     io,
-    io::Write,
+    io::{BufWriter, Write},
     process::{Command, Stdio},
     thread,
     time::{Duration, Instant},
@@ -64,6 +64,10 @@ struct Args {
     )]
     player_args: String,
 
+    /// Player write buffer size in bytes
+    #[arg(long, value_name = "SIZE", default_value_t = 4096)]
+    player_buffer_size: usize,
+
     /// Disables resetting the player and stream when encountering an embedded advertisement
     #[arg(long)]
     disable_reset_on_ad: bool,
@@ -82,19 +86,23 @@ struct Args {
 fn spawn_player_or_stdout(
     player_path: &Option<String>,
     player_args: &str,
+    player_buffer_size: usize,
 ) -> Result<Box<dyn Write + Send>> {
     if let Some(player_path) = player_path {
         info!("Opening player: {} {}", player_path, player_args);
-        Ok(Box::new(
-            Command::new(player_path)
-                .args(player_args.split_whitespace())
-                .stdin(Stdio::piped())
-                .spawn()
-                .context("Failed to open player")?
-                .stdin
-                .take()
-                .context("Failed to open player stdin")?,
-        ))
+        let stdin = Command::new(player_path)
+            .args(player_args.split_whitespace())
+            .stdin(Stdio::piped())
+            .spawn()
+            .context("Failed to open player")?
+            .stdin
+            .take()
+            .context("Failed to open player stdin")?;
+
+        Ok(Box::new(BufWriter::with_capacity(
+            player_buffer_size,
+            stdin,
+        )))
     } else {
         ensure!(
             !io::stdout().is_terminal(),
@@ -174,7 +182,11 @@ fn main() -> Result<()> {
     loop {
         let io_thread = IOThread::new(
             &agent,
-            spawn_player_or_stdout(&args.player_path, &args.player_args)?,
+            spawn_player_or_stdout(
+                &args.player_path,
+                &args.player_args,
+                args.player_buffer_size,
+            )?,
         )?;
 
         let playlist = MediaPlaylist::new(&agent, &args.server, &args.channel, &args.quality)?;
