@@ -58,9 +58,10 @@ struct Args {
         short = 'a',
         long,
         value_name = "ARGUMENTS",
-        allow_hyphen_values = true
+        default_value = "",
+        allow_hyphen_values = true,
     )]
-    player_args: Option<String>,
+    player_args: String,
 
     /// Disables resetting the player and stream when encountering an embedded advertisement
     #[arg(long)]
@@ -168,12 +169,11 @@ fn main() -> Result<()> {
         )?;
     }
 
-    let player_args = args.player_args.unwrap_or_default();
     let agent = AgentBuilder::new().user_agent(USER_AGENT).build();
     loop {
         let io_thread = IOThread::new(
             &agent,
-            spawn_player_or_stdout(&args.player_path, &player_args)?,
+            spawn_player_or_stdout(&args.player_path, &args.player_args)?,
         )?;
 
         let playlist = MediaPlaylist::new(&agent, &args.server, &args.channel, &args.quality)?;
