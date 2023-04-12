@@ -59,7 +59,8 @@ struct Args {
         long,
         value_name = "ARGUMENTS",
         default_value = "",
-        allow_hyphen_values = true,
+        hide_default_value = true,
+        allow_hyphen_values = true
     )]
     player_args: String,
 
