@@ -22,8 +22,6 @@ Options:
           Path to the player that the stream will be piped to, if not specified will write stream to stdout
   -a, --player-args <ARGUMENTS>
           Arguments to pass to the player
-      --player-buffer-size <SIZE>
-          Player write buffer size in bytes [default: 4096]
       --disable-reset-on-ad
           Disables resetting the player and stream when encountering an embedded advertisement
   -d, --debug
