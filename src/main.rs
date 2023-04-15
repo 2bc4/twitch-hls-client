@@ -79,7 +79,7 @@ struct Args {
     /// Twitch channel to watch (can also be twitch.tv/channel for Streamlink compatibility)
     channel: String,
 
-    /// Stream quality/variant playlist to fetch (best, 1080p, 720p, 360p, 160p)
+    /// Stream quality/variant playlist to fetch (best, 1080p, 720p, 360p, 160p, audio_only)
     quality: String,
 }
 
