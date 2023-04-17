@@ -28,7 +28,7 @@ use anyhow::{bail, ensure, Context, Result};
 use clap::Parser;
 use is_terminal::IsTerminal;
 use log::{debug, info, warn};
-use simplelog::{ColorChoice, Config, ConfigBuilder, LevelFilter, TermLogger, TerminalMode};
+use simplelog::{ColorChoice, ConfigBuilder, LevelFilter, TermLogger, TerminalMode};
 use ureq::AgentBuilder;
 
 mod iothread;
