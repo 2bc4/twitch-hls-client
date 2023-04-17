@@ -18,8 +18,7 @@
 use std::{
     cmp::{Ord, Ordering},
     io,
-    io::Write,
-    process::{Command, Stdio},
+    process::{ChildStdin, Command, Stdio},
     thread,
     time::Instant,
 };
@@ -79,13 +78,10 @@ struct Args {
     quality: String,
 }
 
-fn spawn_player_or_stdout(
-    player_path: &Option<String>,
-    player_args: &str,
-) -> Result<Box<dyn Write + Send>> {
+fn try_spawn_player(player_path: &Option<String>, player_args: &str) -> Result<Option<ChildStdin>> {
     if let Some(player_path) = player_path {
         info!("Opening player: {} {}", player_path, player_args);
-        Ok(Box::new(
+        Ok(Some(
             Command::new(player_path)
                 .args(player_args.split_whitespace())
                 .stdin(Stdio::piped())
@@ -101,8 +97,7 @@ fn spawn_player_or_stdout(
             "No player set and stdout is a terminal, exiting..."
         );
 
-        info!("Writing to stdout");
-        Ok(Box::new(io::stdout()))
+        Ok(None)
     }
 }
 
@@ -174,7 +169,7 @@ fn main() -> Result<()> {
     loop {
         let io_thread = IOThread::new(
             &agent,
-            spawn_player_or_stdout(&args.player_path, &args.player_args)?,
+            try_spawn_player(&args.player_path, &args.player_args)?,
         )?;
 
         let mut playlist = MediaPlaylist::new(&agent, &args.server, &args.channel, &args.quality)?;

@@ -17,6 +17,7 @@ use std::{
     io,
     io::{ErrorKind::BrokenPipe, Write},
     process,
+    process::ChildStdin,
     sync::mpsc::{channel, Receiver, Sender},
     thread,
 };
@@ -30,14 +31,14 @@ pub struct IOThread {
 }
 
 impl IOThread {
-    pub fn new(agent: &Agent, pipe: Box<dyn Write + Send>) -> Result<Self> {
+    pub fn new(agent: &Agent, stdin: Option<ChildStdin>) -> Result<Self> {
         let (url_sender, url_receiver): (Sender<String>, Receiver<String>) = channel();
 
         let agent = agent.clone(); //ureq uses an ARC to store state
         thread::Builder::new()
             .name("IO Thread".to_owned())
             .spawn(move || {
-                if let Err(e) = Self::thread_main(&agent, pipe, &url_receiver) {
+                if let Err(e) = Self::thread_main(&agent, stdin, &url_receiver) {
                     error!("Error: {}", e);
                     process::exit(1);
                 }
@@ -57,9 +58,17 @@ impl IOThread {
 
     fn thread_main(
         agent: &Agent,
-        mut pipe: Box<dyn Write + Send>,
+        stdin: Option<ChildStdin>,
         url_receiver: &Receiver<String>,
     ) -> Result<()> {
+        let mut pipe: Box<dyn Write> = stdin.map_or_else(
+            || {
+                info!("Writing to stdout");
+                Box::new(io::stdout().lock()) as Box<dyn Write>
+            },
+            |stdin| Box::new(stdin) as Box<dyn Write>,
+        );
+
         loop {
             let Ok(url) = url_receiver.recv() else { return Ok(()); };
 
