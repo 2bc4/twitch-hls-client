@@ -155,7 +155,10 @@ fn main() -> Result<()> {
     if args.debug {
         TermLogger::init(
             LevelFilter::Debug,
-            Config::default(),
+            ConfigBuilder::new()
+                .add_filter_ignore_str("ureq::unit")
+                .add_filter_ignore_str("ureq::pool")
+                .build(),
             TerminalMode::Stderr,
             ColorChoice::Auto,
         )?;
