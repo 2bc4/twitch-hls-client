@@ -13,45 +13,20 @@
 //    You should have received a copy of the GNU General Public License
 //    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+use std::time::Duration;
+
 use anyhow::{anyhow, Context, Result};
 use log::{error, info};
 use percent_encoding::{percent_encode, AsciiSet, CONTROLS};
 use ureq::Agent;
 use url::Url;
 
-pub struct Segment {
+pub struct Reload {
     pub url: String,
-    pub sequence: u64,
-}
+    pub sequence: u32,
+    pub prev_sequence: u32,
+    pub delta: Duration,
 
-impl Segment {
-    pub fn new(playlist: &str) -> Result<Self> {
-        Ok(Self {
-            url: playlist
-                .lines()
-                .last()
-                .context("Malformed media playlist")?
-                .replace("#EXT-X-TWITCH-PREFETCH:", ""),
-            sequence: Self::parse_sequence(playlist)?,
-        })
-    }
-
-    fn parse_sequence(playlist: &str) -> Result<u64> {
-        playlist
-            .lines()
-            .skip_while(|s| !s.contains("#EXT-X-MEDIA-SEQUENCE"))
-            .nth(1)
-            .context("Malformed media playlist")?
-            .split(':')
-            .nth(1)
-            .context("Invalid media sequence")?
-            .parse()
-            .context("Error parsing media sequence")
-    }
-}
-
-pub struct PlaylistReload {
-    pub segment: Segment,
     pub ad: bool,
     pub discontinuity: bool,
 }
@@ -59,6 +34,8 @@ pub struct PlaylistReload {
 pub struct MediaPlaylist {
     agent: Agent,
     url: String,
+    prev_sequence: u32,
+    prev_total_seconds: Duration,
 }
 
 impl MediaPlaylist {
@@ -69,25 +46,45 @@ impl MediaPlaylist {
         Ok(Self {
             agent: agent.clone(), //ureq uses an ARC to store state
             url: master_playlist.fetch(agent)?,
+            prev_sequence: 0,
+            prev_total_seconds: Duration::ZERO,
         })
     }
 
-    pub fn catch_up(&self) -> Result<()> {
+    pub fn catch_up(&mut self) -> Result<()> {
         info!("Catching up to latest segment");
 
-        let mut segment = Segment::new(&self.fetch()?)?;
-        let first = segment.sequence;
-        while segment.sequence == first {
-            segment = Segment::new(&self.fetch()?)?;
+        let mut playlist = self.fetch()?;
+        let mut sequence = Self::parse_sequence(&playlist)?;
+
+        let first = sequence;
+        while sequence == first {
+            playlist = self.fetch()?;
+            sequence = Self::parse_sequence(&playlist)?;
         }
+
+        self.prev_sequence = sequence;
+        self.prev_total_seconds = Self::parse_total_seconds(&playlist)?;
 
         Ok(())
     }
 
-    pub fn reload(&self) -> Result<PlaylistReload> {
+    pub fn reload(&mut self) -> Result<Reload> {
         let playlist = self.fetch()?;
-        Ok(PlaylistReload {
-            segment: Segment::new(&playlist)?,
+
+        let sequence = Self::parse_sequence(&playlist)?;
+        let prev_sequence = self.prev_sequence;
+        self.prev_sequence = sequence;
+
+        let total_seconds = Self::parse_total_seconds(&playlist)?;
+        let prev_total_seconds = self.prev_total_seconds;
+        self.prev_total_seconds = total_seconds;
+
+        Ok(Reload {
+            url: Self::parse_url(&playlist)?,
+            sequence,
+            prev_sequence,
+            delta: total_seconds - prev_total_seconds,
             ad: playlist.contains("Amazon")
                 || playlist.contains("stitched-ad")
                 || playlist.contains("X-TV-TWITCH-AD"),
@@ -105,6 +102,42 @@ impl MediaPlaylist {
             .call()
             .context("Failed to fetch media playlist")?
             .into_string()?)
+    }
+
+    fn parse_sequence(playlist: &str) -> Result<u32> {
+        playlist
+            .lines()
+            .skip_while(|s| !s.starts_with("#EXT-X-MEDIA-SEQUENCE"))
+            .nth(1)
+            .context("Malformed media playlist while parsing #EXT-X-MEDIA-SEQUENCE")?
+            .split(':')
+            .nth(1)
+            .context("Invalid #EXT-X-MEDIA-SEQUENCE")?
+            .parse()
+            .context("Error parsing #EXT-X-MEDIA-SEQUENCE")
+    }
+
+    fn parse_url(playlist: &str) -> Result<String> {
+        Ok(playlist
+            .lines()
+            .last()
+            .context("Malformed media playlist while parsing segment URL")?
+            .replace("#EXT-X-TWITCH-PREFETCH:", ""))
+    }
+
+    fn parse_total_seconds(playlist: &str) -> Result<Duration> {
+        Ok(Duration::try_from_secs_f32(
+            playlist
+                .lines()
+                .skip_while(|s| !s.starts_with("#EXT-X-TWITCH-TOTAL-SECS"))
+                .next()
+                .context("Malformed media playlist while parsing #EXT-X-TWITCH-TOTAL-SECS")?
+                .split(':')
+                .nth(1)
+                .context("Invalid #EXT-X-TWITCH-TOTAL-SECS")?
+                .parse()
+                .context("Error parsing #EXT-X-TWITCH-TOTAL-SECS")?,
+        )?)
     }
 }
 

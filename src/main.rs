@@ -21,7 +21,7 @@ use std::{
     io::Write,
     process::{Command, Stdio},
     thread,
-    time::{Duration, Instant},
+    time::Instant,
 };
 
 use anyhow::{bail, ensure, Context, Result};
@@ -108,10 +108,9 @@ fn spawn_player_or_stdout(
 
 fn reload_loop(
     io_thread: &IOThread,
-    playlist: &MediaPlaylist,
+    playlist: &mut MediaPlaylist,
     disable_reset_on_ad: bool,
 ) -> Result<()> {
-    let mut prev_sequence: u64 = 0;
     loop {
         let time = Instant::now();
 
@@ -125,27 +124,25 @@ fn reload_loop(
 
         debug!("Playlist reload took {:?}", time.elapsed());
 
-        match reload.segment.sequence.cmp(&prev_sequence) {
+        match reload.sequence.cmp(&reload.prev_sequence) {
             Ordering::Greater => {
-                const SEGMENT_DURATION: Duration = Duration::from_secs(2);
+                io_thread.send_url(&reload.url)?;
 
-                io_thread.send_url(&reload.segment.url)?;
-
-                debug!("Sequence: {} -> {}", prev_sequence, reload.segment.sequence);
-                prev_sequence = reload.segment.sequence;
+                debug!("Sequence: {} -> {}", reload.prev_sequence, reload.sequence);
+                debug!("Segment duration: {:?}", reload.delta);
 
                 let elapsed = time.elapsed();
-                if elapsed < SEGMENT_DURATION {
-                    thread::sleep(SEGMENT_DURATION - elapsed);
+                if elapsed < reload.delta {
+                    let sleep_time = reload.delta - elapsed;
+
+                    debug!("Sleeping for {:?}", sleep_time);
+                    thread::sleep(sleep_time);
                 } else {
                     warn!("Took longer than segment duration, stream may be broken");
                 }
             }
             Ordering::Less => bail!("Out of order media sequence"),
-            Ordering::Equal => debug!(
-                "Sequence {} is the same as previous",
-                reload.segment.sequence
-            ), //try again immediately
+            Ordering::Equal => debug!("Sequence {} is the same as previous", reload.sequence), //try again immediately
         }
     }
 }
@@ -180,10 +177,10 @@ fn main() -> Result<()> {
             spawn_player_or_stdout(&args.player_path, &args.player_args)?,
         )?;
 
-        let playlist = MediaPlaylist::new(&agent, &args.server, &args.channel, &args.quality)?;
+        let mut playlist = MediaPlaylist::new(&agent, &args.server, &args.channel, &args.quality)?;
         playlist.catch_up()?;
 
-        if let Err(e) = reload_loop(&io_thread, &playlist, args.disable_reset_on_ad) {
+        if let Err(e) = reload_loop(&io_thread, &mut playlist, args.disable_reset_on_ad) {
             match e.downcast_ref::<ureq::Error>() {
                 Some(ureq::Error::Status(code, _)) if *code == 404 => {
                     info!("Playlist not found. Stream likely ended, exiting...");
