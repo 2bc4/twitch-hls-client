@@ -88,7 +88,9 @@ impl MediaPlaylist {
         let playlist = self.fetch()?;
         Ok(PlaylistReload {
             segment: Segment::new(&playlist)?,
-            ad: playlist.contains("Amazon"),
+            ad: playlist.contains("Amazon")
+                || playlist.contains("stitched-ad")
+                || playlist.contains("X-TV-TWITCH-AD"),
             discontinuity: playlist.contains("#EXT-X-DISCONTINUITY"),
         })
     }
