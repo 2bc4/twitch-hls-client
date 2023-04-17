@@ -25,7 +25,7 @@ pub struct Reload {
     pub url: String,
     pub sequence: u32,
     pub prev_sequence: u32,
-    pub delta: Duration,
+    pub duration: Duration,
 
     pub ad: bool,
     pub discontinuity: bool,
@@ -35,7 +35,6 @@ pub struct MediaPlaylist {
     agent: Agent,
     url: String,
     prev_sequence: u32,
-    prev_total_seconds: Duration,
 }
 
 impl MediaPlaylist {
@@ -47,7 +46,6 @@ impl MediaPlaylist {
             agent: agent.clone(), //ureq uses an ARC to store state
             url: master_playlist.fetch(agent)?,
             prev_sequence: 0,
-            prev_total_seconds: Duration::ZERO,
         })
     }
 
@@ -64,7 +62,6 @@ impl MediaPlaylist {
         }
 
         self.prev_sequence = sequence;
-        self.prev_total_seconds = Self::parse_total_seconds(&playlist)?;
 
         Ok(())
     }
@@ -76,15 +73,11 @@ impl MediaPlaylist {
         let prev_sequence = self.prev_sequence;
         self.prev_sequence = sequence;
 
-        let total_seconds = Self::parse_total_seconds(&playlist)?;
-        let prev_total_seconds = self.prev_total_seconds;
-        self.prev_total_seconds = total_seconds;
-
         Ok(Reload {
             url: Self::parse_url(&playlist)?,
             sequence,
             prev_sequence,
-            delta: total_seconds - prev_total_seconds,
+            duration: Self::parse_duration(&playlist)?,
             ad: playlist.contains("Amazon")
                 || playlist.contains("stitched-ad")
                 || playlist.contains("X-TV-TWITCH-AD"),
@@ -125,18 +118,20 @@ impl MediaPlaylist {
             .replace("#EXT-X-TWITCH-PREFETCH:", ""))
     }
 
-    fn parse_total_seconds(playlist: &str) -> Result<Duration> {
+    fn parse_duration(playlist: &str) -> Result<Duration> {
         Ok(Duration::try_from_secs_f32(
             playlist
                 .lines()
-                .skip_while(|s| !s.starts_with("#EXT-X-TWITCH-TOTAL-SECS"))
+                .rev()
+                .skip_while(|s| !s.starts_with("#EXTINF"))
                 .next()
-                .context("Malformed media playlist while parsing #EXT-X-TWITCH-TOTAL-SECS")?
-                .split(':')
-                .nth(1)
-                .context("Invalid #EXT-X-TWITCH-TOTAL-SECS")?
+                .context("Malformed media playlist while parsing #EXTINF")?
+                .replace("#EXTINF:", "")
+                .split(',')
+                .next()
+                .context("Invalid #EXTINF")?
                 .parse()
-                .context("Error parsing #EXT-X-TWITCH-TOTAL-SECS")?,
+                .context("Error parsing #EXTINF")?,
         )?)
     }
 }

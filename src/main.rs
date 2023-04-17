@@ -124,11 +124,11 @@ fn reload_loop(
                 io_thread.send_url(&reload.url)?;
 
                 debug!("Sequence: {} -> {}", reload.prev_sequence, reload.sequence);
-                debug!("Segment duration: {:?}", reload.delta);
+                debug!("Segment duration: {:?}", reload.duration);
 
                 let elapsed = time.elapsed();
-                if elapsed < reload.delta {
-                    let sleep_time = reload.delta - elapsed;
+                if elapsed < reload.duration {
+                    let sleep_time = reload.duration - elapsed;
 
                     debug!("Sleeping for {:?}", sleep_time);
                     thread::sleep(sleep_time);
