@@ -23,7 +23,7 @@ use std::{
 };
 
 use anyhow::{bail, Context, Result};
-use log::{error, info};
+use log::info;
 use ureq::Agent;
 
 pub struct IOThread {
@@ -39,7 +39,7 @@ impl IOThread {
             .name("IO Thread".to_owned())
             .spawn(move || {
                 if let Err(e) = Self::thread_main(&agent, stdin, &url_receiver) {
-                    error!("Error: {}", e);
+                    eprintln!("Error: {e}");
                     process::exit(1);
                 }
             })
@@ -78,8 +78,7 @@ impl IOThread {
                 .set("referer", "https://player.twitch.tv")
                 .set("origin", "https://player.twitch.tv")
                 .set("connection", "keep-alive")
-                .call()
-                .context("Error fetching segment")?
+                .call()?
                 .into_reader();
 
             match io::copy(&mut reader, &mut pipe) {
