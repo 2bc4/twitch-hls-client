@@ -1,3 +1,5 @@
+#### :warning: This is currently experimental and shouldn't be used. It has several bugs that need to be fixed to function properly.
+
 ## twitch-hls-client
 Lightweight CLI client for watching low latency Twitch streams with ad blocking.
 
