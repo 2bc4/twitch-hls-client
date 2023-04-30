@@ -15,80 +15,115 @@
 
 use std::{
     io,
-    io::{ErrorKind::BrokenPipe, Write},
+    io::{Error, ErrorKind, ErrorKind::BrokenPipe, Write},
     process,
-    process::ChildStdin,
-    sync::mpsc::{channel, Receiver, Sender},
-    thread,
+    process::{Command, Stdio},
+    thread::Builder,
 };
 
-use anyhow::{bail, Context, Result};
+use anyhow::{ensure, Context, Result};
+use crossbeam_channel::{bounded, unbounded, Receiver, Sender};
+use is_terminal::IsTerminal;
 use log::info;
-use ureq::Agent;
 
-pub struct IOThread {
-    url_sender: Sender<String>,
+pub struct Worker {
+    ready_rx: Receiver<()>,
+    segment_tx: Sender<Vec<u8>>,
 }
 
-impl IOThread {
-    pub fn new(agent: &Agent, stdin: Option<ChildStdin>) -> Result<Self> {
-        let (url_sender, url_receiver): (Sender<String>, Receiver<String>) = channel();
+impl Write for Worker {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        //Acts as a buffer if the player isn't consuming stdin quickly enough.
+        //If the player is paused it will buffer endlessly until OOM.
+        //Perhaps it should be limited in some way.
+        self.segment_tx.send(buf.to_vec()).or(Err(Error::new(
+            ErrorKind::Other,
+            "Failed to send segment data to segment worker thread",
+        )))?;
 
-        let agent = agent.clone(); //ureq uses an ARC to store state
-        thread::Builder::new()
-            .name("IO Thread".to_owned())
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+impl Worker {
+    pub fn new(player_path: &Option<String>, player_args: &str) -> Result<Self> {
+        let (ready_tx, ready_rx): (Sender<()>, Receiver<()>) = bounded(1);
+        let (segment_tx, segment_rx): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = unbounded();
+        let path = player_path.clone();
+        let args = player_args.to_owned();
+
+        Builder::new()
+            .name("Segment Worker".to_owned())
             .spawn(move || {
-                if let Err(e) = Self::thread_main(&agent, stdin, &url_receiver) {
+                // :(
+
+                if let Err(e) = Self::thread_main(&ready_tx, &segment_rx, path, &args) {
                     eprintln!("Error: {e}");
                     process::exit(1);
                 }
             })
-            .context("Error spawning IO thread")?;
+            .context("Failed to spawn segment worker thread")?;
 
-        Ok(Self { url_sender })
+        Ok(Self {
+            ready_rx,
+            segment_tx,
+        })
     }
 
-    pub fn send_url(&self, url: &str) -> Result<()> {
-        self.url_sender
-            .send(url.to_owned())
-            .context("Error sending URL to IO thread")?;
-
-        Ok(())
+    pub fn wait_until_ready(&self) -> Result<()> {
+        self.ready_rx
+            .recv()
+            .context("Failed to receive ready state from segment worker thread")
     }
 
     fn thread_main(
-        agent: &Agent,
-        stdin: Option<ChildStdin>,
-        url_receiver: &Receiver<String>,
+        ready_tx: &Sender<()>,
+        segment_rx: &Receiver<Vec<u8>>,
+        player_path: Option<String>,
+        player_args: &str,
     ) -> Result<()> {
-        let mut pipe: Box<dyn Write> = stdin.map_or_else(
-            || {
-                info!("Writing to stdout");
-                Box::new(io::stdout().lock()) as Box<dyn Write>
-            },
-            |stdin| Box::new(stdin) as Box<dyn Write>,
-        );
+        let mut pipe: Box<dyn Write> = if let Some(player_path) = player_path {
+            info!("Opening player: {} {}", player_path, player_args);
+            Box::new(
+                Command::new(player_path)
+                    .args(player_args.split_whitespace())
+                    .stdin(Stdio::piped())
+                    .spawn()
+                    .context("Failed to open player")?
+                    .stdin
+                    .take()
+                    .context("Failed to open player stdin")?,
+            )
+        } else {
+            ensure!(
+                !io::stdout().is_terminal(),
+                "No player set and stdout is a terminal, exiting..."
+            );
+
+            info!("Writing to stdout");
+            Box::new(io::stdout().lock())
+        };
+
+        ready_tx
+            .send(())
+            .context("Failed to send ready status from segment worker thread")?;
 
         loop {
-            let Ok(url) = url_receiver.recv() else { return Ok(()); };
+            let Ok(buf) = segment_rx.recv() else { return Ok(()); };
 
-            let mut reader = agent
-                .get(&url)
-                .set("content-type", "application/octet-stream")
-                .set("referer", "https://player.twitch.tv")
-                .set("origin", "https://player.twitch.tv")
-                .set("connection", "keep-alive")
-                .call()?
-                .into_reader();
-
-            match io::copy(&mut reader, &mut pipe) {
-                Err(ref e) if e.kind() == BrokenPipe => {
-                    info!("Pipe closed, exiting...");
-                    process::exit(0);
+            if let Err(e) = io::copy(&mut buf.as_slice(), &mut pipe) {
+                match e.kind() {
+                    BrokenPipe => {
+                        info!("Pipe closed, exiting...");
+                        process::exit(0);
+                    }
+                    _ => return Err(e.into()),
                 }
-                Err(e) => bail!(e),
-                _ => (),
-            };
+            }
         }
     }
 }

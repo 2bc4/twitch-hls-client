@@ -15,27 +15,19 @@
 
 #![forbid(unsafe_code)]
 
-use std::{
-    cmp::{Ord, Ordering},
-    io,
-    process::{ChildStdin, Command, Stdio},
-    thread,
-    time::Instant,
-};
+use std::{io, thread, time::Instant};
 
-use anyhow::{bail, ensure, Context, Result};
+use anyhow::Result;
 use clap::Parser;
-use is_terminal::IsTerminal;
 use log::{debug, info, warn};
 use simplelog::{ColorChoice, ConfigBuilder, LevelFilter, TermLogger, TerminalMode};
-use ureq::AgentBuilder;
 
-mod iothread;
-mod playlist;
-use iothread::IOThread;
-use playlist::MediaPlaylist;
-
-const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36";
+mod hls;
+mod http;
+mod segment_worker;
+use hls::MediaPlaylist;
+use http::Request;
+use segment_worker::Worker;
 
 #[derive(Parser)]
 #[command(version, next_line_help = true)]
@@ -63,10 +55,6 @@ struct Args {
     )]
     player_args: String,
 
-    /// Disables resetting the player and stream when encountering an embedded advertisement
-    #[arg(long)]
-    disable_reset_on_ad: bool,
-
     /// Enable debug logging
     #[arg(short, long)]
     debug: bool,
@@ -78,66 +66,86 @@ struct Args {
     quality: String,
 }
 
-fn try_spawn_player(player_path: &Option<String>, player_args: &str) -> Result<Option<ChildStdin>> {
-    if let Some(player_path) = player_path {
-        info!("Opening player: {} {}", player_path, player_args);
-        Ok(Some(
-            Command::new(player_path)
-                .args(player_args.split_whitespace())
-                .stdin(Stdio::piped())
-                .spawn()
-                .context("Failed to open player")?
-                .stdin
-                .take()
-                .context("Failed to open player stdin")?,
-        ))
-    } else {
-        ensure!(
-            !io::stdout().is_terminal(),
-            "No player set and stdout is a terminal, exiting..."
-        );
+//Only exists to check the errors of both reloads at once
+fn kickstart(playlist: &mut MediaPlaylist, worker: &mut Worker) -> Result<Request> {
+    playlist.reload()?;
 
-        Ok(None)
-    }
+    let mut request = Request::get(&playlist.prefetch_urls[0])?;
+    io::copy(&mut request.reader()?, worker)?;
+
+    playlist.reload()?;
+    Ok(request)
 }
 
-fn reload_loop(
-    io_thread: &IOThread,
-    playlist: &mut MediaPlaylist,
-    disable_reset_on_ad: bool,
-) -> Result<()> {
+fn reload_loop(playlist: &mut MediaPlaylist, worker: &mut Worker) -> Result<()> {
+    let mut request = match kickstart(playlist, worker) {
+        Ok(request) => request,
+        Err(e) => match e.downcast_ref::<hls::Error>() {
+            Some(hls::Error::Advertisement | hls::Error::Discontinuity) => {
+                warn!("{e} on startup, resetting...");
+                return Ok(());
+            }
+            _ => return Err(e),
+        },
+    };
+
+    let mut retry_count = 0;
     loop {
         let time = Instant::now();
+        let preconnect = request
+            .is_different_host(&playlist.prefetch_urls[0])?
+            .then(|| {
+                debug!("Server changed, preconnecting to next");
+                Request::get(&playlist.prefetch_urls[0])
+            });
 
-        let reload = playlist.reload()?;
-        if !disable_reset_on_ad && reload.ad {
-            warn!("Encountered an embedded ad segment, resetting");
-            return Ok(()); //TODO: Use fallback servers
-        } else if reload.discontinuity {
-            warn!("Encountered a discontinuity, stream may be broken");
+        request.set_url(&playlist.prefetch_urls[1])?;
+        io::copy(&mut request.reader()?, worker)?;
+
+        loop {
+            match playlist.reload() {
+                Ok(_) => {
+                    retry_count = 0;
+                    break;
+                },
+                Err(e) => match e.downcast_ref::<hls::Error>() {
+                    Some(hls::Error::Unchanged | hls::Error::InvalidPrefetchUrl) => {
+                        retry_count += 1;
+                        if retry_count == 5 {
+                            warn!("Maximum retries on media playlist reached, exiting...");
+                            return Ok(());
+                        }
+
+                        debug!("{e}, retrying...");
+                        continue;
+                    }
+                    Some(hls::Error::Advertisement) => {
+                        warn!("{e}, resetting...");
+                        return Ok(());
+                    }
+                    Some(hls::Error::Discontinuity) => {
+                        warn!("{e}, stream may be broken");
+                    }
+                    _ => return Err(e),
+                },
+            }
         }
 
-        debug!("Playlist reload took {:?}", time.elapsed());
+        if let Some(preconnect) = preconnect {
+            request = preconnect?;
+        }
 
-        match reload.sequence.cmp(&reload.prev_sequence) {
-            Ordering::Greater => {
-                io_thread.send_url(&reload.url)?;
+        let elapsed = time.elapsed();
+        if elapsed < playlist.duration {
+            let sleep_time = playlist.duration - elapsed;
+            debug!(
+                "Duration: {:?} | Elapsed: {:?} | Sleeping for {:?}",
+                playlist.duration, elapsed, sleep_time
+            );
 
-                debug!("Sequence: {} -> {}", reload.prev_sequence, reload.sequence);
-                debug!("Segment duration: {:?}", reload.duration);
-
-                let elapsed = time.elapsed();
-                if elapsed < reload.duration {
-                    let sleep_time = reload.duration - elapsed;
-
-                    debug!("Sleeping for {:?}", sleep_time);
-                    thread::sleep(sleep_time);
-                } else {
-                    warn!("Took longer than segment duration, stream may be broken");
-                }
-            }
-            Ordering::Less => bail!("Out of order media sequence"),
-            Ordering::Equal => debug!("Sequence {} is the same as previous", reload.sequence), //try again immediately
+            thread::sleep(sleep_time);
+        } else {
+            debug!("Duration: {:?} | Elapsed: {:?}", playlist.duration, elapsed);
         }
     }
 }
@@ -148,8 +156,7 @@ fn main() -> Result<()> {
         TermLogger::init(
             LevelFilter::Debug,
             ConfigBuilder::new()
-                .add_filter_ignore_str("ureq::unit")
-                .add_filter_ignore_str("ureq::pool")
+                .set_thread_level(LevelFilter::Off)
                 .build(),
             TerminalMode::Stderr,
             ColorChoice::Auto,
@@ -165,23 +172,19 @@ fn main() -> Result<()> {
         )?;
     }
 
-    let agent = AgentBuilder::new().user_agent(USER_AGENT).build();
     loop {
-        let io_thread = IOThread::new(
-            &agent,
-            try_spawn_player(&args.player_path, &args.player_args)?,
-        )?;
+        let mut worker = Worker::new(&args.player_path, &args.player_args)?;
+        worker.wait_until_ready()?;
 
-        let mut playlist = MediaPlaylist::new(&agent, &args.server, &args.channel, &args.quality)?;
-        playlist.catch_up()?;
+        let mut playlist = MediaPlaylist::new(&args.server, &args.channel, &args.quality)?;
 
-        if let Err(e) = reload_loop(&io_thread, &mut playlist, args.disable_reset_on_ad) {
-            match e.downcast_ref::<ureq::Error>() {
-                Some(ureq::Error::Status(code, _)) if *code == 404 => {
+        if let Err(e) = reload_loop(&mut playlist, &mut worker) {
+            match e.downcast_ref::<http::Error>() {
+                Some(http::Error::Status(code, _)) if *code == 404 => {
                     info!("Playlist not found. Stream likely ended, exiting...");
                     return Ok(());
                 }
-                _ => bail!(e),
+                _ => return Err(e),
             }
         }
     }

@@ -13,109 +13,100 @@
 //    You should have received a copy of the GNU General Public License
 //    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-use std::time::Duration;
+use std::{fmt, time::Duration};
 
 use anyhow::{anyhow, Context, Result};
-use log::{error, info};
+use log::{debug, error, info};
 use percent_encoding::{percent_encode, AsciiSet, CONTROLS};
-use ureq::Agent;
 use url::Url;
 
-pub struct Reload {
-    pub url: String,
-    pub sequence: u32,
-    pub prev_sequence: u32,
-    pub duration: Duration,
+use crate::http::Request;
 
-    pub ad: bool,
-    pub discontinuity: bool,
+#[derive(Debug)]
+pub enum Error {
+    Unchanged,
+    InvalidPrefetchUrl,
+    Advertisement,
+    Discontinuity,
+}
+
+impl std::error::Error for Error {}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Unchanged => write!(f, "Media playlist is the same as previous"),
+            Self::InvalidPrefetchUrl => write!(f, "Invalid or missing prefetch URLs"),
+            Self::Advertisement => write!(f, "Encountered an embedded advertisement segment"),
+            Self::Discontinuity => write!(f, "Encountered a discontinuity"),
+        }
+    }
 }
 
 pub struct MediaPlaylist {
-    agent: Agent,
-    url: String,
-    prev_sequence: u32,
+    pub prefetch_urls: Vec<String>,
+    pub duration: Duration,
+    request: Request,
 }
 
 impl MediaPlaylist {
-    pub fn new(agent: &Agent, server: &str, channel: &str, quality: &str) -> Result<Self> {
-        //TODO: Store for fallback servers on ad
+    pub fn new(server: &str, channel: &str, quality: &str) -> Result<Self> {
         let master_playlist = MasterPlaylist::new(server, channel, quality)?;
 
+        let mut request = Request::get(&master_playlist.fetch()?)?;
+        request.set_accept_header(
+            "application/x-mpegURL, application/vnd.apple.mpegurl, application/json, text/plain",
+        )?;
+
         Ok(Self {
-            agent: agent.clone(), //ureq uses an ARC to store state
-            url: master_playlist.fetch(agent)?,
-            prev_sequence: 0,
+            prefetch_urls: vec![String::default(); 2],
+            duration: Duration::default(),
+            request,
         })
     }
 
-    pub fn catch_up(&mut self) -> Result<()> {
-        info!("Catching up to latest segment");
+    pub fn reload(&mut self) -> Result<()> {
+        let playlist = self.request.read_string()?;
+        debug!("Playlist:\n{playlist}");
 
-        let mut playlist = self.fetch()?;
-        let mut sequence = Self::parse_sequence(&playlist)?;
-
-        let first = sequence;
-        while sequence == first {
-            playlist = self.fetch()?;
-            sequence = Self::parse_sequence(&playlist)?;
+        if playlist.contains("Amazon")
+            || playlist.contains("stitched-ad")
+            || playlist.contains("X-TV-TWITCH-AD")
+        {
+            return Err(Error::Advertisement.into());
         }
 
-        self.prev_sequence = sequence;
+        if playlist.contains("#EXT-X-DISCONTINUITY") {
+            return Err(Error::Discontinuity.into());
+        }
 
+        let prefetch_urls = Self::parse_prefetch_urls(&playlist)?;
+        if prefetch_urls[0] == self.prefetch_urls[0] || prefetch_urls[1] == self.prefetch_urls[1] {
+            return Err(Error::Unchanged.into());
+        }
+
+        self.prefetch_urls = prefetch_urls;
+        self.duration = Self::parse_duration(&playlist)?;
         Ok(())
     }
 
-    pub fn reload(&mut self) -> Result<Reload> {
-        let playlist = self.fetch()?;
-
-        let sequence = Self::parse_sequence(&playlist)?;
-        let prev_sequence = self.prev_sequence;
-        self.prev_sequence = sequence;
-
-        Ok(Reload {
-            url: Self::parse_url(&playlist)?,
-            sequence,
-            prev_sequence,
-            duration: Self::parse_duration(&playlist)?,
-            ad: playlist.contains("Amazon")
-                || playlist.contains("stitched-ad")
-                || playlist.contains("X-TV-TWITCH-AD"),
-            discontinuity: playlist.contains("#EXT-X-DISCONTINUITY"),
-        })
-    }
-
-    fn fetch(&self) -> Result<String> {
-        Ok(self
-            .agent
-            .get(&self.url)
-            .set("referer", "https://player.twitch.tv")
-            .set("origin", "https://player.twitch.tv")
-            .set("connection", "keep-alive")
-            .call()
-            .context("Failed to fetch media playlist")?
-            .into_string()?)
-    }
-
-    fn parse_sequence(playlist: &str) -> Result<u32> {
-        playlist
+    fn parse_prefetch_urls(playlist: &str) -> Result<Vec<String>> {
+        let prefetch_urls = playlist
             .lines()
-            .skip_while(|s| !s.starts_with("#EXT-X-MEDIA-SEQUENCE"))
-            .nth(1)
-            .context("Malformed media playlist while parsing #EXT-X-MEDIA-SEQUENCE")?
-            .split(':')
-            .nth(1)
-            .context("Invalid #EXT-X-MEDIA-SEQUENCE")?
-            .parse()
-            .context("Error parsing #EXT-X-MEDIA-SEQUENCE")
-    }
+            .rev()
+            .filter(|s| s.starts_with("#EXT-X-TWITCH-PREFETCH"))
+            .map(|s| s.replace("#EXT-X-TWITCH-PREFETCH:", ""))
+            .collect::<Vec<String>>();
 
-    fn parse_url(playlist: &str) -> Result<String> {
-        Ok(playlist
-            .lines()
-            .last()
-            .context("Malformed media playlist while parsing segment URL")?
-            .replace("#EXT-X-TWITCH-PREFETCH:", ""))
+        if prefetch_urls.len() != 2 {
+            return Err(Error::InvalidPrefetchUrl.into());
+        }
+
+        for url in &prefetch_urls {
+            Url::parse(url).or(Err(Error::InvalidPrefetchUrl))?;
+        }
+
+        Ok(prefetch_urls)
     }
 
     fn parse_duration(playlist: &str) -> Result<Duration> {
@@ -123,15 +114,14 @@ impl MediaPlaylist {
             playlist
                 .lines()
                 .rev()
-                .skip_while(|s| !s.starts_with("#EXTINF"))
-                .next()
+                .find(|s| s.starts_with("#EXTINF"))
                 .context("Malformed media playlist while parsing #EXTINF")?
                 .replace("#EXTINF:", "")
                 .split(',')
                 .next()
                 .context("Invalid #EXTINF")?
                 .parse()
-                .context("Error parsing #EXTINF")?,
+                .context("Failed to parse #EXTINF")?,
         )?)
     }
 }
@@ -171,37 +161,42 @@ impl MasterPlaylist {
         })
     }
 
-    pub fn fetch(&self, agent: &Agent) -> Result<String> {
+    pub fn fetch(&self) -> Result<String> {
         info!("Fetching playlist for channel {}", self.channel);
         let playlist = self
             .servers
             .iter()
             .find_map(|s| {
-                info!(
-                    "Using server {}://{}",
-                    s.scheme(),
-                    s.host().expect("Somehow invalid host?")
-                );
+                let scheme = s.scheme();
+                let host = s.host_str().expect("Somehow invalid host?");
 
                 let request = if s.path() == "/[ttvlol]" {
-                    info!("Trying TTVLOL API");
                     const ENCODE_SET: &AsciiSet = &CONTROLS.add(b'?').add(b'=').add(b'&');
+                    info!("Using server {scheme}://{host} (TTVLOL API)");
 
                     let mut url = s.clone();
-                    url.set_path(&("/playlist/".to_owned() + &self.channel + ".m3u8"));
+                    url.set_path(&format!("/playlist/{}.m3u8", &self.channel));
 
-                    agent
-                        .get(&percent_encode(url.as_str().as_bytes(), ENCODE_SET).to_string())
-                        .set("x-donate-to", "https://ttv.lol/donate")
-                        .call()
+                    Request::get_with_header(
+                        &percent_encode(url.as_str().as_bytes(), ENCODE_SET).to_string(),
+                        "X-Donate-To: https://ttv.lol/donate",
+                    )
                 } else {
-                    agent.request_url("GET", s).call()
+                    info!("Using server {scheme}://{host}");
+                    Request::get(s.as_str())
                 };
 
+                //Awkward but I do just want to print the error and move on
                 match request {
-                    Ok(res) => res.into_string().ok(),
+                    Ok(mut res) => match res.read_string() {
+                        Ok(res) => Some(res),
+                        Err(e) => {
+                            error!("{e}");
+                            None
+                        }
+                    },
                     Err(e) => {
-                        error!("{}", e);
+                        error!("{e}");
                         None
                     }
                 }

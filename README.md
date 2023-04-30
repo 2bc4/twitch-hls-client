@@ -1,5 +1,3 @@
-#### :warning: This is currently experimental and shouldn't be used. It has several bugs that need to be fixed to function properly.
-
 ## twitch-hls-client
 Lightweight CLI client for watching low latency Twitch streams with ad blocking.
 
@@ -24,8 +22,6 @@ Options:
           Path to the player that the stream will be piped to, if not specified will write stream to stdout
   -a, --player-args <ARGUMENTS>
           Arguments to pass to the player
-      --disable-reset-on-ad
-          Disables resetting the player and stream when encountering an embedded advertisement
   -d, --debug
           Enable debug logging
   -h, --help
@@ -36,12 +32,10 @@ Options:
 
 ### Example
 ```sh
-$ twitch-hls-client twitch.tv/twitchchannel best -s https://api.ttv.lol/[ttvlol],https://eu.luminous.dev/live/[channel] -p /usr/bin/mpv -a '- --profile=low-latency --demuxer-max-bytes=700k'
-[INFO] Opening player: mpv - --profile=low-latency --demuxer-max-bytes=700k
+$ twitch-hls-client twitch.tv/twitchchannel best -s https://api.ttv.lol/[ttvlol],https://eu.luminous.dev/live/[channel] -p /usr/bin/mpv -a '- --profile=low-latency'
+[INFO] Opening player: mpv - --profile=low-latency
 [INFO] Fetching playlist for channel twitchchannel
-[INFO] Using server https://api.ttv.lol
-[INFO] Trying TTVLOL API
-[INFO] Catching up to latest segment
+[INFO] Using server https://api.ttv.lol (TTVLOL API)
  (+) Video --vid=1 (h264)
  (+) Audio --aid=1 (aac)
 Using hardware decoding (vaapi).

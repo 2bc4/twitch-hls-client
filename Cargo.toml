@@ -14,10 +14,15 @@ panic = "abort"
 
 [dependencies]
 anyhow = "1.0.70"
-clap = { version = "4.2.1", features = ["derive"] }
+chunked_transfer = "1.4.1"
+clap = { version = "4.2.1", default-features = false, features = ["std", "help", "usage", "error-context", "derive"] }
+crossbeam-channel = "0.5.8"
+flate2 = "1.0.25"
+httparse = "1.8.0"
 is-terminal = "0.4.6"
 log = "0.4.17"
 percent-encoding = "2.2.0"
+rustls = "0.21.0"
+rustls-native-certs = "0.6.2"
 simplelog = "0.12.1"
-ureq = { version = "2.6.2", features = ["native-certs"] }
 url = "2.3.1"
