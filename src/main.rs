@@ -15,7 +15,7 @@
 
 #![forbid(unsafe_code)]
 
-use std::{io, thread, time::Instant};
+use std::{io, process, thread, time::Instant};
 
 use anyhow::Result;
 use clap::Parser;
@@ -107,13 +107,13 @@ fn reload_loop(playlist: &mut MediaPlaylist, worker: &mut Worker) -> Result<()> 
                 Ok(_) => {
                     retry_count = 0;
                     break;
-                },
+                }
                 Err(e) => match e.downcast_ref::<hls::Error>() {
                     Some(hls::Error::Unchanged | hls::Error::InvalidPrefetchUrl) => {
                         retry_count += 1;
                         if retry_count == 5 {
                             warn!("Maximum retries on media playlist reached, exiting...");
-                            return Ok(());
+                            process::exit(0);
                         }
 
                         debug!("{e}, retrying...");
