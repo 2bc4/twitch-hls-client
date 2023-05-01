@@ -134,7 +134,7 @@ struct MasterPlaylist {
 
 impl MasterPlaylist {
     pub fn new(servers: &str, channel: &str, quality: &str) -> Result<Self> {
-        let channel = channel.to_owned().to_lowercase().replace("twitch.tv/", "");
+        let channel = channel.to_lowercase().replace("twitch.tv/", "");
 
         let servers: Result<Vec<Url>, _> = servers
             .replace("[channel]", &channel)
