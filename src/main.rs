@@ -54,7 +54,7 @@ impl Args {
                      if not specified will write stream to stdout"
                 ).required(false),
                 arg!(-a --"player-args" <ARGUMENTS> "Arguments to pass to the player")
-                    .default_value("")
+                    .default_value("-")
                     .hide_default_value(true)
                     .allow_hyphen_values(true),
                 arg!(-d --debug "Enable debug logging").action(ArgAction::SetTrue),
