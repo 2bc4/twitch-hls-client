@@ -58,6 +58,8 @@ pub struct Request {
 
 impl Request {
     pub fn get(url: &str) -> Result<Self> {
+        const DEFAULT_ACCEPT_HEADER: &str = "*/*";
+
         let url = Url::parse(url).context("Invalid request URL")?;
         let scheme = url.scheme();
         let host = get_host(&url)?;
@@ -95,12 +97,10 @@ impl Request {
             _ => bail!("{scheme} is not supported"),
         };
 
-        let accept_header = "*/*".to_owned();
-
         Ok(Self {
             stream: BufReader::new(stream),
-            request: Self::format_request(&url, &accept_header)?,
-            accept_header,
+            request: Self::format_request(&url, DEFAULT_ACCEPT_HEADER)?,
+            accept_header: DEFAULT_ACCEPT_HEADER.to_owned(),
             url,
         })
     }
