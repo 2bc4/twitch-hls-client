@@ -59,7 +59,7 @@ impl Args {
                     .allow_hyphen_values(true),
                 arg!(-d --debug "Enable debug logging").action(ArgAction::SetTrue),
                 arg!(<CHANNEL>
-                     "Twitch channel to watch (can also be twitch.tv/channel for Streamlink compatibility"
+                     "Twitch channel to watch (can also be twitch.tv/channel for Streamlink compatibility)"
                 ),
                 arg!(<QUALITY>
                      "Stream quality/variant playlist to fetch (best, 1080p, 720p, 360p, 160p, audio_only)"
