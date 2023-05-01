@@ -247,12 +247,12 @@ impl<'a> Decoder<'a> {
 
         let is_chunked = headers.iter().any(|h| {
             h.name.to_lowercase() == "transfer-encoding"
-                && String::from_utf8_lossy(h.value).to_lowercase() == "chunked"
+                && String::from_utf8_lossy(h.value) == "chunked"
         });
 
         let is_gzipped = headers.iter().any(|h| {
             h.name.to_lowercase() == "content-encoding"
-                && String::from_utf8_lossy(h.value).to_lowercase() == "gzip"
+                && String::from_utf8_lossy(h.value) == "gzip"
         });
 
         match (is_chunked, is_gzipped) {
