@@ -18,7 +18,7 @@
 use std::{io, process, thread, time::Instant};
 
 use anyhow::Result;
-use clap::Parser;
+use clap::{arg, command, ArgAction};
 use log::{debug, info, warn};
 use simplelog::{ColorChoice, ConfigBuilder, LevelFilter, TermLogger, TerminalMode};
 
@@ -29,41 +29,54 @@ use hls::MediaPlaylist;
 use http::Request;
 use segment_worker::Worker;
 
-#[derive(Parser)]
-#[command(version, next_line_help = true)]
 struct Args {
-    /// Playlist proxy server to fetch the playlist from.
-    /// Can be multiple comma separated servers, will try each in order until successful.
-    /// If URL path is "[ttvlol]" the playlist will be requested using the TTVLOL API.
-    /// If URL includes "[channel]" it will be replaced with the channel argument at runtime.
-    #[arg(short, long, value_name = "URL", verbatim_doc_comment)]
     server: String,
-
-    /// Path to the player that the stream will be piped to,
-    /// if not specified will write stream to stdout
-    #[arg(short, long = "player", value_name = "PATH")]
     player_path: Option<String>,
-
-    /// Arguments to pass to the player
-    #[arg(
-        short = 'a',
-        long,
-        value_name = "ARGUMENTS",
-        default_value = "",
-        hide_default_value = true,
-        allow_hyphen_values = true
-    )]
     player_args: String,
-
-    /// Enable debug logging
-    #[arg(short, long)]
     debug: bool,
-
-    /// Twitch channel to watch (can also be twitch.tv/channel for Streamlink compatibility)
     channel: String,
-
-    /// Stream quality/variant playlist to fetch (best, 1080p, 720p, 360p, 160p, audio_only)
     quality: String,
+}
+
+impl Args {
+    pub fn parse() -> Self {
+        let matches = command!()
+            .next_line_help(true)
+            .args(&[
+                arg!(-s --server <URL>
+                    "Playlist proxy server to fetch the playlist from.\n\
+                     Can be multiple comma separated servers, will try each in order until successful.\n\
+                     If URL path is \"[ttvlol]\" the playlist will be requested using the TTVLOL API.\n\
+                     If URL includes \"[channel]\" it will be replaced with the channel argument at runtime."
+                ).required(true),
+                arg!(-p --player <PATH>
+                     "Path to the player that the stream will be piped to, \
+                     if not specified will write stream to stdout"
+                ).required(false),
+                arg!(-a --"player-args" <ARGUMENTS> "Arguments to pass to the player")
+                    .default_value("")
+                    .hide_default_value(true)
+                    .allow_hyphen_values(true),
+                arg!(-d --debug "Enable debug logging").action(ArgAction::SetTrue),
+                arg!(<CHANNEL>
+                     "Twitch channel to watch (can also be twitch.tv/channel for Streamlink compatibility"
+                ),
+                arg!(<QUALITY>
+                     "Stream quality/variant playlist to fetch (best, 1080p, 720p, 360p, 160p, audio_only)"
+                ),
+            ])
+            .get_matches();
+
+        Self {
+            //the unwraps should never panic
+            server: matches.get_one::<String>("server").unwrap().clone(),
+            player_path: matches.get_one::<String>("player").cloned(),
+            player_args: matches.get_one::<String>("player-args").unwrap().clone(),
+            debug: matches.get_flag("debug"),
+            channel: matches.get_one::<String>("CHANNEL").unwrap().clone(),
+            quality: matches.get_one::<String>("QUALITY").unwrap().clone(),
+        }
+    }
 }
 
 //Only exists to check the errors of both reloads at once

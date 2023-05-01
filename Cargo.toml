@@ -15,7 +15,7 @@ panic = "abort"
 [dependencies]
 anyhow = "1.0.70"
 chunked_transfer = "1.4.1"
-clap = { version = "4.2.1", default-features = false, features = ["std", "help", "usage", "error-context", "derive"] }
+clap = { version = "4.2.1", default-features = false, features = ["std", "help", "usage", "error-context", "cargo"] }
 crossbeam-channel = "0.5.8"
 flate2 = "1.0.25"
 httparse = "1.8.0"
