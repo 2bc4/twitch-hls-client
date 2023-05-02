@@ -124,10 +124,18 @@ impl Request {
     }
 
     pub fn set_url(&mut self, url: &str) -> Result<()> {
-        assert!(!self.is_different_host(url)?);
+        let url = Url::parse(url).context("Invalid updated request URL")?;
+        if get_host(&self.url)? == get_host(&url)? {
+            self.url = url;
+            self.request = Self::format_request(&self.url, &self.accept_header)?;
+        } else {
+            debug!("Host changed, creating new request");
 
-        self.url = Url::parse(url).context("Invalid updated request URL")?;
-        self.request = Self::format_request(&self.url, &self.accept_header)?;
+            let mut r = Self::get(url.as_str())?;
+            r.set_accept_header(&self.accept_header)?;
+            *self = r;
+        }
+
         Ok(())
     }
 
@@ -136,10 +144,6 @@ impl Request {
         self.request = Self::format_request(&self.url, &self.accept_header)?;
 
         Ok(())
-    }
-
-    pub fn is_different_host(&self, url: &str) -> Result<bool> {
-        Ok(get_host(&self.url)? != get_host(&Url::parse(url)?)?)
     }
 
     fn process(&mut self) -> Result<Decoder> {

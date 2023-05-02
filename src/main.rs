@@ -105,12 +105,6 @@ fn reload_loop(playlist: &mut MediaPlaylist, worker: &mut Worker) -> Result<()> 
     let mut retry_count = 0;
     loop {
         let time = Instant::now();
-        let preconnect = request
-            .is_different_host(&playlist.prefetch_urls[0])?
-            .then(|| {
-                debug!("Server changed, preconnecting to next");
-                Request::get(&playlist.prefetch_urls[0])
-            });
 
         request.set_url(&playlist.prefetch_urls[1])?;
         io::copy(&mut request.reader()?, worker)?;
@@ -142,10 +136,6 @@ fn reload_loop(playlist: &mut MediaPlaylist, worker: &mut Worker) -> Result<()> 
                     _ => return Err(e),
                 },
             }
-        }
-
-        if let Some(preconnect) = preconnect {
-            request = preconnect?;
         }
 
         let elapsed = time.elapsed();
