@@ -160,6 +160,8 @@ fn main() -> Result<()> {
             LevelFilter::Debug,
             ConfigBuilder::new()
                 .set_thread_level(LevelFilter::Off)
+                .set_time_offset_to_local()
+                .unwrap() //isn't an error
                 .build(),
             TerminalMode::Stderr,
             ColorChoice::Auto,
