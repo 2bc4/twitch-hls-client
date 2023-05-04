@@ -116,7 +116,7 @@ fn main() -> Result<()> {
                     continue;
                 }
                 _ => return Err(e),
-            }
+            },
         };
 
         worker.send(&playlist.prefetch_urls[0])?;
