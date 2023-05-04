@@ -85,14 +85,12 @@ impl Request {
                     .with_root_certificates(roots)
                     .with_no_client_auth();
 
-                let conn = ClientConnection::new(Arc::new(config), host.try_into()?)?;
-                let sock = TcpStream::connect(format!("{host}:{port}"))?;
+                let mut conn = ClientConnection::new(Arc::new(config), host.try_into()?)?;
+                let mut sock = TcpStream::connect(format!("{host}:{port}"))?;
                 sock.set_nodelay(true)?;
 
-                let mut stream = StreamOwned::new(conn, sock);
-                stream.flush()?; //handshake
-
-                Box::new(stream)
+                conn.complete_io(&mut sock)?; //handshake
+                Box::new(StreamOwned::new(conn, sock))
             }
             _ => bail!("{scheme} is not supported"),
         };
