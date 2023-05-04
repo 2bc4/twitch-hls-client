@@ -58,13 +58,13 @@ impl Worker {
     pub fn send(&self, url: &str) -> Result<()> {
         self.url_tx
             .send(url.to_owned())
-            .context("Failed to send URL to segment reader thread")
+            .context("Failed to send URL to segment worker thread")
     }
 
     pub fn sync(&self) -> Result<()> {
         self.sync_rx
             .recv()
-            .context("Failed to receive ready state from segment worker thread")
+            .context("Failed to receive sync state from segment worker thread")
     }
 
     fn thread_main(
@@ -95,18 +95,28 @@ impl Worker {
             Box::new(io::stdout().lock())
         };
 
-        let mut request = Request::get(&url_rx.recv()?)?;
-        copy_segment(&mut request.reader()?, &mut pipe)?;
+        let mut request = match url_rx.recv() {
+            Ok(url) => {
+                let mut request = Request::get(&url)?;
+                copy_segment(&mut request.reader()?, &mut pipe)?;
+
+                request
+            }
+            _ => return Ok(()),
+        };
 
         sync_tx
             .send(())
-            .context("Failed to send ready status from segment worker thread")?;
+            .context("Failed to send sync state from segment worker thread")?;
 
         loop {
-            let Ok(url) = url_rx.recv() else { return Ok(()); };
-            request.set_url(&url)?;
-
-            copy_segment(&mut request.reader()?, &mut pipe)?;
+            match url_rx.recv() {
+                Ok(url) => {
+                    request.set_url(&url)?;
+                    copy_segment(&mut request.reader()?, &mut pipe)?;
+                }
+                _ => return Ok(()),
+            }
         }
     }
 }
