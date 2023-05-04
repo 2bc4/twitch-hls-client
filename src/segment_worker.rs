@@ -15,44 +15,28 @@
 
 use std::{
     io,
-    io::{Error, ErrorKind, ErrorKind::BrokenPipe, Write},
+    io::{ErrorKind::BrokenPipe, Read, Write},
     process,
     process::{Command, Stdio},
+    sync::mpsc::{channel, sync_channel, Receiver, Sender, SyncSender},
     thread::Builder,
 };
 
 use anyhow::{ensure, Context, Result};
-use crossbeam_channel::{bounded, unbounded, Receiver, Sender};
 use is_terminal::IsTerminal;
 use log::info;
 
+use crate::http::Request;
+
 pub struct Worker {
-    ready_rx: Receiver<()>,
-    segment_tx: Sender<Vec<u8>>,
-}
-
-impl Write for Worker {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        //Acts as a buffer if the player isn't consuming stdin quickly enough.
-        //If the player is paused it will buffer endlessly until OOM.
-        //Perhaps it should be limited in some way.
-        self.segment_tx.send(buf.to_vec()).or(Err(Error::new(
-            ErrorKind::Other,
-            "Failed to send segment data to segment worker thread",
-        )))?;
-
-        Ok(buf.len())
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
+    url_tx: Sender<String>,
+    sync_rx: Receiver<()>,
 }
 
 impl Worker {
     pub fn new(player_path: &Option<String>, player_args: &str) -> Result<Self> {
-        let (ready_tx, ready_rx): (Sender<()>, Receiver<()>) = bounded(1);
-        let (segment_tx, segment_rx): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = unbounded();
+        let (url_tx, url_rx): (Sender<String>, Receiver<String>) = channel();
+        let (sync_tx, sync_rx): (SyncSender<()>, Receiver<()>) = sync_channel(1);
         let path = player_path.clone();
         let args = player_args.to_owned();
 
@@ -61,28 +45,31 @@ impl Worker {
             .spawn(move || {
                 // :(
 
-                if let Err(e) = Self::thread_main(&ready_tx, &segment_rx, path, &args) {
+                if let Err(e) = Self::thread_main(&url_rx, &sync_tx, path, &args) {
                     eprintln!("Error: {e}");
                     process::exit(1);
                 }
             })
             .context("Failed to spawn segment worker thread")?;
 
-        Ok(Self {
-            ready_rx,
-            segment_tx,
-        })
+        Ok(Self { url_tx, sync_rx })
     }
 
-    pub fn wait_until_ready(&self) -> Result<()> {
-        self.ready_rx
+    pub fn send(&self, url: &str) -> Result<()> {
+        self.url_tx
+            .send(url.to_owned())
+            .context("Failed to send URL to segment reader thread")
+    }
+
+    pub fn sync(&self) -> Result<()> {
+        self.sync_rx
             .recv()
             .context("Failed to receive ready state from segment worker thread")
     }
 
     fn thread_main(
-        ready_tx: &Sender<()>,
-        segment_rx: &Receiver<Vec<u8>>,
+        url_rx: &Receiver<String>,
+        sync_tx: &SyncSender<()>,
         player_path: Option<String>,
         player_args: &str,
     ) -> Result<()> {
@@ -108,22 +95,32 @@ impl Worker {
             Box::new(io::stdout().lock())
         };
 
-        ready_tx
+        let mut request = Request::get(&url_rx.recv()?)?;
+        copy_segment(&mut request.reader()?, &mut pipe)?;
+
+        sync_tx
             .send(())
             .context("Failed to send ready status from segment worker thread")?;
 
         loop {
-            let Ok(buf) = segment_rx.recv() else { return Ok(()); };
+            let Ok(url) = url_rx.recv() else { return Ok(()); };
+            request.set_url(&url)?;
 
-            if let Err(e) = io::copy(&mut buf.as_slice(), &mut pipe) {
-                match e.kind() {
-                    BrokenPipe => {
-                        info!("Pipe closed, exiting...");
-                        process::exit(0);
-                    }
-                    _ => return Err(e.into()),
-                }
-            }
+            copy_segment(&mut request.reader()?, &mut pipe)?;
         }
+    }
+}
+
+#[inline]
+fn copy_segment(reader: &mut impl Read, writer: &mut impl Write) -> Result<()> {
+    match io::copy(reader, writer) {
+        Ok(_) => Ok(()),
+        Err(e) => match e.kind() {
+            BrokenPipe => {
+                info!("Pipe closed, exiting...");
+                process::exit(0);
+            }
+            _ => Err(e.into()),
+        },
     }
 }

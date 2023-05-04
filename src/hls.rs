@@ -44,7 +44,7 @@ impl fmt::Display for Error {
 }
 
 pub struct MediaPlaylist {
-    pub prefetch_urls: Vec<String>,
+    pub prefetch_urls: Vec<String>, //[0] = newest, [1] = next
     pub duration: Duration,
     request: Request,
 }
@@ -58,11 +58,14 @@ impl MediaPlaylist {
             "application/x-mpegURL, application/vnd.apple.mpegurl, application/json, text/plain",
         )?;
 
-        Ok(Self {
+        let mut media_playlist = Self {
             prefetch_urls: vec![String::default(); 2],
             duration: Duration::default(),
             request,
-        })
+        };
+
+        media_playlist.reload()?;
+        Ok(media_playlist)
     }
 
     pub fn reload(&mut self) -> Result<()> {

@@ -157,10 +157,11 @@ impl Request {
         let mut buf = vec![0u8; BUF_INIT_SIZE]; //has to be initialized or read_until can return 0
         let mut consumed = 0;
         while consumed != HEADERS_END_SIZE {
-            consumed = self.stream.read_until(b'\n', &mut buf)?;
-            if consumed == 0 {
+            if self.stream.fill_buf()?.is_empty() {
                 bail!("EOF on HTTP stream");
             }
+
+            consumed = self.stream.read_until(b'\n', &mut buf)?;
         }
         buf.drain(..BUF_INIT_SIZE);
         debug!("Response:\n{}", String::from_utf8_lossy(&buf));

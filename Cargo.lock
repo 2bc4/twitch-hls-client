@@ -102,25 +102,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "crossbeam-channel"
-version = "0.5.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a33c2bf77f2df06183c3aa30d1e96c0695a313d4f9c453cc3762a6db39f99200"
-dependencies = [
- "cfg-if",
- "crossbeam-utils",
-]
-
-[[package]]
-name = "crossbeam-utils"
-version = "0.8.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c063cd8cc95f5c377ed0d4b49a4b21f632396ff690e8470c29b3359b346984b"
-dependencies = [
- "cfg-if",
-]
-
-[[package]]
 name = "errno"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -503,7 +484,6 @@ dependencies = [
  "anyhow",
  "chunked_transfer",
  "clap",
- "crossbeam-channel",
  "flate2",
  "httparse",
  "is-terminal",
@@ -512,6 +492,7 @@ dependencies = [
  "rustls",
  "rustls-native-certs",
  "simplelog",
+ "time",
  "url",
 ]
 

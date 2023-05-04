@@ -15,18 +15,19 @@
 
 #![forbid(unsafe_code)]
 
-use std::{io, process, thread, time::Instant};
+use std::{thread, time::Instant};
 
 use anyhow::Result;
 use clap::{arg, command, ArgAction};
 use log::{debug, info, warn};
-use simplelog::{ColorChoice, ConfigBuilder, LevelFilter, TermLogger, TerminalMode};
+use simplelog::{
+    format_description, ColorChoice, ConfigBuilder, LevelFilter, TermLogger, TerminalMode,
+};
 
 mod hls;
 mod http;
 mod segment_worker;
 use hls::MediaPlaylist;
-use http::Request;
 use segment_worker::Worker;
 
 struct Args {
@@ -79,87 +80,15 @@ impl Args {
     }
 }
 
-//Only exists to check the errors of both reloads at once
-fn kickstart(playlist: &mut MediaPlaylist, worker: &mut Worker) -> Result<Request> {
-    playlist.reload()?;
-
-    let mut request = Request::get(&playlist.prefetch_urls[0])?;
-    io::copy(&mut request.reader()?, worker)?;
-
-    playlist.reload()?;
-    Ok(request)
-}
-
-fn reload_loop(playlist: &mut MediaPlaylist, worker: &mut Worker) -> Result<()> {
-    let mut request = match kickstart(playlist, worker) {
-        Ok(request) => request,
-        Err(e) => match e.downcast_ref::<hls::Error>() {
-            Some(hls::Error::Advertisement | hls::Error::Discontinuity) => {
-                warn!("{e} on startup, resetting...");
-                return Ok(());
-            }
-            _ => return Err(e),
-        },
-    };
-
-    let mut retry_count = 0;
-    loop {
-        let time = Instant::now();
-
-        request.set_url(&playlist.prefetch_urls[1])?;
-        io::copy(&mut request.reader()?, worker)?;
-
-        loop {
-            match playlist.reload() {
-                Ok(_) => {
-                    retry_count = 0;
-                    break;
-                }
-                Err(e) => match e.downcast_ref::<hls::Error>() {
-                    Some(hls::Error::Unchanged | hls::Error::InvalidPrefetchUrl) => {
-                        retry_count += 1;
-                        if retry_count == 5 {
-                            warn!("Maximum retries on media playlist reached, exiting...");
-                            process::exit(0);
-                        }
-
-                        debug!("{e}, retrying...");
-                        continue;
-                    }
-                    Some(hls::Error::Advertisement) => {
-                        warn!("{e}, resetting...");
-                        return Ok(());
-                    }
-                    Some(hls::Error::Discontinuity) => {
-                        warn!("{e}, stream may be broken");
-                    }
-                    _ => return Err(e),
-                },
-            }
-        }
-
-        let elapsed = time.elapsed();
-        if elapsed < playlist.duration {
-            let sleep_time = playlist.duration - elapsed;
-            debug!(
-                "Duration: {:?} | Elapsed: {:?} | Sleeping for {:?}",
-                playlist.duration, elapsed, sleep_time
-            );
-
-            thread::sleep(sleep_time);
-        } else {
-            debug!("Duration: {:?} | Elapsed: {:?}", playlist.duration, elapsed);
-        }
-    }
-}
-
 fn main() -> Result<()> {
     let args = Args::parse();
     if args.debug {
         TermLogger::init(
             LevelFilter::Debug,
             ConfigBuilder::new()
-                .set_thread_level(LevelFilter::Off)
+                .set_time_format_custom(format_description!(
+                    "[hour]:[minute]:[second].[subsecond digits:5]"
+                ))
                 .set_time_offset_to_local()
                 .unwrap() //isn't an error
                 .build(),
@@ -178,18 +107,54 @@ fn main() -> Result<()> {
     }
 
     loop {
-        let mut worker = Worker::new(&args.player_path, &args.player_args)?;
-        worker.wait_until_ready()?;
-
-        let mut playlist = MediaPlaylist::new(&args.server, &args.channel, &args.quality)?;
-
-        if let Err(e) = reload_loop(&mut playlist, &mut worker) {
-            match e.downcast_ref::<http::Error>() {
-                Some(http::Error::Status(code, _)) if *code == 404 => {
-                    info!("Playlist not found. Stream likely ended, exiting...");
-                    return Ok(());
+        let worker = Worker::new(&args.player_path, &args.player_args)?;
+        let mut playlist = match MediaPlaylist::new(&args.server, &args.channel, &args.quality) {
+            Ok(playlist) => playlist,
+            Err(e) => match e.downcast_ref::<hls::Error>() {
+                Some(hls::Error::Advertisement | hls::Error::Discontinuity) => {
+                    warn!("{e} on startup, resetting...");
+                    continue;
                 }
                 _ => return Err(e),
+            }
+        };
+
+        worker.send(&playlist.prefetch_urls[0])?;
+        worker.sync()?;
+
+        let mut retry_count: u8 = 0;
+        loop {
+            let time = Instant::now();
+            match playlist.reload() {
+                Ok(_) => retry_count = 0,
+                Err(e) => match e.downcast_ref::<hls::Error>() {
+                    Some(hls::Error::Unchanged | hls::Error::InvalidPrefetchUrl) => {
+                        const MAX_RETRIES: u8 = 5;
+
+                        retry_count += 1;
+                        if retry_count == MAX_RETRIES {
+                            info!("Maximum retries on media playlist reached, exiting...");
+                            return Ok(());
+                        }
+
+                        debug!("{e}, retrying...");
+                        continue;
+                    }
+                    Some(hls::Error::Advertisement) => {
+                        warn!("{e}, resetting...");
+                        break;
+                    }
+                    Some(hls::Error::Discontinuity) => {
+                        warn!("{e}, stream may be broken");
+                    }
+                    _ => return Err(e),
+                },
+            }
+
+            worker.send(&playlist.prefetch_urls[1])?;
+
+            if let Some(sleep_time) = playlist.duration.checked_sub(time.elapsed()) {
+                thread::sleep(sleep_time);
             }
         }
     }
