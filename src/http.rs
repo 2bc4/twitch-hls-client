@@ -15,7 +15,11 @@
 
 use std::{
     fmt, io,
-    io::{BufRead, BufReader, Read, Write},
+    io::{
+        BufRead, BufReader,
+        ErrorKind::{ConnectionAborted, UnexpectedEof},
+        Read, Write,
+    },
     net::TcpStream,
 };
 
@@ -112,10 +116,7 @@ impl Request {
             self.request = Self::format_request(&self.url, &self.accept_header)?;
         } else {
             debug!("Host changed, creating new request");
-
-            let mut r = Self::get(url.as_str())?;
-            r.set_accept_header(&self.accept_header)?;
-            *self = r;
+            self.reconnect(url.as_str())?;
         }
 
         Ok(())
@@ -139,8 +140,26 @@ impl Request {
         let mut buf = vec![0u8; BUF_INIT_SIZE]; //has to be initialized or read_until can return 0
         let mut consumed = 0;
         while consumed != HEADERS_END_SIZE {
-            if self.stream.fill_buf()?.is_empty() {
-                bail!("EOF on HTTP stream");
+            match self.stream.fill_buf() {
+                Ok(stream_buf) => {
+                    if stream_buf.is_empty() {
+                        //Temporary
+                        debug!("EOF, retrying");
+                        buf.drain(BUF_INIT_SIZE..);
+                        self.reconnect(self.url.clone().as_str())?;
+                        self.stream.get_mut().write_all(self.request.as_bytes())?;
+                    }
+                }
+                Err(e) => match e.kind() {
+                    ConnectionAborted | UnexpectedEof => {
+                        //Temporary
+                        debug!("Unexpected EOF/connection reset, retrying");
+                        buf.drain(BUF_INIT_SIZE..);
+                        self.reconnect(self.url.clone().as_str())?;
+                        self.stream.get_mut().write_all(self.request.as_bytes())?;
+                    }
+                    _ => return Err(e.into()),
+                },
             }
 
             consumed = self.stream.read_until(b'\n', &mut buf)?;
@@ -187,6 +206,14 @@ impl Request {
             get_host(url)?,
             accept_header,
         ))
+    }
+
+    fn reconnect(&mut self, url: &str) -> Result<()> {
+        let mut request = Self::get(url)?;
+        request.set_accept_header(&self.accept_header)?;
+        *self = request;
+
+        Ok(())
     }
 
     #[cfg(any(feature = "rustls-webpki", feature = "rustls-native-certs"))]
