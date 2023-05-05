@@ -135,7 +135,17 @@ impl Request {
         const MAX_HEADERS: usize = 16;
 
         debug!("Request:\n{}", self.request);
-        self.stream.get_mut().write_all(self.request.as_bytes())?;
+        if let Err(e) = self.stream.get_mut().write_all(self.request.as_bytes()) {
+            match e.kind() {
+                ConnectionAborted | UnexpectedEof => {
+                    //Temporary
+                    debug!("Unexpected EOF/connection reset, retrying");
+                    self.reconnect(self.url.clone().as_str())?;
+                    self.stream.get_mut().write_all(self.request.as_bytes())?;
+                }
+                _ => return Err(e.into()),
+            }
+        }
 
         let mut buf = vec![0u8; BUF_INIT_SIZE]; //has to be initialized or read_until can return 0
         let mut consumed = 0;
