@@ -17,7 +17,7 @@ use std::{
     fmt, io,
     io::{
         BufRead, BufReader,
-        ErrorKind::{ConnectionAborted, UnexpectedEof},
+        ErrorKind::{ConnectionAborted, ConnectionReset, UnexpectedEof},
         Read, Write,
     },
     net::TcpStream,
@@ -137,7 +137,7 @@ impl Request {
         debug!("Request:\n{}", self.request);
         if let Err(e) = self.stream.get_mut().write_all(self.request.as_bytes()) {
             match e.kind() {
-                ConnectionAborted | UnexpectedEof => {
+                ConnectionReset | ConnectionAborted | UnexpectedEof => {
                     //Temporary
                     debug!("Unexpected EOF/connection reset, retrying");
                     self.reconnect(self.url.clone().as_str())?;
@@ -161,7 +161,7 @@ impl Request {
                     }
                 }
                 Err(e) => match e.kind() {
-                    ConnectionAborted | UnexpectedEof => {
+                    ConnectionReset | ConnectionAborted | UnexpectedEof => {
                         //Temporary
                         debug!("Unexpected EOF/connection reset, retrying");
                         buf.drain(BUF_INIT_SIZE..);
