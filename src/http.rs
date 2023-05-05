@@ -17,7 +17,6 @@ use std::{
     fmt, io,
     io::{BufRead, BufReader, Read, Write},
     net::TcpStream,
-    sync::Arc,
 };
 
 use anyhow::{bail, Context, Result};
@@ -25,7 +24,6 @@ use chunked_transfer::Decoder as ChunkDecoder;
 use flate2::read::GzDecoder;
 use httparse::{Header, Response, Status, EMPTY_HEADER};
 use log::debug;
-use rustls::{Certificate, ClientConfig, ClientConnection, RootCertStore, StreamOwned};
 use url::Url;
 
 #[derive(Debug)]
@@ -45,7 +43,12 @@ impl fmt::Display for Error {
 
 pub trait ReadWrite: Read + Write {}
 impl ReadWrite for TcpStream {}
-impl ReadWrite for StreamOwned<ClientConnection, TcpStream> {}
+
+#[cfg(any(feature = "rustls-webpki", feature = "rustls-native-certs"))]
+impl ReadWrite for rustls::StreamOwned<rustls::ClientConnection, TcpStream> {}
+
+#[cfg(feature = "native-tls")]
+impl ReadWrite for native_tls::TlsStream<TcpStream> {}
 
 type Stream = BufReader<Box<dyn ReadWrite>>;
 
@@ -67,31 +70,12 @@ impl Request {
             .port_or_known_default()
             .context("Invalid port in request URL")?;
 
+        let sock = TcpStream::connect(format!("{host}:{port}"))?;
+        sock.set_nodelay(true)?;
+
         let stream: Box<dyn ReadWrite> = match scheme {
-            "http" => {
-                let sock = TcpStream::connect(format!("{host}:{port}"))?;
-                sock.set_nodelay(true)?;
-
-                Box::new(sock)
-            }
-            "https" => {
-                let mut roots = RootCertStore::empty();
-                for cert in rustls_native_certs::load_native_certs()? {
-                    roots.add(&Certificate(cert.0))?;
-                }
-
-                let config = ClientConfig::builder()
-                    .with_safe_defaults()
-                    .with_root_certificates(roots)
-                    .with_no_client_auth();
-
-                let mut conn = ClientConnection::new(Arc::new(config), host.try_into()?)?;
-                let mut sock = TcpStream::connect(format!("{host}:{port}"))?;
-                sock.set_nodelay(true)?;
-
-                conn.complete_io(&mut sock)?; //handshake
-                Box::new(StreamOwned::new(conn, sock))
-            }
+            "http" => Box::new(sock),
+            "https" => Box::new(Self::init_tls(host, sock)?),
             _ => bail!("{scheme} is not supported"),
         };
 
@@ -203,6 +187,60 @@ impl Request {
             get_host(url)?,
             accept_header,
         ))
+    }
+
+    #[cfg(any(feature = "rustls-webpki", feature = "rustls-native-certs"))]
+    fn init_rustls(
+        host: &str,
+        mut sock: TcpStream,
+        roots: rustls::RootCertStore,
+    ) -> Result<rustls::StreamOwned<rustls::ClientConnection, TcpStream>> {
+        use std::sync::Arc;
+
+        let config = rustls::ClientConfig::builder()
+            .with_safe_defaults()
+            .with_root_certificates(roots)
+            .with_no_client_auth();
+
+        let mut conn = rustls::ClientConnection::new(Arc::new(config), host.try_into()?)?;
+
+        conn.complete_io(&mut sock)?; //handshake
+        Ok(rustls::StreamOwned::new(conn, sock))
+    }
+
+    #[cfg(feature = "rustls-webpki")]
+    fn init_tls(
+        host: &str,
+        sock: TcpStream,
+    ) -> Result<rustls::StreamOwned<rustls::ClientConnection, TcpStream>> {
+        let mut roots = rustls::RootCertStore::empty();
+        roots.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(|ta| {
+            rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
+                ta.subject,
+                ta.spki,
+                ta.name_constraints,
+            )
+        }));
+
+        Self::init_rustls(host, sock, roots)
+    }
+
+    #[cfg(feature = "rustls-native-certs")]
+    fn init_tls(
+        host: &str,
+        sock: TcpStream,
+    ) -> Result<rustls::StreamOwned<rustls::ClientConnection, TcpStream>> {
+        let mut roots = rustls::RootCertStore::empty();
+        for cert in rustls_native_certs::load_native_certs()? {
+            roots.add(&rustls::Certificate(cert.0))?;
+        }
+
+        Self::init_rustls(host, sock, roots)
+    }
+
+    #[cfg(feature = "native-tls")]
+    fn init_tls(host: &str, sock: TcpStream) -> Result<native_tls::TlsStream<TcpStream>> {
+        Ok(native_tls::TlsConnector::new()?.connect(host, sock)?)
     }
 }
 
