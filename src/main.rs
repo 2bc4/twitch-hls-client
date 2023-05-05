@@ -129,7 +129,7 @@ fn main() -> Result<()> {
                 Ok(_) => retry_count = 0,
                 Err(e) => match e.downcast_ref::<hls::Error>() {
                     Some(hls::Error::Unchanged | hls::Error::InvalidPrefetchUrl) => {
-                        const MAX_RETRIES: u8 = 5;
+                        const MAX_RETRIES: u8 = 30;
 
                         retry_count += 1;
                         if retry_count == MAX_RETRIES {
