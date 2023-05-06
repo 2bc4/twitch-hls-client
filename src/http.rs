@@ -116,7 +116,7 @@ impl Request {
             self.request = Self::format_request(&self.url, &self.accept_header)?;
         } else {
             debug!("Host changed, creating new request");
-            self.reconnect(url.as_str())?;
+            self.reconnect(Some(url.as_str()))?;
         }
 
         Ok(())
@@ -129,53 +129,58 @@ impl Request {
         Ok(())
     }
 
-    fn process(&mut self) -> Result<Decoder> {
+    fn reconnect(&mut self, url: Option<&str>) -> Result<()> {
+        let mut request = if let Some(url) = url {
+            Self::get(url)?
+        } else {
+            Self::get(self.url.as_str())?
+        };
+
+        request.set_accept_header(&self.accept_header)?;
+        *self = request;
+
+        Ok(())
+    }
+
+    fn do_io(&mut self) -> Result<Vec<u8>> {
         const BUF_INIT_SIZE: usize = 1024;
         const HEADERS_END_SIZE: usize = 2; //read only \r\n
-        const MAX_HEADERS: usize = 16;
 
         debug!("Request:\n{}", self.request);
-        if let Err(e) = self.stream.get_mut().write_all(self.request.as_bytes()) {
-            match e.kind() {
-                ConnectionReset | ConnectionAborted | UnexpectedEof => {
-                    //Temporary
-                    debug!("Unexpected EOF/connection reset, retrying");
-                    self.reconnect(self.url.clone().as_str())?;
-                    self.stream.get_mut().write_all(self.request.as_bytes())?;
-                }
-                _ => return Err(e.into()),
-            }
-        }
+        self.stream.get_mut().write_all(self.request.as_bytes())?;
 
         let mut buf = vec![0u8; BUF_INIT_SIZE]; //has to be initialized or read_until can return 0
         let mut consumed = 0;
         while consumed != HEADERS_END_SIZE {
-            match self.stream.fill_buf() {
-                Ok(stream_buf) => {
-                    if stream_buf.is_empty() {
-                        //Temporary
-                        debug!("EOF, retrying");
-                        buf.drain(BUF_INIT_SIZE..);
-                        self.reconnect(self.url.clone().as_str())?;
-                        self.stream.get_mut().write_all(self.request.as_bytes())?;
-                    }
-                }
-                Err(e) => match e.kind() {
-                    ConnectionReset | ConnectionAborted | UnexpectedEof => {
-                        //Temporary
-                        debug!("Unexpected EOF/connection reset, retrying");
-                        buf.drain(BUF_INIT_SIZE..);
-                        self.reconnect(self.url.clone().as_str())?;
-                        self.stream.get_mut().write_all(self.request.as_bytes())?;
-                    }
-                    _ => return Err(e.into()),
-                },
+            if self.stream.fill_buf()?.is_empty() {
+                return Err(io::Error::from(io::ErrorKind::UnexpectedEof).into());
             }
 
             consumed = self.stream.read_until(b'\n', &mut buf)?;
         }
         buf.drain(..BUF_INIT_SIZE);
         debug!("Response:\n{}", String::from_utf8_lossy(&buf));
+
+        Ok(buf)
+    }
+
+    fn process(&mut self) -> Result<Decoder> {
+        const MAX_HEADERS: usize = 16;
+
+        let buf = match self.do_io() {
+            Ok(buf) => buf,
+            Err(e) => match e.downcast_ref::<io::Error>() {
+                Some(ioe) => match ioe.kind() {
+                    ConnectionReset | ConnectionAborted | UnexpectedEof => {
+                        debug!("Connection reset/EOF, reconnecting");
+                        self.reconnect(None)?;
+                        self.do_io()? //if it happens again it's unrecoverable
+                    }
+                    _ => return Err(e),
+                },
+                _ => return Err(e),
+            },
+        };
 
         let mut headers = [EMPTY_HEADER; MAX_HEADERS];
         let mut response = Response::new(&mut headers);
@@ -216,14 +221,6 @@ impl Request {
             get_host(url)?,
             accept_header,
         ))
-    }
-
-    fn reconnect(&mut self, url: &str) -> Result<()> {
-        let mut request = Self::get(url)?;
-        request.set_accept_header(&self.accept_header)?;
-        *self = request;
-
-        Ok(())
     }
 
     #[cfg(any(feature = "rustls-webpki", feature = "rustls-native-certs"))]
