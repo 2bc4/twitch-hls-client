@@ -1,0 +1,114 @@
+# Based on https://github.com/AlyoshaVasilieva/luminous-ttv/blob/main/.github/workflows/release.yaml
+
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
+    paths:
+      - '**.rs'
+      - 'Cargo**'
+
+name: Release
+
+jobs:
+  check:
+    name: Check
+    strategy:
+      fail-fast: false
+      matrix:
+        version: [ 'ubuntu-latest', 'windows-latest', 'macos-latest' ]
+    runs-on: ${{ matrix.version }}
+    steps:
+      - uses: actions/checkout@v3
+      - name: setup
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check
+
+  lint:
+    name: Lint
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        version: [ 'ubuntu-latest', 'windows-latest', 'macos-latest' ]
+        cargo-cmd:
+          - fmt --all -- --check
+          - clippy --all # -Wclippy::pedantic breaks on Windows?
+    runs-on: ${{ matrix.version }}
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo ${{ matrix['cargo-cmd'] }}
+
+  release:
+    name: Release
+    needs: lint
+    runs-on: ${{ matrix.os }}
+    env:
+      CC_aarch64_unknown_linux_musl: "clang"
+      AR_aarch64_unknown_linux_musl: "llvm-ar"
+      CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_RUSTFLAGS: "-Clink-self-contained=yes -Clinker=rust-lld"
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            binName: twitch-hls-client.exe
+          - target: i686-pc-windows-msvc
+            os: windows-latest
+            binName: twitch-hls-client.exe
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            binName: twitch-hls-client
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            binName: twitch-hls-client
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            binName: twitch-hls-client
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            binName: twitch-hls-client
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install Musl Tools
+        if: ${{ contains(matrix.os, 'ubuntu') }}
+        run: sudo apt-get install -y musl-dev musl-tools clang llvm
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release --target=${{ matrix.target }}
+      - name: Smoke Test
+        if: ${{ !contains(matrix.target, 'aarch64') }}
+        run: cargo run --release --target=${{ matrix.target }} -- -V
+      - name: Move Binary
+        id: mv
+        run: mv "target/${{ matrix.target }}/release/${{ matrix.binName }}" .
+      - name: Zip Files
+        uses: vimtor/action-zip@v1.1
+        id: archive
+        with:
+          files: README.md LICENSE ${{ matrix.binName }}
+          dest: twitch-hls-client-${{ matrix.target }}.zip
+      - name: Upload Archives
+        uses: ncipollo/release-action@v1
+        with:
+          draft: true
+          allowUpdates: true
+          updateOnlyUnreleased: true
+          artifactErrorsFailBuild: true
+          artifacts: twitch-hls-client-${{ matrix.target }}.zip
+          artifactContentType: application/zip
+          omitBodyDuringUpdate: true
+          omitNameDuringUpdate: true
+          omitPrereleaseDuringUpdate: true
