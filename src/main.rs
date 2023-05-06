@@ -18,7 +18,7 @@
 use std::{thread, time::Instant};
 
 use anyhow::Result;
-use clap::{arg, command, ArgAction};
+use clap::{arg, command, value_parser, ArgAction};
 use log::{debug, info, warn};
 use simplelog::{
     format_description, ColorChoice, ConfigBuilder, LevelFilter, TermLogger, TerminalMode,
@@ -35,6 +35,7 @@ struct Args {
     player_path: Option<String>,
     player_args: String,
     debug: bool,
+    max_retries: u32,
     channel: String,
     quality: String,
 }
@@ -45,7 +46,7 @@ impl Args {
             .next_line_help(true)
             .args(&[
                 arg!(-s --server <URL>
-                    "Playlist proxy server to fetch the playlist from.\n\
+                    "Playlist proxy server to fetch the master playlist from.\n\
                      Can be multiple comma separated servers, will try each in order until successful.\n\
                      If URL path is \"[ttvlol]\" the playlist will be requested using the TTVLOL API.\n\
                      If URL includes \"[channel]\" it will be replaced with the channel argument at runtime."
@@ -53,12 +54,15 @@ impl Args {
                 arg!(-p --player <PATH>
                      "Path to the player that the stream will be piped to, \
                      if not specified will write stream to stdout"
-                ).required(false),
+                ),
                 arg!(-a --"player-args" <ARGUMENTS> "Arguments to pass to the player")
                     .default_value("-")
                     .hide_default_value(true)
                     .allow_hyphen_values(true),
                 arg!(-d --debug "Enable debug logging").action(ArgAction::SetTrue),
+                arg!(--"max-retries" <COUNT> "Attempt to fetch the media playlist <COUNT> times before exiting")
+                    .value_parser(value_parser!(u32))
+                    .default_value("30"),
                 arg!(<CHANNEL>
                      "Twitch channel to watch (can also be twitch.tv/channel for Streamlink compatibility)"
                 ),
@@ -69,11 +73,12 @@ impl Args {
             .get_matches();
 
         Self {
-            //the unwraps should never panic
+            //these unwraps should never panic
             server: matches.get_one::<String>("server").unwrap().clone(),
             player_path: matches.get_one::<String>("player").cloned(),
             player_args: matches.get_one::<String>("player-args").unwrap().clone(),
             debug: matches.get_flag("debug"),
+            max_retries: *matches.get_one::<u32>("max-retries").unwrap(),
             channel: matches.get_one::<String>("CHANNEL").unwrap().clone(),
             quality: matches.get_one::<String>("QUALITY").unwrap().clone(),
         }
@@ -122,17 +127,15 @@ fn main() -> Result<()> {
         worker.send(&playlist.prefetch_urls[0])?;
         worker.sync()?;
 
-        let mut retry_count: u8 = 0;
+        let mut retry_count: u32 = 0;
         loop {
             let time = Instant::now();
             match playlist.reload() {
                 Ok(_) => retry_count = 0,
                 Err(e) => match e.downcast_ref::<hls::Error>() {
                     Some(hls::Error::Unchanged | hls::Error::InvalidPrefetchUrl) => {
-                        const MAX_RETRIES: u8 = 30;
-
                         retry_count += 1;
-                        if retry_count == MAX_RETRIES {
+                        if retry_count == args.max_retries {
                             info!("Maximum retries on media playlist reached, exiting...");
                             return Ok(());
                         }
