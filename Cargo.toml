@@ -12,6 +12,7 @@ rust-version = "1.60"
 codegen-units = 1
 lto = true
 panic = "abort"
+strip = "symbols"
 
 [features]
 default = ["rustls-webpki"]
