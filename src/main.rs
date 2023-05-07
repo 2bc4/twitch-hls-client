@@ -32,7 +32,7 @@ use segment_worker::Worker;
 
 struct Args {
     server: String,
-    player_path: Option<String>,
+    player_path: String,
     player_args: String,
     debug: bool,
     max_retries: u32,
@@ -51,15 +51,14 @@ impl Args {
                      If URL path is \"[ttvlol]\" the playlist will be requested using the TTVLOL API.\n\
                      If URL includes \"[channel]\" it will be replaced with the channel argument at runtime."
                 ).required(true),
-                arg!(-p --player <PATH>
-                     "Path to the player that the stream will be piped to, \
-                     if not specified will write stream to stdout"
-                ),
+                arg!(-p --player <PATH> "Path to the player that the stream will be piped to")
+                    .required(true),
                 arg!(-a --"player-args" <ARGUMENTS> "Arguments to pass to the player")
                     .default_value("-")
                     .hide_default_value(true)
                     .allow_hyphen_values(true),
-                arg!(-d --debug "Enable debug logging").action(ArgAction::SetTrue),
+                arg!(-d --debug "Enable debug logging")
+                    .action(ArgAction::SetTrue),
                 arg!(--"max-retries" <COUNT> "Attempt to fetch the media playlist <COUNT> times before exiting")
                     .value_parser(value_parser!(u32))
                     .default_value("30"),
@@ -75,7 +74,7 @@ impl Args {
         Self {
             //these unwraps should never panic
             server: matches.get_one::<String>("server").unwrap().clone(),
-            player_path: matches.get_one::<String>("player").cloned(),
+            player_path: matches.get_one::<String>("player").unwrap().clone(),
             player_args: matches.get_one::<String>("player-args").unwrap().clone(),
             debug: matches.get_flag("debug"),
             max_retries: *matches.get_one::<u32>("max-retries").unwrap(),
@@ -112,7 +111,7 @@ fn main() -> Result<()> {
     }
 
     loop {
-        let worker = Worker::new(&args.player_path, &args.player_args)?;
+        let worker = Worker::new(args.player_path.clone(), args.player_args.clone())?;
         let mut playlist = match MediaPlaylist::new(&args.server, &args.channel, &args.quality) {
             Ok(playlist) => playlist,
             Err(e) => match e.downcast_ref::<hls::Error>() {

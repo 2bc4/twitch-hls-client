@@ -22,8 +22,7 @@ use std::{
     thread::Builder,
 };
 
-use anyhow::{ensure, Context, Result};
-use is_terminal::IsTerminal;
+use anyhow::{Context, Result};
 use log::info;
 
 use crate::http::Request;
@@ -34,18 +33,16 @@ pub struct Worker {
 }
 
 impl Worker {
-    pub fn new(player_path: &Option<String>, player_args: &str) -> Result<Self> {
+    pub fn new(player_path: String, player_args: String) -> Result<Self> {
         let (url_tx, url_rx): (Sender<String>, Receiver<String>) = channel();
         let (sync_tx, sync_rx): (SyncSender<()>, Receiver<()>) = sync_channel(1);
-        let path = player_path.clone();
-        let args = player_args.to_owned();
 
         Builder::new()
-            .name("Segment Worker".to_owned())
+            .name(String::from("Segment Worker"))
             .spawn(move || {
                 // :(
 
-                if let Err(e) = Self::thread_main(&url_rx, &sync_tx, path, &args) {
+                if let Err(e) = Self::thread_main(&url_rx, &sync_tx, &player_path, &player_args) {
                     eprintln!("Error: {e}");
                     process::exit(1);
                 }
@@ -70,30 +67,18 @@ impl Worker {
     fn thread_main(
         url_rx: &Receiver<String>,
         sync_tx: &SyncSender<()>,
-        player_path: Option<String>,
+        player_path: &str,
         player_args: &str,
     ) -> Result<()> {
-        let mut pipe: Box<dyn Write> = if let Some(player_path) = player_path {
-            info!("Opening player: {} {}", player_path, player_args);
-            Box::new(
-                Command::new(player_path)
-                    .args(player_args.split_whitespace())
-                    .stdin(Stdio::piped())
-                    .spawn()
-                    .context("Failed to open player")?
-                    .stdin
-                    .take()
-                    .context("Failed to open player stdin")?,
-            )
-        } else {
-            ensure!(
-                !io::stdout().is_terminal(),
-                "No player set and stdout is a terminal, exiting..."
-            );
-
-            info!("Writing to stdout");
-            Box::new(io::stdout().lock())
-        };
+        info!("Opening player: {} {}", player_path, player_args);
+        let mut pipe = Command::new(player_path)
+            .args(player_args.split_whitespace())
+            .stdin(Stdio::piped())
+            .spawn()
+            .context("Failed to open player")?
+            .stdin
+            .take()
+            .context("Failed to open player stdin")?;
 
         let mut request = match url_rx.recv() {
             Ok(url) => {
@@ -127,7 +112,7 @@ fn copy_segment(reader: &mut impl Read, writer: &mut impl Write) -> Result<()> {
         Ok(_) => Ok(()),
         Err(e) => match e.kind() {
             BrokenPipe => {
-                info!("Pipe closed, exiting...");
+                info!("Player closed, exiting...");
                 process::exit(0);
             }
             _ => Err(e.into()),

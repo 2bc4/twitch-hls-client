@@ -26,7 +26,6 @@ chunked_transfer = "1.4.1"
 clap = { version = "4.2.1", default-features = false, features = ["std", "help", "usage", "error-context", "cargo"] }
 flate2 = "1.0.25"
 httparse = "1.8.0"
-is-terminal = "0.4.6"
 log = "0.4.17"
 native-tls = { version = "0.2.11", optional = true }
 percent-encoding = "2.2.0"
