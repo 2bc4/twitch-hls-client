@@ -142,7 +142,7 @@ impl Request {
         Ok(())
     }
 
-    fn do_io(&mut self) -> Result<Vec<u8>> {
+    fn do_io(&mut self) -> Result<Vec<u8>, io::Error> {
         const BUF_INIT_SIZE: usize = 1024;
         const HEADERS_END_SIZE: usize = 2; //read only \r\n
 
@@ -153,7 +153,7 @@ impl Request {
         let mut consumed = 0;
         while consumed != HEADERS_END_SIZE {
             if self.stream.fill_buf()?.is_empty() {
-                return Err(io::Error::from(io::ErrorKind::UnexpectedEof).into());
+                return Err(io::Error::from(io::ErrorKind::UnexpectedEof));
             }
 
             consumed = self.stream.read_until(b'\n', &mut buf)?;
@@ -169,16 +169,13 @@ impl Request {
 
         let buf = match self.do_io() {
             Ok(buf) => buf,
-            Err(e) => match e.downcast_ref::<io::Error>() {
-                Some(ioe) => match ioe.kind() {
-                    ConnectionReset | ConnectionAborted | UnexpectedEof => {
-                        debug!("Connection reset/EOF, reconnecting");
-                        self.reconnect(None)?;
-                        self.do_io()? //if it happens again it's unrecoverable
-                    }
-                    _ => return Err(e),
-                },
-                _ => return Err(e),
+            Err(e) => match e.kind() {
+                ConnectionReset | ConnectionAborted | UnexpectedEof => {
+                    debug!("Connection reset/EOF, reconnecting");
+                    self.reconnect(None)?;
+                    self.do_io()? //if it happens again it's unrecoverable
+                }
+                _ => return Err(e.into()),
             },
         };
 
