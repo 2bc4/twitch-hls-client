@@ -223,30 +223,8 @@ impl Request {
         ))
     }
 
-    #[cfg(any(feature = "rustls-webpki", feature = "rustls-native-certs"))]
-    fn init_rustls(
-        host: &str,
-        mut sock: TcpStream,
-        roots: rustls::RootCertStore,
-    ) -> Result<rustls::StreamOwned<rustls::ClientConnection, TcpStream>> {
-        use std::sync::Arc;
-
-        let config = rustls::ClientConfig::builder()
-            .with_safe_defaults()
-            .with_root_certificates(roots)
-            .with_no_client_auth();
-
-        let mut conn = rustls::ClientConnection::new(Arc::new(config), host.try_into()?)?;
-
-        conn.complete_io(&mut sock)?; //handshake
-        Ok(rustls::StreamOwned::new(conn, sock))
-    }
-
     #[cfg(feature = "rustls-webpki")]
-    fn init_tls(
-        host: &str,
-        sock: TcpStream,
-    ) -> Result<rustls::StreamOwned<rustls::ClientConnection, TcpStream>> {
+    fn root_certs() -> rustls::RootCertStore {
         let mut roots = rustls::RootCertStore::empty();
         roots.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(|ta| {
             rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
@@ -256,20 +234,40 @@ impl Request {
             )
         }));
 
-        Self::init_rustls(host, sock, roots)
+        roots
     }
 
     #[cfg(feature = "rustls-native-certs")]
-    fn init_tls(
-        host: &str,
-        sock: TcpStream,
-    ) -> Result<rustls::StreamOwned<rustls::ClientConnection, TcpStream>> {
+    fn root_certs() -> rustls::RootCertStore {
         let mut roots = rustls::RootCertStore::empty();
-        for cert in rustls_native_certs::load_native_certs()? {
-            roots.add(&rustls::Certificate(cert.0))?;
+        let certs = rustls_native_certs::load_native_certs().unwrap_or_else(|_| Vec::new());
+        for cert in certs {
+            //Ignore parsing errors, OS can have broken certs.
+            if let Err(e) = roots.add(&rustls::Certificate(cert.0)) {
+                debug!("Invalid certificate: {e}");
+            }
         }
 
-        Self::init_rustls(host, sock, roots)
+        roots
+    }
+
+    #[cfg(any(feature = "rustls-webpki", feature = "rustls-native-certs"))]
+    fn init_tls(
+        host: &str,
+        mut sock: TcpStream,
+    ) -> Result<rustls::StreamOwned<rustls::ClientConnection, TcpStream>> {
+        use std::sync::Arc;
+
+        let roots = Self::root_certs();
+        let config = rustls::ClientConfig::builder()
+            .with_safe_defaults()
+            .with_root_certificates(roots)
+            .with_no_client_auth();
+
+        let mut conn = rustls::ClientConnection::new(Arc::new(config), host.try_into()?)?;
+        conn.complete_io(&mut sock)?; //handshake
+
+        Ok(rustls::StreamOwned::new(conn, sock))
     }
 
     #[cfg(feature = "native-tls")]
