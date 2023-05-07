@@ -4,7 +4,7 @@ Lightweight CLI client for watching low latency Twitch streams with ad blocking.
 Fetches the playlist from the ad blocking playlist proxy server of your choosing, fetches the latest prefetch segment, and then writes the MPEG-TS stream to your player.
 
 ```
-Usage: twitch-hls-client [OPTIONS] --server <URL> <CHANNEL> <QUALITY>
+Usage: twitch-hls-client [OPTIONS] --server <URL> --player <PATH> <CHANNEL> <QUALITY>
 
 Arguments:
   <CHANNEL>
@@ -14,16 +14,18 @@ Arguments:
 
 Options:
   -s, --server <URL>
-          Playlist proxy server to fetch the playlist from.
+          Playlist proxy server to fetch the master playlist from.
           Can be multiple comma separated servers, will try each in order until successful.
           If URL path is "[ttvlol]" the playlist will be requested using the TTVLOL API.
           If URL includes "[channel]" it will be replaced with the channel argument at runtime.
   -p, --player <PATH>
-          Path to the player that the stream will be piped to, if not specified will write stream to stdout
+          Path to the player that the stream will be piped to
   -a, --player-args <ARGUMENTS>
           Arguments to pass to the player
   -d, --debug
           Enable debug logging
+      --max-retries <COUNT>
+          Attempt to fetch the media playlist <COUNT> times before exiting [default: 30]
   -h, --help
           Print help
   -V, --version
