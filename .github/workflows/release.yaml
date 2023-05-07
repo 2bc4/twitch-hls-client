@@ -25,7 +25,7 @@ jobs:
         with:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
-      - run: cargo check --no-default-features --features rustls-native-certs
+      - run: cargo check
 
   lint:
     name: Lint
@@ -36,7 +36,7 @@ jobs:
         version: [ 'ubuntu-latest', 'windows-latest', 'macos-latest' ]
         cargo-cmd:
           - fmt --all -- --check
-          - clippy --all --no-default-features --features rustls-native-certs # -Wclippy::pedantic breaks on Windows?
+          - clippy --all # -Wclippy::pedantic breaks on Windows?
     runs-on: ${{ matrix.version }}
     steps:
       - uses: actions/checkout@v3
@@ -87,10 +87,10 @@ jobs:
         with:
           targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
-      - run: cargo build --release --target=${{ matrix.target }} --no-default-features --features rustls-native-certs
+      - run: cargo build --release --target=${{ matrix.target }}
       - name: Smoke Test
         if: ${{ !contains(matrix.target, 'aarch64') }}
-        run: cargo run --release --target=${{ matrix.target }} --no-default-features --features rustls-native-certs -- -V
+        run: cargo run --release --target=${{ matrix.target }} -- -V
       - name: Move Binary
         id: mv
         run: mv "target/${{ matrix.target }}/release/${{ matrix.binName }}" .
