@@ -45,3 +45,10 @@ VO: [gpu] 1920x1080 vaapi[nv12]
 AO: [pipewire] 48000Hz stereo 2ch floatp
 AV: 03:57:23 / 03:57:23 (100%) A-V:  0.000 Cache: 0.7s/482KB
 ```
+
+### Building
+First, install [Rust](https://rustup.rs).
+
+If you wish to build from the latest commit run `cargo install --locked --git https://github.com/2bc4/twitch-hls-client.git` or clone the repo and run `cargo build --release`.
+
+If you just want to build the latest release it's on [crates.io](https://crates.io/crates/twitch-hls-client). Run `cargo install twitch-hls-client`.
