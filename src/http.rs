@@ -203,7 +203,7 @@ impl Request {
         Ok(format!(
             "GET {}{} HTTP/1.1\r\n\
              Host: {}\r\n\
-             User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/112.0\r\n\
+             User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/113.0\r\n\
              Accept: {}\r\n\
              Accept-Language: en-US\r\n\
              Accept-Encoding: gzip\r\n\
