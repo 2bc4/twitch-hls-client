@@ -17,7 +17,6 @@ use std::{
     io,
     io::{ErrorKind::BrokenPipe, Read, Write},
     process,
-    process::{Command, Stdio},
     sync::mpsc::{channel, sync_channel, Receiver, Sender, SyncSender},
     thread::Builder,
 };
@@ -25,7 +24,7 @@ use std::{
 use anyhow::{Context, Result};
 use log::info;
 
-use crate::http::Request;
+use crate::{common, http::Request};
 
 pub struct Worker {
     url_tx: Sender<String>,
@@ -70,12 +69,7 @@ impl Worker {
         player_path: &str,
         player_args: &str,
     ) -> Result<()> {
-        info!("Opening player: {} {}", player_path, player_args);
-        let mut pipe = Command::new(player_path)
-            .args(player_args.split_whitespace())
-            .stdin(Stdio::piped())
-            .spawn()
-            .context("Failed to open player")?
+        let mut pipe = common::spawn_player(player_path, player_args)?
             .stdin
             .take()
             .context("Failed to open player stdin")?;

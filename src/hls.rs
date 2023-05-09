@@ -50,10 +50,8 @@ pub struct MediaPlaylist {
 }
 
 impl MediaPlaylist {
-    pub fn new(server: &str, channel: &str, quality: &str) -> Result<Self> {
-        let master_playlist = MasterPlaylist::new(server, channel, quality)?;
-
-        let mut request = Request::get(&master_playlist.fetch()?)?;
+    pub fn new(playlist_url: &str) -> Result<Self> {
+        let mut request = Request::get(playlist_url)?;
         request.set_accept_header(
             "application/x-mpegURL, application/vnd.apple.mpegurl, application/json, text/plain",
         )?;
@@ -129,7 +127,7 @@ impl MediaPlaylist {
     }
 }
 
-struct MasterPlaylist {
+pub struct MasterPlaylist {
     servers: Vec<Url>,
     quality: String,
     channel: String,

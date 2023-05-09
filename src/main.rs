@@ -24,10 +24,11 @@ use simplelog::{
     format_description, ColorChoice, ConfigBuilder, LevelFilter, TermLogger, TerminalMode,
 };
 
+mod common;
 mod hls;
 mod http;
 mod segment_worker;
-use hls::MediaPlaylist;
+use hls::{MasterPlaylist, MediaPlaylist};
 use segment_worker::Worker;
 
 struct Args {
@@ -111,10 +112,22 @@ fn main() -> Result<()> {
     }
 
     loop {
-        let worker = Worker::new(args.player_path.clone(), args.player_args.clone())?;
-        let mut playlist = match MediaPlaylist::new(&args.server, &args.channel, &args.quality) {
+        let url = MasterPlaylist::new(&args.server, &args.channel, &args.quality)?.fetch()?;
+        let mut playlist = match MediaPlaylist::new(&url) {
             Ok(playlist) => playlist,
             Err(e) => match e.downcast_ref::<hls::Error>() {
+                Some(hls::Error::InvalidPrefetchUrl) => {
+                    info!("Stream is not low latency, opening player with playlist URL");
+                    let player_args = args
+                        .player_args
+                        .split_whitespace()
+                        .map(|s| if s == "-" { url.clone() } else { s.to_owned() })
+                        .collect::<Vec<String>>()
+                        .join(" ");
+
+                    common::spawn_player(&args.player_path, &player_args)?.wait()?;
+                    return Ok(());
+                }
                 Some(hls::Error::Advertisement | hls::Error::Discontinuity) => {
                     warn!("{e} on startup, resetting...");
                     continue;
@@ -123,6 +136,7 @@ fn main() -> Result<()> {
             },
         };
 
+        let worker = Worker::new(args.player_path.clone(), args.player_args.clone())?;
         worker.send(&playlist.prefetch_urls[0])?;
         worker.sync()?;
 
