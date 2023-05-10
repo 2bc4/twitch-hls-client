@@ -15,9 +15,13 @@
 
 #![forbid(unsafe_code)]
 
-use std::{thread, time::Instant};
+use std::{
+    process::{Child, ChildStdin, Command, ExitStatus, Stdio},
+    thread,
+    time::Instant,
+};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::{arg, command, value_parser, ArgAction};
 use log::{debug, info, warn};
 use simplelog::{
@@ -27,23 +31,44 @@ use simplelog::{
 mod hls;
 mod http;
 mod segment_worker;
-mod common {
-    use anyhow::{Context, Result};
-    use log::info;
-    use std::process::{Child, Command, Stdio};
+use hls::{MasterPlaylist, MediaPlaylist};
+use segment_worker::Worker;
 
-    pub fn spawn_player(player_path: &str, player_args: &str) -> Result<Child> {
-        info!("Opening player: {} {}", player_path, player_args);
-        Command::new(player_path)
-            .args(player_args.split_whitespace())
-            .stdin(Stdio::piped())
-            .spawn()
-            .context("Failed to open player")
+pub(crate) struct Player {
+    process: Child,
+}
+
+impl Drop for Player {
+    fn drop(&mut self) {
+        if let Err(e) = self.process.kill() {
+            warn!("Failed to kill player: {e}");
+        }
     }
 }
 
-use hls::{MasterPlaylist, MediaPlaylist};
-use segment_worker::Worker;
+impl Player {
+    pub fn spawn(path: &str, args: &str) -> Result<Self> {
+        info!("Opening player: {} {}", path, args);
+        Ok(Self {
+            process: Command::new(path)
+                .args(args.split_whitespace())
+                .stdin(Stdio::piped())
+                .spawn()
+                .context("Failed to open player")?,
+        })
+    }
+
+    pub fn stdin(&mut self) -> Result<ChildStdin> {
+        self.process
+            .stdin
+            .take()
+            .context("Failed to open player stdin")
+    }
+
+    pub fn wait(&mut self) -> Result<ExitStatus> {
+        Ok(self.process.wait()?)
+    }
+}
 
 struct Args {
     server: String,
@@ -150,7 +175,9 @@ fn main() -> Result<()> {
                         .collect::<Vec<String>>()
                         .join(" ");
 
-                    common::spawn_player(&args.player_path, &player_args)?.wait()?;
+                    let mut player = Player::spawn(&args.player_path, &player_args)?;
+                    player.wait()?;
+
                     return Ok(());
                 }
                 Some(hls::Error::Advertisement | hls::Error::Discontinuity) => {

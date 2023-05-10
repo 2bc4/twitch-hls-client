@@ -24,7 +24,7 @@ use std::{
 use anyhow::{Context, Result};
 use log::info;
 
-use crate::{common, http::Request};
+use crate::{http::Request, Player};
 
 pub struct Worker {
     url_tx: Sender<String>,
@@ -69,10 +69,8 @@ impl Worker {
         player_path: &str,
         player_args: &str,
     ) -> Result<()> {
-        let mut pipe = common::spawn_player(player_path, player_args)?
-            .stdin
-            .take()
-            .context("Failed to open player stdin")?;
+        let mut player = Player::spawn(player_path, player_args)?;
+        let mut pipe = player.stdin()?;
 
         let mut request = match url_rx.recv() {
             Ok(url) => {
