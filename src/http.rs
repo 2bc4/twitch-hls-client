@@ -77,14 +77,12 @@ impl Request {
         let sock = TcpStream::connect(format!("{host}:{port}"))?;
         sock.set_nodelay(true)?;
 
-        let stream: Box<dyn ReadWrite> = match scheme {
-            "http" => Box::new(sock),
-            "https" => Box::new(Self::init_tls(host, sock)?),
-            _ => bail!("{scheme} is not supported"),
-        };
-
         Ok(Self {
-            stream: BufReader::new(stream),
+            stream: match scheme {
+                "http" => BufReader::new(Box::new(sock)),
+                "https" => BufReader::new(Box::new(Self::init_tls(host, sock)?)),
+                _ => bail!("{scheme} is not supported"),
+            },
             request: Self::format_request(&url, DEFAULT_ACCEPT_HEADER)?,
             accept_header: DEFAULT_ACCEPT_HEADER.to_owned(),
             url,
