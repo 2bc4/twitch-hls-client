@@ -131,7 +131,6 @@ impl Request {
         Decoder::new(&mut self.stream, &headers)
     }
 
-
     pub fn read_string(&mut self) -> Result<String> {
         Ok(io::read_to_string(&mut self.reader()?)?)
     }
@@ -271,7 +270,7 @@ impl Request {
 }
 
 enum Encoding<'a> {
-    Unencoded(&'a mut Stream, usize),
+    Unencoded(&'a mut Stream, u64),
     Chunked(ChunkDecoder<&'a mut Stream>),
     ChunkedGzip(GzDecoder<ChunkDecoder<&'a mut Stream>>),
     Gzip(GzDecoder<&'a mut Stream>),
@@ -279,15 +278,15 @@ enum Encoding<'a> {
 
 pub struct Decoder<'a> {
     kind: Encoding<'a>,
-    consumed: usize,
+    consumed: u64,
 }
 
 impl Read for Decoder<'_> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match &mut self.kind {
             Encoding::Unencoded(stream, length) => {
-                let consumed = stream.take((*length - self.consumed) as u64).read(buf)?;
-                self.consumed += consumed;
+                let consumed = stream.take(*length - self.consumed).read(buf)?;
+                self.consumed += consumed as u64;
 
                 Ok(consumed)
             }
@@ -328,7 +327,7 @@ impl<'a> Decoder<'a> {
 
                 return Ok(Self {
                     kind: Encoding::ChunkedGzip(GzDecoder::new(ChunkDecoder::new(stream))),
-                    consumed: usize::default(),
+                    consumed: u64::default(),
                 });
             }
             (true, false) => {
@@ -336,7 +335,7 @@ impl<'a> Decoder<'a> {
 
                 return Ok(Self {
                     kind: Encoding::Chunked(ChunkDecoder::new(stream)),
-                    consumed: usize::default(),
+                    consumed: u64::default(),
                 });
             }
             (false, true) => {
@@ -344,7 +343,7 @@ impl<'a> Decoder<'a> {
 
                 return Ok(Self {
                     kind: Encoding::Gzip(GzDecoder::new(stream)),
-                    consumed: usize::default(),
+                    consumed: u64::default(),
                 });
             }
             _ => match content_length {
@@ -354,7 +353,7 @@ impl<'a> Decoder<'a> {
 
                     return Ok(Self {
                         kind: Encoding::Unencoded(stream, length),
-                        consumed: usize::default(),
+                        consumed: u64::default(),
                     });
                 }
                 _ => bail!("Could not resolve encoding of HTTP response"),
