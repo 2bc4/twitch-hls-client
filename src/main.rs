@@ -24,10 +24,24 @@ use simplelog::{
     format_description, ColorChoice, ConfigBuilder, LevelFilter, TermLogger, TerminalMode,
 };
 
-mod common;
 mod hls;
 mod http;
 mod segment_worker;
+mod common {
+    use anyhow::{Context, Result};
+    use log::info;
+    use std::process::{Child, Command, Stdio};
+
+    pub fn spawn_player(player_path: &str, player_args: &str) -> Result<Child> {
+        info!("Opening player: {} {}", player_path, player_args);
+        Command::new(player_path)
+            .args(player_args.split_whitespace())
+            .stdin(Stdio::piped())
+            .spawn()
+            .context("Failed to open player")
+    }
+}
+
 use hls::{MasterPlaylist, MediaPlaylist};
 use segment_worker::Worker;
 
