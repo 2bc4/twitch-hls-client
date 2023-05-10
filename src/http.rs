@@ -192,7 +192,7 @@ impl Request {
         //because url crate doesn't prepend ? to the first query param
         let query = url
             .query()
-            .map_or_else(String::new, |query| format!("?{query}"));
+            .map_or_else(String::default, |query| format!("?{query}"));
 
         Ok(format!(
             "GET {}{} HTTP/1.1\r\n\
