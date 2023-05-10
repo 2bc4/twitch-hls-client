@@ -102,11 +102,38 @@ impl Request {
     }
 
     pub fn reader(&mut self) -> Result<Decoder> {
-        self.process()
+        const MAX_HEADERS: usize = 16;
+
+        let buf = match self.do_io() {
+            Ok(buf) => buf,
+            Err(e) => match e.kind() {
+                ConnectionReset | ConnectionAborted | UnexpectedEof => {
+                    debug!("Connection reset/EOF, reconnecting");
+                    self.reconnect(None)?;
+                    self.do_io()? //if it happens again it's unrecoverable
+                }
+                _ => return Err(e.into()),
+            },
+        };
+
+        let mut headers = [EMPTY_HEADER; MAX_HEADERS];
+        let mut response = Response::new(&mut headers);
+        match response.parse(&buf) {
+            Err(e) => return Err(e.into()),
+            Ok(Status::Partial) => bail!("Partial HTTP response"),
+            Ok(Status::Complete(_)) => match response.code {
+                Some(code) if code == 200 => (),
+                Some(code) => return Err(Error::Status(code, self.url.as_str().to_owned()).into()),
+                None => bail!("Invalid HTTP response"),
+            },
+        }
+
+        Decoder::new(&mut self.stream, &headers)
     }
 
+
     pub fn read_string(&mut self) -> Result<String> {
-        Ok(io::read_to_string(&mut self.process()?)?)
+        Ok(io::read_to_string(&mut self.reader()?)?)
     }
 
     pub fn set_url(&mut self, url: &str) -> Result<()> {
@@ -162,36 +189,6 @@ impl Request {
         debug!("Response:\n{}", String::from_utf8_lossy(&buf));
 
         Ok(buf)
-    }
-
-    fn process(&mut self) -> Result<Decoder> {
-        const MAX_HEADERS: usize = 16;
-
-        let buf = match self.do_io() {
-            Ok(buf) => buf,
-            Err(e) => match e.kind() {
-                ConnectionReset | ConnectionAborted | UnexpectedEof => {
-                    debug!("Connection reset/EOF, reconnecting");
-                    self.reconnect(None)?;
-                    self.do_io()? //if it happens again it's unrecoverable
-                }
-                _ => return Err(e.into()),
-            },
-        };
-
-        let mut headers = [EMPTY_HEADER; MAX_HEADERS];
-        let mut response = Response::new(&mut headers);
-        match response.parse(&buf) {
-            Err(e) => return Err(e.into()),
-            Ok(Status::Partial) => bail!("Partial HTTP response"),
-            Ok(Status::Complete(_)) => match response.code {
-                Some(code) if code == 200 => (),
-                Some(code) => return Err(Error::Status(code, self.url.as_str().to_owned()).into()),
-                None => bail!("Invalid HTTP response"),
-            },
-        }
-
-        Decoder::new(&mut self.stream, &headers)
     }
 
     fn format_request(url: &Url, accept_header: &str) -> Result<String> {
