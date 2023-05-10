@@ -51,6 +51,7 @@ struct Args {
     player_args: String,
     debug: bool,
     max_retries: u32,
+    passthrough: bool,
     channel: String,
     quality: String,
 }
@@ -67,7 +68,7 @@ impl Args {
                      If URL includes \"[channel]\" it will be replaced with the channel argument at runtime."
                 ).required(true),
                 arg!(-p --player <PATH> "Path to the player that the stream will be piped to")
-                    .required(true),
+                    .required_unless_present("passthrough"),
                 arg!(-a --"player-args" <ARGUMENTS> "Arguments to pass to the player")
                     .default_value("-")
                     .hide_default_value(true)
@@ -77,6 +78,8 @@ impl Args {
                 arg!(--"max-retries" <COUNT> "Attempt to fetch the media playlist <COUNT> times before exiting")
                     .value_parser(value_parser!(u32))
                     .default_value("30"),
+                arg!(--passthrough "Print the playlist URL to stdout and exit")
+                    .action(ArgAction::SetTrue),
                 arg!(<CHANNEL>
                      "Twitch channel to watch (can also be twitch.tv/channel for Streamlink compatibility)"
                 ),
@@ -89,10 +92,13 @@ impl Args {
         Self {
             //these unwraps should never panic
             server: matches.get_one::<String>("server").unwrap().clone(),
-            player_path: matches.get_one::<String>("player").unwrap().clone(),
+            player_path: matches
+                .get_one::<String>("player")
+                .map_or_else(String::default, String::clone),
             player_args: matches.get_one::<String>("player-args").unwrap().clone(),
             debug: matches.get_flag("debug"),
             max_retries: *matches.get_one::<u32>("max-retries").unwrap(),
+            passthrough: matches.get_flag("passthrough"),
             channel: matches.get_one::<String>("CHANNEL").unwrap().clone(),
             quality: matches.get_one::<String>("QUALITY").unwrap().clone(),
         }
@@ -127,6 +133,11 @@ fn main() -> Result<()> {
 
     loop {
         let url = MasterPlaylist::new(&args.server, &args.channel, &args.quality)?.fetch()?;
+        if args.passthrough {
+            println!("{url}");
+            return Ok(());
+        }
+
         let mut playlist = match MediaPlaylist::new(&url) {
             Ok(playlist) => playlist,
             Err(e) => match e.downcast_ref::<hls::Error>() {
