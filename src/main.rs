@@ -127,7 +127,7 @@ fn main() -> Result<()> {
                 .set_time_level(LevelFilter::Off)
                 .build(),
             TerminalMode::Stderr,
-            ColorChoice::Never,
+            ColorChoice::Auto,
         )?;
     }
 
