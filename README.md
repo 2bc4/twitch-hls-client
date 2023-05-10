@@ -33,7 +33,7 @@ Options:
 ```
 
 ### Example
-```sh
+```
 $ twitch-hls-client twitch.tv/twitchchannel best -s https://api.ttv.lol/[ttvlol],https://eu.luminous.dev/live/[channel] -p /usr/bin/mpv -a '- --profile=low-latency'
 [INFO] Opening player: mpv - --profile=low-latency
 [INFO] Fetching playlist for channel twitchchannel
