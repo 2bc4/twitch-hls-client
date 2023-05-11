@@ -16,14 +16,15 @@
 #![forbid(unsafe_code)]
 
 use std::{
+    process,
     process::{Child, ChildStdin, Command, ExitStatus, Stdio},
     thread,
     time::Instant,
 };
 
 use anyhow::{Context, Result};
-use clap::{arg, command, value_parser, ArgAction};
 use log::{debug, info, warn};
+use pico_args::Arguments;
 use simplelog::{
     format_description, ColorChoice, ConfigBuilder, LevelFilter, TermLogger, TerminalMode,
 };
@@ -70,6 +71,7 @@ impl Player {
     }
 }
 
+#[derive(Default, Debug)]
 struct Args {
     server: String,
     player_path: String,
@@ -82,56 +84,51 @@ struct Args {
 }
 
 impl Args {
-    pub fn parse() -> Self {
-        let matches = command!()
-            .next_line_help(true)
-            .args(&[
-                arg!(-s --server <URL>
-                    "Playlist proxy server to fetch the master playlist from.\n\
-                     Can be multiple comma separated servers, will try each in order until successful.\n\
-                     If URL path is \"[ttvlol]\" the playlist will be requested using the TTVLOL API.\n\
-                     If URL includes \"[channel]\" it will be replaced with the channel argument at runtime."
-                ).required(true),
-                arg!(-p --player <PATH> "Path to the player that the stream will be piped to")
-                    .required_unless_present("passthrough"),
-                arg!(-a --"player-args" <ARGUMENTS> "Arguments to pass to the player")
-                    .default_value("-")
-                    .hide_default_value(true)
-                    .allow_hyphen_values(true),
-                arg!(-d --debug "Enable debug logging")
-                    .action(ArgAction::SetTrue),
-                arg!(--"max-retries" <COUNT> "Attempt to fetch the media playlist <COUNT> times before exiting")
-                    .value_parser(value_parser!(u32))
-                    .default_value("30"),
-                arg!(--passthrough "Print the playlist URL to stdout and exit")
-                    .action(ArgAction::SetTrue),
-                arg!(<CHANNEL>
-                     "Twitch channel to watch (can also be twitch.tv/channel for Streamlink compatibility)"
-                ),
-                arg!(<QUALITY>
-                     "Stream quality/variant playlist to fetch (best, 1080p, 720p, 360p, 160p, audio_only)"
-                ),
-            ])
-            .get_matches();
+    pub fn parse() -> Result<Self> {
+        const DEFAULT_PLAYER_ARGS: &str = "-";
+        const DEFAULT_MAX_RETRIES: u32 = 30;
 
-        Self {
-            //these unwraps should never panic
-            server: matches.get_one::<String>("server").unwrap().clone(),
-            player_path: matches
-                .get_one::<String>("player")
-                .map_or_else(String::default, String::clone),
-            player_args: matches.get_one::<String>("player-args").unwrap().clone(),
-            debug: matches.get_flag("debug"),
-            max_retries: *matches.get_one::<u32>("max-retries").unwrap(),
-            passthrough: matches.get_flag("passthrough"),
-            channel: matches.get_one::<String>("CHANNEL").unwrap().clone(),
-            quality: matches.get_one::<String>("QUALITY").unwrap().clone(),
+        let mut parser = Arguments::from_env();
+        if parser.contains("-h") || parser.contains("--help") {
+            eprintln!("{}", include_str!("usage"));
+            process::exit(0);
+        }
+
+        if parser.contains("-V") || parser.contains("--version") {
+            eprintln!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
+            process::exit(0);
+        }
+
+        if parser.contains("--passthrough") {
+            Ok(Self {
+                passthrough: true,
+                server: parser.value_from_str("-s")?,
+                debug: parser.contains("-d") || parser.contains("--debug"),
+                channel: parser.free_from_str()?,
+                quality: parser.free_from_str()?,
+                ..Default::default()
+            })
+        } else {
+            Ok(Self {
+                server: parser.value_from_str("-s")?,
+                player_path: parser.value_from_str("-p")?,
+                player_args: parser
+                    .opt_value_from_str("-a")?
+                    .unwrap_or_else(|| DEFAULT_PLAYER_ARGS.to_owned()),
+                debug: parser.contains("-d") || parser.contains("--debug"),
+                max_retries: parser
+                    .opt_value_from_str("--max-retries")?
+                    .unwrap_or(DEFAULT_MAX_RETRIES),
+                passthrough: false,
+                channel: parser.free_from_str()?,
+                quality: parser.free_from_str()?,
+            })
         }
     }
 }
 
 fn main() -> Result<()> {
-    let args = Args::parse();
+    let args = Args::parse()?;
     if args.debug {
         TermLogger::init(
             LevelFilter::Debug,
@@ -155,6 +152,8 @@ fn main() -> Result<()> {
             ColorChoice::Auto,
         )?;
     }
+
+    debug!("{:?}", args);
 
     loop {
         let url = MasterPlaylist::new(&args.server, &args.channel, &args.quality)?.fetch()?;

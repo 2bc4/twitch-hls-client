@@ -1,0 +1,28 @@
+Usage: twitch-hls-client [OPTIONS] -s <URL> -p <PATH> <CHANNEL> <QUALITY>
+
+Arguments:
+  <CHANNEL>
+          Twitch channel to watch (can also be twitch.tv/channel)
+  <QUALITY>
+          Stream quality/variant playlist to fetch (best, 1080p, 720p, 360p, 160p, audio_only, etc.)
+
+Options:
+  -s <URL>
+          Playlist proxy server to fetch the master playlist from.
+          Can be multiple comma separated servers, will try each in order until successful.
+          If URL path is "[ttvlol]" the playlist will be requested using the TTVLOL API.
+          If URL includes "[channel]" it will be replaced with the channel argument at runtime.
+  -p <PATH>
+          Path to the player that the stream will be piped to
+  -a <ARGUMENTS>
+          Arguments to pass to the player
+  -d, --debug
+          Enable debug logging
+      --max-retries <COUNT>
+          Attempt to fetch the media playlist <COUNT> times before exiting (default: 30)
+      --passthrough
+          Print the playlist URL to stdout and exit
+  -h, --help
+          Print help
+  -V, --version
+          Print version
