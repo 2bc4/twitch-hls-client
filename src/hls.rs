@@ -17,7 +17,6 @@ use std::{fmt, time::Duration};
 
 use anyhow::{anyhow, Context, Result};
 use log::{debug, error, info};
-use percent_encoding::{percent_encode, AsciiSet, CONTROLS};
 use url::Url;
 
 use crate::http::Request;
@@ -172,14 +171,16 @@ impl MasterPlaylist {
                 let host = s.host_str().expect("Somehow invalid host?");
 
                 let request = if s.path() == "/[ttvlol]" {
-                    const ENCODE_SET: &AsciiSet = &CONTROLS.add(b'?').add(b'=').add(b'&');
                     info!("Using server {scheme}://{host} (TTVLOL API)");
 
                     let mut url = s.clone();
                     url.set_path(&format!("/playlist/{}.m3u8", &self.channel));
 
                     Request::get_with_header(
-                        &percent_encode(url.as_str().as_bytes(), ENCODE_SET).to_string(),
+                        &url.as_str()
+                            .replace('?', "%3F")
+                            .replace('=', "%3D")
+                            .replace('&', "%26"),
                         "X-Donate-To: https://ttv.lol/donate",
                     )
                 } else {

@@ -578,7 +578,6 @@ dependencies = [
  "httparse",
  "log",
  "native-tls",
- "percent-encoding",
  "pico-args",
  "rustls",
  "rustls-native-certs",
