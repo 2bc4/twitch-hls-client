@@ -165,11 +165,11 @@ fn main() -> Result<()> {
             ColorChoice::Auto,
         )?;
     }
-
     debug!("{:?}", args);
 
+    let master_playlist = MasterPlaylist::new(&args.servers)?;
     loop {
-        let url = MasterPlaylist::new(&args.servers, &args.channel)?.fetch(&args.quality)?;
+        let url = master_playlist.fetch(&args.channel, &args.quality)?;
         if args.passthrough {
             println!("{url}");
             return Ok(());

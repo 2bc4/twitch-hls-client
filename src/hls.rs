@@ -128,11 +128,10 @@ impl MediaPlaylist {
 
 pub struct MasterPlaylist {
     servers: Vec<Url>,
-    channel: String,
 }
 
 impl MasterPlaylist {
-    pub fn new(servers: &[String], channel: &str) -> Result<Self> {
+    pub fn new(servers: &[String]) -> Result<Self> {
         Ok(Self {
             servers: servers
                 .iter()
@@ -151,12 +150,11 @@ impl MasterPlaylist {
                 })
                 .collect::<Result<Vec<Url>, _>>()
                 .context("Invalid server URL")?,
-            channel: channel.to_owned(),
         })
     }
 
-    pub fn fetch(&self, quality: &str) -> Result<String> {
-        info!("Fetching playlist for channel {}", self.channel);
+    pub fn fetch(&self, channel: &str, quality: &str) -> Result<String> {
+        info!("Fetching playlist for channel {}", channel);
         let playlist = self
             .servers
             .iter()
@@ -168,7 +166,7 @@ impl MasterPlaylist {
                     info!("Using server {scheme}://{host} (TTVLOL API)");
 
                     let mut url = s.clone();
-                    url.set_path(&format!("/playlist/{}.m3u8", &self.channel));
+                    url.set_path(&format!("/playlist/{channel}.m3u8"));
 
                     Request::get_with_header(
                         &url.as_str()
