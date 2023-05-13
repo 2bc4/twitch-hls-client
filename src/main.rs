@@ -156,7 +156,7 @@ fn main() -> Result<()> {
     debug!("{:?}", args);
 
     loop {
-        let url = MasterPlaylist::new(&args.server, &args.channel, &args.quality)?.fetch()?;
+        let url = MasterPlaylist::new(&args.server, &args.channel)?.fetch(&args.quality)?;
         if args.passthrough {
             println!("{url}");
             return Ok(());

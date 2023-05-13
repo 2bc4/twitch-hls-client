@@ -128,40 +128,37 @@ impl MediaPlaylist {
 
 pub struct MasterPlaylist {
     servers: Vec<Url>,
-    quality: String,
     channel: String,
 }
 
 impl MasterPlaylist {
-    pub fn new(servers: &str, channel: &str, quality: &str) -> Result<Self> {
+    pub fn new(servers: &str, channel: &str) -> Result<Self> {
         let channel = channel.to_lowercase().replace("twitch.tv/", "");
 
-        let servers: Result<Vec<Url>, _> = servers
-            .replace("[channel]", &channel)
-            .split(',')
-            .map(|s| {
-                Url::parse_with_params(
-                    s,
-                    &[
-                        ("player", "twitchweb"),
-                        ("type", "any"),
-                        ("allow_source", "true"),
-                        ("allow_audio_only", "true"),
-                        ("allow_spectre", "false"),
-                        ("fast_bread", "true"),
-                    ],
-                )
-            })
-            .collect();
-
         Ok(Self {
-            servers: servers.context("Invalid server URL")?,
-            quality: quality.to_owned(),
+            servers: servers
+                .replace("[channel]", &channel)
+                .split(',')
+                .map(|s| {
+                    Url::parse_with_params(
+                        s,
+                        &[
+                            ("player", "twitchweb"),
+                            ("type", "any"),
+                            ("allow_source", "true"),
+                            ("allow_audio_only", "true"),
+                            ("allow_spectre", "false"),
+                            ("fast_bread", "true"),
+                        ],
+                    )
+                })
+                .collect::<Result<Vec<Url>, _>>()
+                .context("Invalid server URL")?,
             channel,
         })
     }
 
-    pub fn fetch(&self) -> Result<String> {
+    pub fn fetch(&self, quality: &str) -> Result<String> {
         info!("Fetching playlist for channel {}", self.channel);
         let playlist = self
             .servers
@@ -205,10 +202,6 @@ impl MasterPlaylist {
             })
             .ok_or_else(|| anyhow!("No servers available"))?;
 
-        Self::parse_variant_playlist(&self.quality, &playlist)
-    }
-
-    fn parse_variant_playlist(quality: &str, playlist: &str) -> Result<String> {
         Ok(playlist
             .lines()
             .skip_while(|s| {
