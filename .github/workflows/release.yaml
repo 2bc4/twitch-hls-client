@@ -55,6 +55,8 @@ jobs:
       CC_aarch64_unknown_linux_musl: "clang"
       AR_aarch64_unknown_linux_musl: "llvm-ar"
       CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_RUSTFLAGS: "-Clink-self-contained=yes -Clinker=rust-lld"
+      CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS: "-Ctarget-cpu=x86-64-v2"
+      CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_RUSTFLAGS: "-Ctarget-cpu=x86-64-v2"
     strategy:
       fail-fast: false
       matrix:
