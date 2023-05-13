@@ -45,16 +45,7 @@ impl fmt::Display for Error {
     }
 }
 
-pub trait ReadWrite: Read + Write {}
-impl ReadWrite for TcpStream {}
-
-#[cfg(any(feature = "rustls-webpki", feature = "rustls-native-certs"))]
-impl ReadWrite for rustls::StreamOwned<rustls::ClientConnection, TcpStream> {}
-
-#[cfg(feature = "native-tls")]
-impl ReadWrite for native_tls::TlsStream<TcpStream> {}
-
-type Stream = BufReader<Box<dyn ReadWrite>>;
+type Stream = BufReader<Transport>;
 
 pub struct Request {
     stream: Stream,
@@ -66,23 +57,10 @@ pub struct Request {
 impl Request {
     pub fn get(url: &str) -> Result<Self> {
         const DEFAULT_ACCEPT_HEADER: &str = "*/*";
-
         let url = Url::parse(url).context("Invalid request URL")?;
-        let scheme = url.scheme();
-        let host = get_host(&url)?;
-        let port = url
-            .port_or_known_default()
-            .context("Invalid port in request URL")?;
-
-        let sock = TcpStream::connect(format!("{host}:{port}"))?;
-        sock.set_nodelay(true)?;
 
         Ok(Self {
-            stream: match scheme {
-                "http" => BufReader::new(Box::new(sock)),
-                "https" => BufReader::new(Box::new(Self::init_tls(host, sock)?)),
-                _ => bail!("{scheme} is not supported"),
-            },
+            stream: BufReader::new(Transport::new(&url)?),
             request: Self::format_request(&url, DEFAULT_ACCEPT_HEADER)?,
             accept_header: DEFAULT_ACCEPT_HEADER.to_owned(),
             url,
@@ -212,6 +190,59 @@ impl Request {
             get_host(url)?,
             accept_header,
         ))
+    }
+}
+
+#[allow(clippy::large_enum_variant)]
+pub enum Transport {
+    Http(TcpStream),
+
+    #[cfg(any(feature = "rustls-webpki", feature = "rustls-native-certs"))]
+    Https(rustls::StreamOwned<rustls::ClientConnection, TcpStream>),
+
+    #[cfg(feature = "native-tls")]
+    Https(native_tls::TlsStream<TcpStream>),
+}
+
+impl Read for Transport {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self {
+            Self::Http(sock) => sock.read(buf),
+            Self::Https(stream) => stream.read(buf),
+        }
+    }
+}
+
+impl Write for Transport {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        match self {
+            Self::Http(sock) => sock.write(buf),
+            Self::Https(stream) => stream.write(buf),
+        }
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        match self {
+            Self::Http(sock) => sock.flush(),
+            Self::Https(stream) => stream.flush(),
+        }
+    }
+}
+
+impl Transport {
+    pub fn new(url: &Url) -> Result<Self> {
+        let scheme = url.scheme();
+        let host = get_host(url)?;
+        let port = url.port_or_known_default().context("Invalid port in URL")?;
+
+        let sock = TcpStream::connect(format!("{host}:{port}"))?;
+        sock.set_nodelay(true)?;
+
+        match scheme {
+            "http" => Ok(Self::Http(sock)),
+            "https" => Ok(Self::Https(Self::init_tls(host, sock)?)),
+            _ => bail!("{scheme} is not supported"),
+        }
     }
 
     #[cfg(feature = "rustls-webpki")]
