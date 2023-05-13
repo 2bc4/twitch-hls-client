@@ -132,13 +132,10 @@ pub struct MasterPlaylist {
 }
 
 impl MasterPlaylist {
-    pub fn new(servers: &str, channel: &str) -> Result<Self> {
-        let channel = channel.to_lowercase().replace("twitch.tv/", "");
-
+    pub fn new(servers: &[String], channel: &str) -> Result<Self> {
         Ok(Self {
             servers: servers
-                .replace("[channel]", &channel)
-                .split(',')
+                .iter()
                 .map(|s| {
                     Url::parse_with_params(
                         s,
@@ -154,7 +151,7 @@ impl MasterPlaylist {
                 })
                 .collect::<Result<Vec<Url>, _>>()
                 .context("Invalid server URL")?,
-            channel,
+            channel: channel.to_owned(),
         })
     }
 
