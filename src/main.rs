@@ -140,6 +140,35 @@ impl Args {
     }
 }
 
+fn init_playlist(args: &Args, master_playlist: &MasterPlaylist) -> Result<MediaPlaylist> {
+    let url = master_playlist.fetch(&args.channel, &args.quality)?;
+    if args.passthrough {
+        println!("{url}");
+        process::exit(0);
+    }
+
+    match MediaPlaylist::new(&url) {
+        Ok(playlist) => Ok(playlist),
+        Err(e) => match e.downcast_ref::<hls::Error>() {
+            Some(hls::Error::InvalidPrefetchUrl) => {
+                info!("Stream is not low latency, opening player with playlist URL");
+                let player_args = args
+                    .player_args
+                    .split_whitespace()
+                    .map(|s| if s == "-" { url.clone() } else { s.to_owned() })
+                    .collect::<Vec<String>>()
+                    .join(" ");
+
+                let mut player = Player::spawn(&args.player_path, &player_args)?;
+                player.wait()?;
+
+                process::exit(0);
+            }
+            _ => Err(e),
+        },
+    }
+}
+
 fn main() -> Result<()> {
     let args = Args::parse()?;
     if args.debug {
@@ -169,29 +198,9 @@ fn main() -> Result<()> {
 
     let master_playlist = MasterPlaylist::new(&args.servers)?;
     loop {
-        let url = master_playlist.fetch(&args.channel, &args.quality)?;
-        if args.passthrough {
-            println!("{url}");
-            return Ok(());
-        }
-
-        let mut playlist = match MediaPlaylist::new(&url) {
+        let mut playlist = match init_playlist(&args, &master_playlist) {
             Ok(playlist) => playlist,
             Err(e) => match e.downcast_ref::<hls::Error>() {
-                Some(hls::Error::InvalidPrefetchUrl) => {
-                    info!("Stream is not low latency, opening player with playlist URL");
-                    let player_args = args
-                        .player_args
-                        .split_whitespace()
-                        .map(|s| if s == "-" { url.clone() } else { s.to_owned() })
-                        .collect::<Vec<String>>()
-                        .join(" ");
-
-                    let mut player = Player::spawn(&args.player_path, &player_args)?;
-                    player.wait()?;
-
-                    return Ok(());
-                }
                 Some(hls::Error::Advertisement | hls::Error::Discontinuity) => {
                     warn!("{e} on startup, resetting...");
                     continue;
