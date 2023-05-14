@@ -99,44 +99,37 @@ impl Args {
             process::exit(0);
         }
 
-        let debug = parser.contains("-d") || parser.contains("--debug");
         let channel = parser
             .free_from_str::<String>()?
             .to_lowercase()
             .replace("twitch.tv/", "");
-        let quality = parser.free_from_str::<String>()?;
-        let servers = parser
-            .value_from_str::<&str, String>("-s")?
-            .replace("[channel]", &channel)
-            .split(',')
-            .map(String::from)
-            .collect();
 
-        if parser.contains("--passthrough") {
-            Ok(Self {
-                passthrough: true,
-                servers,
-                debug,
-                channel,
-                quality,
-                ..Default::default()
-            })
-        } else {
-            Ok(Self {
-                passthrough: false,
-                servers,
-                debug,
-                channel,
-                quality,
-                player_path: parser.value_from_str("-p")?,
-                player_args: parser
-                    .opt_value_from_str("-a")?
-                    .unwrap_or_else(|| DEFAULT_PLAYER_ARGS.to_owned()),
-                max_retries: parser
-                    .opt_value_from_str("--max-retries")?
-                    .unwrap_or(DEFAULT_MAX_RETRIES),
-            })
+        let mut args = Self {
+            servers: parser
+                .value_from_str::<&str, String>("-s")?
+                .replace("[channel]", &channel)
+                .split(',')
+                .map(String::from)
+                .collect(),
+            player_path: String::default(),
+            player_args: parser
+                .opt_value_from_str("-a")?
+                .unwrap_or_else(|| DEFAULT_PLAYER_ARGS.to_owned()),
+            debug: parser.contains("-d") || parser.contains("--debug"),
+            max_retries: parser
+                .opt_value_from_str("--max-retries")?
+                .unwrap_or(DEFAULT_MAX_RETRIES),
+            passthrough: parser.contains("--passthrough"),
+            channel,
+            quality: parser.free_from_str::<String>()?,
+        };
+
+        if args.passthrough {
+            return Ok(args);
         }
+
+        args.player_path = parser.value_from_str("-p")?;
+        Ok(args)
     }
 }
 
