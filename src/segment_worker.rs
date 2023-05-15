@@ -15,14 +15,13 @@
 
 use std::{
     io,
-    io::{ErrorKind::BrokenPipe, Read, Write},
+    io::ErrorKind::BrokenPipe,
     process,
-    sync::mpsc::{channel, sync_channel, Receiver, Sender, SyncSender},
+    sync::mpsc::{channel, sync_channel, Receiver, SendError, Sender, SyncSender},
     thread::Builder,
 };
 
 use anyhow::{Context, Result};
-use log::info;
 
 use crate::{http::Request, Player};
 
@@ -51,10 +50,8 @@ impl Worker {
         Ok(Self { url_tx, sync_rx })
     }
 
-    pub fn send(&self, url: &str) -> Result<()> {
-        self.url_tx
-            .send(url.to_owned())
-            .context("Failed to send URL to segment worker thread")
+    pub fn send(&self, url: &str) -> Result<(), SendError<String>> {
+        self.url_tx.send(url.to_owned())
     }
 
     pub fn sync(&self) -> Result<()> {
@@ -75,7 +72,12 @@ impl Worker {
         let mut request = match url_rx.recv() {
             Ok(url) => {
                 let mut request = Request::get(&url)?;
-                copy_segment(&mut request.reader()?, &mut pipe)?;
+                if let Err(e) = io::copy(&mut request.reader()?, &mut pipe) {
+                    match e.kind() {
+                        BrokenPipe => return Ok(()),
+                        _ => return Err(e.into()),
+                    }
+                }
 
                 request
             }
@@ -87,27 +89,15 @@ impl Worker {
             .context("Failed to send sync state from segment worker thread")?;
 
         loop {
-            match url_rx.recv() {
-                Ok(url) => {
-                    request.set_url(&url)?;
-                    copy_segment(&mut request.reader()?, &mut pipe)?;
+            let Ok(url) = url_rx.recv() else { return Ok(()); };
+            request.set_url(&url)?;
+
+            if let Err(e) = io::copy(&mut request.reader()?, &mut pipe) {
+                match e.kind() {
+                    BrokenPipe => return Ok(()),
+                    _ => return Err(e.into()),
                 }
-                _ => return Ok(()),
             }
         }
-    }
-}
-
-#[inline]
-fn copy_segment(reader: &mut impl Read, writer: &mut impl Write) -> Result<()> {
-    match io::copy(reader, writer) {
-        Ok(_) => Ok(()),
-        Err(e) => match e.kind() {
-            BrokenPipe => {
-                info!("Player closed, exiting...");
-                process::exit(0);
-            }
-            _ => Err(e.into()),
-        },
     }
 }

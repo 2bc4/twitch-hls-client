@@ -233,7 +233,10 @@ fn main() -> Result<()> {
                 },
             }
 
-            worker.send(&playlist.prefetch_urls[1])?;
+            if worker.send(&playlist.prefetch_urls[1]).is_err() {
+                info!("Player closed, exiting...");
+                return Ok(());
+            }
 
             if let Some(sleep_time) = playlist.duration.checked_sub(time.elapsed()) {
                 thread::sleep(sleep_time);
