@@ -22,6 +22,7 @@ use std::{
 
 use anyhow::{Context, Result};
 use log::{info, warn};
+use url::Url;
 
 use crate::http::Request;
 
@@ -62,13 +63,13 @@ impl Player {
 }
 
 pub struct Worker {
-    url_tx: Sender<String>,
+    url_tx: Sender<Url>,
     sync_rx: Receiver<()>,
 }
 
 impl Worker {
     pub fn new(player: Player) -> Result<Self> {
-        let (url_tx, url_rx): (Sender<String>, Receiver<String>) = channel();
+        let (url_tx, url_rx): (Sender<Url>, Receiver<Url>) = channel();
         let (sync_tx, sync_rx): (SyncSender<()>, Receiver<()>) = sync_channel(1);
 
         Builder::new()
@@ -86,7 +87,7 @@ impl Worker {
         Ok(Self { url_tx, sync_rx })
     }
 
-    pub fn send(&self, url: String) -> Result<(), SendError<String>> {
+    pub fn send(&self, url: Url) -> Result<(), SendError<Url>> {
         self.url_tx.send(url)
     }
 
@@ -97,7 +98,7 @@ impl Worker {
     }
 
     fn thread_main(
-        url_rx: &Receiver<String>,
+        url_rx: &Receiver<Url>,
         sync_tx: &SyncSender<()>,
         mut player: Player,
     ) -> Result<()> {
@@ -105,7 +106,7 @@ impl Worker {
 
         let mut request = match url_rx.recv() {
             Ok(url) => {
-                let mut request = Request::get(&url)?;
+                let mut request = Request::get(url)?;
                 if let Err(e) = io::copy(&mut request.reader()?, &mut pipe) {
                     match e.kind() {
                         BrokenPipe => return Ok(()),
@@ -124,7 +125,7 @@ impl Worker {
 
         loop {
             let Ok(url) = url_rx.recv() else { return Ok(()); };
-            request.set_url(&url)?;
+            request.set_url(url)?;
 
             if let Err(e) = io::copy(&mut request.reader()?, &mut pipe) {
                 match e.kind() {

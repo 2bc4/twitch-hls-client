@@ -55,9 +55,8 @@ pub struct Request {
 }
 
 impl Request {
-    pub fn get(url: &str) -> Result<Self> {
+    pub fn get(url: Url) -> Result<Self> {
         const DEFAULT_ACCEPT_HEADER: &str = "*/*";
-        let url = Url::parse(url).context("Invalid request URL")?;
 
         Ok(Self {
             stream: BufReader::new(Transport::new(&url)?),
@@ -68,7 +67,7 @@ impl Request {
     }
 
     pub fn get_with_header(url: &str, header: &str) -> Result<Self> {
-        let mut r = Self::get(url)?;
+        let mut r = Self::get(url.parse()?)?;
 
         //Before end of headers.
         //Will be overwritten if set_url is called but this is only needed for the TTVLOL API.
@@ -99,7 +98,7 @@ impl Request {
             Ok(Status::Partial) => bail!("Partial HTTP response"),
             Ok(Status::Complete(_)) => match response.code {
                 Some(code) if code == 200 => (),
-                Some(code) => return Err(Error::Status(code, self.url.as_str().to_owned()).into()),
+                Some(code) => return Err(Error::Status(code, self.url.to_string()).into()),
                 None => bail!("Invalid HTTP response"),
             },
         }
@@ -111,14 +110,13 @@ impl Request {
         Ok(io::read_to_string(&mut self.reader()?)?)
     }
 
-    pub fn set_url(&mut self, url: &str) -> Result<()> {
-        let url = Url::parse(url).context("Invalid updated request URL")?;
+    pub fn set_url(&mut self, url: Url) -> Result<()> {
         if get_host(&self.url)? == get_host(&url)? {
             self.url = url;
             self.request = Self::format_request(&self.url, self.accept_header)?;
         } else {
             debug!("Host changed, creating new request");
-            self.reconnect(Some(url.as_str()))?;
+            self.reconnect(Some(url))?;
         }
 
         Ok(())
@@ -131,11 +129,11 @@ impl Request {
         Ok(())
     }
 
-    fn reconnect(&mut self, url: Option<&str>) -> Result<()> {
+    fn reconnect(&mut self, url: Option<Url>) -> Result<()> {
         let mut request = if let Some(url) = url {
             Self::get(url)?
         } else {
-            Self::get(self.url.as_str())?
+            Self::get(self.url.clone())?
         };
 
         request.accept_header = self.accept_header;

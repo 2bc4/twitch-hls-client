@@ -25,6 +25,7 @@ use crate::http::Request;
 pub enum Error {
     Unchanged,
     InvalidPrefetchUrl,
+    InvalidDuration,
     Advertisement,
     Discontinuity,
 }
@@ -36,27 +37,56 @@ impl fmt::Display for Error {
         match self {
             Self::Unchanged => write!(f, "Media playlist is the same as previous"),
             Self::InvalidPrefetchUrl => write!(f, "Invalid or missing prefetch URLs"),
+            Self::InvalidDuration => write!(f, "Invalid or missing segment duration"),
             Self::Advertisement => write!(f, "Encountered an embedded advertisement segment"),
             Self::Discontinuity => write!(f, "Encountered a discontinuity"),
         }
     }
 }
 
+pub enum PrefetchUrlKind {
+    Newest,
+    Next,
+}
+
+#[derive(Default, PartialEq, Eq)]
+pub struct PrefetchUrls {
+    urls: [Option<Url>; 2],
+}
+
+impl PrefetchUrls {
+    pub fn new(newest: &str, next: &str) -> Result<Self, Error> {
+        Ok(Self {
+            urls: [
+                Some(Url::parse(newest).or(Err(Error::InvalidPrefetchUrl))?),
+                Some(Url::parse(next).or(Err(Error::InvalidPrefetchUrl))?),
+            ],
+        })
+    }
+
+    pub fn take(&mut self, kind: &PrefetchUrlKind) -> Result<Url, Error> {
+        match kind {
+            PrefetchUrlKind::Newest => self.urls[0].take().ok_or(Error::InvalidPrefetchUrl),
+            PrefetchUrlKind::Next => self.urls[1].take().ok_or(Error::InvalidPrefetchUrl),
+        }
+    }
+}
+
 pub struct MediaPlaylist {
-    pub prefetch_urls: Vec<String>, //[0] = newest, [1] = next
+    pub urls: PrefetchUrls,
     pub duration: Duration,
     request: Request,
 }
 
 impl MediaPlaylist {
-    pub fn new(playlist_url: &str) -> Result<Self> {
-        let mut request = Request::get(playlist_url)?;
+    pub fn new(url: &Url) -> Result<Self> {
+        let mut request = Request::get(url.clone())?;
         request.set_accept_header(
             "application/x-mpegURL, application/vnd.apple.mpegurl, application/json, text/plain",
         )?;
 
         let mut media_playlist = Self {
-            prefetch_urls: vec![String::default(); 2],
+            urls: PrefetchUrls::default(),
             duration: Duration::default(),
             request,
         };
@@ -80,49 +110,57 @@ impl MediaPlaylist {
             return Err(Error::Discontinuity.into());
         }
 
-        let prefetch_urls = Self::parse_prefetch_urls(&playlist)?;
-        if prefetch_urls[0] == self.prefetch_urls[0] || prefetch_urls[1] == self.prefetch_urls[1] {
+        let urls = Self::parse_prefetch_urls(&playlist)?;
+        if urls == self.urls {
             return Err(Error::Unchanged.into());
         }
 
-        self.prefetch_urls = prefetch_urls;
+        self.urls = urls;
         self.duration = Self::parse_duration(&playlist)?;
         Ok(())
     }
 
-    fn parse_prefetch_urls(playlist: &str) -> Result<Vec<String>> {
-        let prefetch_urls = playlist
+    fn parse_prefetch_urls(playlist: &str) -> Result<PrefetchUrls, Error> {
+        let newest = playlist
             .lines()
             .rev()
-            .filter(|s| s.starts_with("#EXT-X-TWITCH-PREFETCH"))
-            .map(|s| s.replace("#EXT-X-TWITCH-PREFETCH:", ""))
-            .collect::<Vec<String>>();
+            .find(|s| s.starts_with("#EXT-X-TWITCH-PREFETCH"))
+            .ok_or(Error::InvalidPrefetchUrl)?
+            .split_once(':')
+            .ok_or(Error::InvalidPrefetchUrl)?
+            .1;
 
-        if prefetch_urls.len() != 2 {
-            return Err(Error::InvalidPrefetchUrl.into());
-        }
+        let next = playlist
+            .lines()
+            .rev()
+            .skip_while(|s| !s.starts_with("#EXT-X-TWITCH-PREFETCH"))
+            .skip(1)
+            .find(|s| s.starts_with("#EXT-X-TWITCH-PREFETCH"))
+            .ok_or(Error::InvalidPrefetchUrl)?
+            .split_once(':')
+            .ok_or(Error::InvalidPrefetchUrl)?
+            .1;
 
-        for url in &prefetch_urls {
-            Url::parse(url).or(Err(Error::InvalidPrefetchUrl))?;
-        }
-
-        Ok(prefetch_urls)
+        PrefetchUrls::new(newest, next)
     }
 
-    fn parse_duration(playlist: &str) -> Result<Duration> {
-        Ok(Duration::try_from_secs_f32(
+    fn parse_duration(playlist: &str) -> Result<Duration, Error> {
+        Duration::try_from_secs_f32(
             playlist
                 .lines()
                 .rev()
                 .find(|s| s.starts_with("#EXTINF"))
-                .context("Malformed media playlist while parsing #EXTINF")?
-                .replace("#EXTINF:", "")
-                .split(',')
-                .next()
-                .context("Invalid #EXTINF")?
+                .ok_or(Error::InvalidDuration)?
+                .split_once(':')
+                .ok_or(Error::InvalidDuration)?
+                .1
+                .split_once(',')
+                .ok_or(Error::InvalidDuration)?
+                .0
                 .parse()
-                .context("Failed to parse #EXTINF")?,
-        )?)
+                .or(Err(Error::InvalidDuration))?,
+        )
+        .or(Err(Error::InvalidDuration))
     }
 }
 
@@ -153,7 +191,7 @@ impl MasterPlaylist {
         })
     }
 
-    pub fn fetch(&self, channel: &str, quality: &str) -> Result<String> {
+    pub fn fetch_variant_playlist(&self, channel: &str, quality: &str) -> Result<Url> {
         info!("Fetching playlist for channel {}", channel);
         let playlist = self
             .servers
@@ -177,7 +215,7 @@ impl MasterPlaylist {
                     )
                 } else {
                     info!("Using server {scheme}://{host}");
-                    Request::get(s.as_str())
+                    Request::get(s.clone())
                 };
 
                 //Awkward but I do just want to print the error and move on
@@ -204,6 +242,6 @@ impl MasterPlaylist {
             })
             .nth(2)
             .context("Invalid quality or malformed master playlist")?
-            .to_owned())
+            .parse()?)
     }
 }

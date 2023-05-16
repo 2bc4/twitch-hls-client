@@ -15,7 +15,7 @@
 
 #![forbid(unsafe_code)]
 
-use std::{mem, process, thread, time::Instant};
+use std::{process, thread, time::Instant};
 
 use anyhow::Result;
 use log::{debug, info, warn};
@@ -27,7 +27,7 @@ use simplelog::{
 mod hls;
 mod http;
 mod segment_worker;
-use hls::{MasterPlaylist, MediaPlaylist};
+use hls::{MasterPlaylist, MediaPlaylist, PrefetchUrlKind};
 use segment_worker::{Player, Worker};
 
 #[derive(Default, Debug)]
@@ -93,7 +93,7 @@ impl Args {
 }
 
 fn init_playlist(args: &Args, master_playlist: &MasterPlaylist) -> Result<MediaPlaylist> {
-    let url = master_playlist.fetch(&args.channel, &args.quality)?;
+    let url = master_playlist.fetch_variant_playlist(&args.channel, &args.quality)?;
     if args.passthrough {
         println!("{url}");
         process::exit(0);
@@ -107,7 +107,13 @@ fn init_playlist(args: &Args, master_playlist: &MasterPlaylist) -> Result<MediaP
                 let player_args = args
                     .player_args
                     .split_whitespace()
-                    .map(|s| if s == "-" { url.clone() } else { s.to_owned() })
+                    .map(|s| {
+                        if s == "-" {
+                            url.to_string()
+                        } else {
+                            s.to_owned()
+                        }
+                    })
                     .collect::<Vec<String>>()
                     .join(" ");
 
@@ -162,7 +168,7 @@ fn main() -> Result<()> {
             },
         };
 
-        worker.send(mem::take(&mut playlist.prefetch_urls[0]))?;
+        worker.send(playlist.urls.take(&PrefetchUrlKind::Newest)?)?;
         worker.sync()?;
 
         let mut retry_count: u32 = 0;
@@ -192,7 +198,7 @@ fn main() -> Result<()> {
                 },
             }
 
-            let segment_url = mem::take(&mut playlist.prefetch_urls[1]);
+            let segment_url = playlist.urls.take(&PrefetchUrlKind::Next)?;
             if worker.send(segment_url).is_err() {
                 info!("Player closed, exiting...");
                 return Ok(());
