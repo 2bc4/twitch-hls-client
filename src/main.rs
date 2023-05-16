@@ -150,6 +150,7 @@ fn main() -> Result<()> {
 
     let master_playlist = MasterPlaylist::new(&args.servers)?;
     loop {
+        let worker = Worker::new(Player::spawn(&args.player_path, &args.player_args)?)?;
         let mut playlist = match init_playlist(&args, &master_playlist) {
             Ok(playlist) => playlist,
             Err(e) => match e.downcast_ref::<hls::Error>() {
@@ -161,7 +162,6 @@ fn main() -> Result<()> {
             },
         };
 
-        let worker = Worker::new(Player::spawn(&args.player_path, &args.player_args)?)?;
         worker.send(mem::take(&mut playlist.prefetch_urls[0]))?;
         worker.sync()?;
 
