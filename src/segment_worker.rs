@@ -14,16 +14,52 @@
 //    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 use std::{
-    io,
-    io::ErrorKind::BrokenPipe,
-    process,
+    io::{self, ErrorKind::BrokenPipe},
+    process::{self, Child, ChildStdin, Command, ExitStatus, Stdio},
     sync::mpsc::{channel, sync_channel, Receiver, SendError, Sender, SyncSender},
     thread::Builder,
 };
 
 use anyhow::{Context, Result};
+use log::{info, warn};
 
-use crate::{http::Request, Player};
+use crate::http::Request;
+
+pub struct Player {
+    process: Child,
+}
+
+impl Drop for Player {
+    fn drop(&mut self) {
+        if let Err(e) = self.process.kill() {
+            warn!("Failed to kill player: {e}");
+        }
+    }
+}
+
+impl Player {
+    pub fn spawn(path: &str, args: &str) -> Result<Self> {
+        info!("Opening player: {} {}", path, args);
+        Ok(Self {
+            process: Command::new(path)
+                .args(args.split_whitespace())
+                .stdin(Stdio::piped())
+                .spawn()
+                .context("Failed to open player")?,
+        })
+    }
+
+    pub fn stdin(&mut self) -> Result<ChildStdin> {
+        self.process
+            .stdin
+            .take()
+            .context("Failed to open player stdin")
+    }
+
+    pub fn wait(&mut self) -> Result<ExitStatus> {
+        Ok(self.process.wait()?)
+    }
+}
 
 pub struct Worker {
     url_tx: Sender<String>,
@@ -31,7 +67,7 @@ pub struct Worker {
 }
 
 impl Worker {
-    pub fn new(player_path: String, player_args: String) -> Result<Self> {
+    pub fn new(player: Player) -> Result<Self> {
         let (url_tx, url_rx): (Sender<String>, Receiver<String>) = channel();
         let (sync_tx, sync_rx): (SyncSender<()>, Receiver<()>) = sync_channel(1);
 
@@ -40,7 +76,7 @@ impl Worker {
             .spawn(move || {
                 // :(
 
-                if let Err(e) = Self::thread_main(&url_rx, &sync_tx, &player_path, &player_args) {
+                if let Err(e) = Self::thread_main(&url_rx, &sync_tx, player) {
                     eprintln!("Error: {e}");
                     process::exit(1);
                 }
@@ -50,8 +86,8 @@ impl Worker {
         Ok(Self { url_tx, sync_rx })
     }
 
-    pub fn send(&self, url: &str) -> Result<(), SendError<String>> {
-        self.url_tx.send(url.to_owned())
+    pub fn send(&self, url: String) -> Result<(), SendError<String>> {
+        self.url_tx.send(url)
     }
 
     pub fn sync(&self) -> Result<()> {
@@ -63,10 +99,8 @@ impl Worker {
     fn thread_main(
         url_rx: &Receiver<String>,
         sync_tx: &SyncSender<()>,
-        player_path: &str,
-        player_args: &str,
+        mut player: Player,
     ) -> Result<()> {
-        let mut player = Player::spawn(player_path, player_args)?;
         let mut pipe = player.stdin()?;
 
         let mut request = match url_rx.recv() {

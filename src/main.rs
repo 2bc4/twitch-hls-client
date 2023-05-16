@@ -15,14 +15,9 @@
 
 #![forbid(unsafe_code)]
 
-use std::{
-    process,
-    process::{Child, ChildStdin, Command, ExitStatus, Stdio},
-    thread,
-    time::Instant,
-};
+use std::{mem, process, thread, time::Instant};
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use log::{debug, info, warn};
 use pico_args::Arguments;
 use simplelog::{
@@ -33,43 +28,7 @@ mod hls;
 mod http;
 mod segment_worker;
 use hls::{MasterPlaylist, MediaPlaylist};
-use segment_worker::Worker;
-
-pub(crate) struct Player {
-    process: Child,
-}
-
-impl Drop for Player {
-    fn drop(&mut self) {
-        if let Err(e) = self.process.kill() {
-            warn!("Failed to kill player: {e}");
-        }
-    }
-}
-
-impl Player {
-    pub fn spawn(path: &str, args: &str) -> Result<Self> {
-        info!("Opening player: {} {}", path, args);
-        Ok(Self {
-            process: Command::new(path)
-                .args(args.split_whitespace())
-                .stdin(Stdio::piped())
-                .spawn()
-                .context("Failed to open player")?,
-        })
-    }
-
-    pub fn stdin(&mut self) -> Result<ChildStdin> {
-        self.process
-            .stdin
-            .take()
-            .context("Failed to open player stdin")
-    }
-
-    pub fn wait(&mut self) -> Result<ExitStatus> {
-        Ok(self.process.wait()?)
-    }
-}
+use segment_worker::{Player, Worker};
 
 #[derive(Default, Debug)]
 struct Args {
@@ -202,8 +161,8 @@ fn main() -> Result<()> {
             },
         };
 
-        let worker = Worker::new(args.player_path.clone(), args.player_args.clone())?;
-        worker.send(&playlist.prefetch_urls[0])?;
+        let worker = Worker::new(Player::spawn(&args.player_path, &args.player_args)?)?;
+        worker.send(mem::take(&mut playlist.prefetch_urls[0]))?;
         worker.sync()?;
 
         let mut retry_count: u32 = 0;
@@ -233,7 +192,8 @@ fn main() -> Result<()> {
                 },
             }
 
-            if worker.send(&playlist.prefetch_urls[1]).is_err() {
+            let segment_url = mem::take(&mut playlist.prefetch_urls[1]);
+            if worker.send(segment_url).is_err() {
                 info!("Player closed, exiting...");
                 return Ok(());
             }

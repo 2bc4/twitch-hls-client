@@ -14,9 +14,9 @@
 //    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 use std::{
-    fmt, io,
+    fmt,
     io::{
-        BufRead, BufReader,
+        self, BufRead, BufReader,
         ErrorKind::{ConnectionAborted, ConnectionReset, UnexpectedEof},
         Read, Write,
     },
@@ -50,7 +50,7 @@ type Stream = BufReader<Transport>;
 pub struct Request {
     stream: Stream,
     request: String,
-    accept_header: String,
+    accept_header: &'static str, //currently only set with string literals
     url: Url,
 }
 
@@ -62,7 +62,7 @@ impl Request {
         Ok(Self {
             stream: BufReader::new(Transport::new(&url)?),
             request: Self::format_request(&url, DEFAULT_ACCEPT_HEADER)?,
-            accept_header: DEFAULT_ACCEPT_HEADER.to_owned(),
+            accept_header: DEFAULT_ACCEPT_HEADER,
             url,
         })
     }
@@ -115,7 +115,7 @@ impl Request {
         let url = Url::parse(url).context("Invalid updated request URL")?;
         if get_host(&self.url)? == get_host(&url)? {
             self.url = url;
-            self.request = Self::format_request(&self.url, &self.accept_header)?;
+            self.request = Self::format_request(&self.url, self.accept_header)?;
         } else {
             debug!("Host changed, creating new request");
             self.reconnect(Some(url.as_str()))?;
@@ -124,9 +124,9 @@ impl Request {
         Ok(())
     }
 
-    pub fn set_accept_header(&mut self, accept_header: &str) -> Result<()> {
-        self.accept_header = accept_header.to_owned();
-        self.request = Self::format_request(&self.url, &self.accept_header)?;
+    pub fn set_accept_header(&mut self, accept_header: &'static str) -> Result<()> {
+        self.accept_header = accept_header;
+        self.request = Self::format_request(&self.url, self.accept_header)?;
 
         Ok(())
     }
@@ -138,7 +138,7 @@ impl Request {
             Self::get(self.url.as_str())?
         };
 
-        request.set_accept_header(&self.accept_header)?;
+        request.accept_header = self.accept_header;
         *self = request;
 
         Ok(())
@@ -167,7 +167,6 @@ impl Request {
     }
 
     fn format_request(url: &Url, accept_header: &str) -> Result<String> {
-        //because url crate doesn't prepend ? to the first query param
         let query = url
             .query()
             .map_or_else(String::default, |query| format!("?{query}"));
@@ -262,7 +261,7 @@ impl Transport {
     #[cfg(feature = "rustls-native-certs")]
     fn root_certs() -> rustls::RootCertStore {
         let mut roots = rustls::RootCertStore::empty();
-        let certs = rustls_native_certs::load_native_certs().unwrap_or_else(|_| Vec::new());
+        let certs = rustls_native_certs::load_native_certs().unwrap_or_default();
         for cert in certs {
             //Ignore parsing errors, OS can have broken certs.
             if let Err(e) = roots.add(&rustls::Certificate(cert.0)) {
