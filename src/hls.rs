@@ -59,11 +59,12 @@ pub struct PrefetchUrls {
 
 impl PrefetchUrls {
     pub fn new(playlist: &str) -> Result<Self, Error> {
-        let mut iter = playlist
-            .lines()
-            .rev()
-            .take_while(|s| s.starts_with("#EXT-X-TWITCH-PREFETCH"))
-            .filter_map(|s| s.split_once(':').and_then(|s| Url::parse(s.1).ok()));
+        let mut iter = playlist.lines().rev().filter_map(|s| {
+            s.starts_with("#EXT-X-TWITCH-PREFETCH")
+                .then_some(s)
+                .and_then(|s| s.split_once(':'))
+                .and_then(|s| Url::parse(s.1).ok())
+        });
 
         Ok(Self {
             newest: Some(iter.next().ok_or(Error::InvalidPrefetchUrl)?),
