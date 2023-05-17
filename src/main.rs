@@ -15,6 +15,10 @@
 
 #![forbid(unsafe_code)]
 
+mod hls;
+mod http;
+mod segment_worker;
+
 use std::{process, thread, time::Instant};
 
 use anyhow::Result;
@@ -24,9 +28,6 @@ use simplelog::{
     format_description, ColorChoice, ConfigBuilder, LevelFilter, TermLogger, TerminalMode,
 };
 
-mod hls;
-mod http;
-mod segment_worker;
 use hls::{
     Error::{Advertisement, Discontinuity, InvalidDuration, InvalidPrefetchUrl, Unchanged},
     MasterPlaylist, MediaPlaylist, PrefetchUrlKind,
