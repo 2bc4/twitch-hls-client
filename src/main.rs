@@ -168,7 +168,7 @@ fn main() -> Result<()> {
             },
         };
 
-        worker.send(playlist.urls.take(&PrefetchUrlKind::Newest)?)?;
+        worker.send(playlist.urls.take(PrefetchUrlKind::Newest)?)?;
         worker.sync()?;
 
         let mut retry_count: u32 = 0;
@@ -198,7 +198,7 @@ fn main() -> Result<()> {
                 },
             }
 
-            let segment_url = playlist.urls.take(&PrefetchUrlKind::Next)?;
+            let segment_url = playlist.urls.take(PrefetchUrlKind::Next)?;
             if worker.send(segment_url).is_err() {
                 info!("Player closed, exiting...");
                 return Ok(());

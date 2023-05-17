@@ -44,30 +44,31 @@ impl fmt::Display for Error {
     }
 }
 
+#[derive(Copy, Clone)]
 pub enum PrefetchUrlKind {
     Newest,
     Next,
 }
 
+//Option wrapper around Url because it doesn't implement Default
 #[derive(Default, PartialEq, Eq)]
 pub struct PrefetchUrls {
-    urls: [Option<Url>; 2],
+    newest: Option<Url>,
+    next: Option<Url>,
 }
 
 impl PrefetchUrls {
     pub fn new(newest: &str, next: &str) -> Result<Self, Error> {
         Ok(Self {
-            urls: [
-                Some(Url::parse(newest).or(Err(Error::InvalidPrefetchUrl))?),
-                Some(Url::parse(next).or(Err(Error::InvalidPrefetchUrl))?),
-            ],
+            newest: Some(Url::parse(newest).or(Err(Error::InvalidPrefetchUrl))?),
+            next: Some(Url::parse(next).or(Err(Error::InvalidPrefetchUrl))?),
         })
     }
 
-    pub fn take(&mut self, kind: &PrefetchUrlKind) -> Result<Url, Error> {
+    pub fn take(&mut self, kind: PrefetchUrlKind) -> Result<Url, Error> {
         match kind {
-            PrefetchUrlKind::Newest => self.urls[0].take().ok_or(Error::InvalidPrefetchUrl),
-            PrefetchUrlKind::Next => self.urls[1].take().ok_or(Error::InvalidPrefetchUrl),
+            PrefetchUrlKind::Newest => self.newest.take().ok_or(Error::InvalidPrefetchUrl),
+            PrefetchUrlKind::Next => self.next.take().ok_or(Error::InvalidPrefetchUrl),
         }
     }
 }
