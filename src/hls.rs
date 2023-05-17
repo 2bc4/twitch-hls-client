@@ -13,7 +13,9 @@
 //    You should have received a copy of the GNU General Public License
 //    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-use std::{fmt, time::Duration};
+use std::{
+    cmp::PartialEq, collections::hash_map::DefaultHasher, fmt, hash::Hasher, time::Duration,
+};
 
 use anyhow::{anyhow, Context, Result};
 use log::{debug, error, info};
@@ -51,24 +53,37 @@ pub enum PrefetchUrlKind {
 }
 
 //Option wrapper around Url because it doesn't implement Default
-#[derive(Default, PartialEq, Eq)]
+#[derive(Default)]
 pub struct PrefetchUrls {
     newest: Option<Url>,
     next: Option<Url>,
+    hash: u64,
+}
+
+impl PartialEq for PrefetchUrls {
+    fn eq(&self, other: &Self) -> bool {
+        self.hash == other.hash
+    }
 }
 
 impl PrefetchUrls {
     pub fn new(playlist: &str) -> Result<Self, Error> {
+        let mut hasher = DefaultHasher::new();
         let mut iter = playlist.lines().rev().filter_map(|s| {
             s.starts_with("#EXT-X-TWITCH-PREFETCH")
                 .then_some(s)
                 .and_then(|s| s.split_once(':'))
-                .and_then(|s| Url::parse(s.1).ok())
+                .map(|s| {
+                    hasher.write(s.1.as_bytes());
+                    s.1
+                })
+                .and_then(|s| Url::parse(s).ok())
         });
 
         Ok(Self {
             newest: Some(iter.next().ok_or(Error::InvalidPrefetchUrl)?),
             next: Some(iter.next().ok_or(Error::InvalidPrefetchUrl)?),
+            hash: hasher.finish(),
         })
     }
 
