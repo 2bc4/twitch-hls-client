@@ -13,9 +13,7 @@
 //    You should have received a copy of the GNU General Public License
 //    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-use std::{
-    cmp::PartialEq, collections::hash_map::DefaultHasher, fmt, hash::Hasher, time::Duration,
-};
+use std::{collections::hash_map::DefaultHasher, fmt, hash::Hasher, time::Duration};
 
 use anyhow::{anyhow, Context, Result};
 use log::{debug, error, info};
@@ -73,11 +71,10 @@ impl PrefetchUrls {
             s.starts_with("#EXT-X-TWITCH-PREFETCH")
                 .then_some(s)
                 .and_then(|s| s.split_once(':'))
-                .map(|s| {
+                .and_then(|s| {
                     hasher.write(s.1.as_bytes());
-                    s.1
+                    Url::parse(s.1).ok()
                 })
-                .and_then(|s| Url::parse(s).ok())
         });
 
         Ok(Self {
