@@ -50,18 +50,14 @@ type Stream = BufReader<Transport>;
 pub struct Request {
     stream: Stream,
     request: String,
-    accept_header: &'static str, //currently only set with string literals
     url: Url,
 }
 
 impl Request {
     pub fn get(url: Url) -> Result<Self> {
-        const DEFAULT_ACCEPT_HEADER: &str = "*/*";
-
         Ok(Self {
             stream: BufReader::new(Transport::new(&url)?),
-            request: Self::format_request(&url, DEFAULT_ACCEPT_HEADER)?,
-            accept_header: DEFAULT_ACCEPT_HEADER,
+            request: Self::format_request(&url)?,
             url,
         })
     }
@@ -113,7 +109,7 @@ impl Request {
     pub fn set_url(&mut self, url: Url) -> Result<()> {
         if get_host(&self.url)? == get_host(&url)? {
             self.url = url;
-            self.request = Self::format_request(&self.url, self.accept_header)?;
+            self.request = Self::format_request(&self.url)?;
         } else {
             debug!("Host changed, creating new request");
             self.reconnect(Some(url))?;
@@ -122,23 +118,14 @@ impl Request {
         Ok(())
     }
 
-    pub fn set_accept_header(&mut self, accept_header: &'static str) -> Result<()> {
-        self.accept_header = accept_header;
-        self.request = Self::format_request(&self.url, self.accept_header)?;
-
-        Ok(())
-    }
-
     fn reconnect(&mut self, url: Option<Url>) -> Result<()> {
-        let mut request = if let Some(url) = url {
+        let request = if let Some(url) = url {
             Self::get(url)?
         } else {
             Self::get(self.url.clone())?
         };
 
-        request.accept_header = self.accept_header;
         *self = request;
-
         Ok(())
     }
 
@@ -164,7 +151,7 @@ impl Request {
         Ok(buf)
     }
 
-    fn format_request(url: &Url, accept_header: &str) -> Result<String> {
+    fn format_request(url: &Url) -> Result<String> {
         let query = url
             .query()
             .map_or_else(String::default, |query| format!("?{query}"));
@@ -173,7 +160,7 @@ impl Request {
             "GET {}{} HTTP/1.1\r\n\
              Host: {}\r\n\
              User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/113.0\r\n\
-             Accept: {}\r\n\
+             Accept: */*\r\n\
              Accept-Language: en-US\r\n\
              Accept-Encoding: gzip\r\n\
              Origin: https://player.twitch.tv\r\n\
@@ -185,7 +172,6 @@ impl Request {
             url.path(),
             query,
             get_host(url)?,
-            accept_header,
         ))
     }
 }

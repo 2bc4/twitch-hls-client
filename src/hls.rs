@@ -88,15 +88,10 @@ pub struct MediaPlaylist {
 
 impl MediaPlaylist {
     pub fn new(url: &Url) -> Result<Self> {
-        let mut request = Request::get(url.clone())?;
-        request.set_accept_header(
-            "application/x-mpegURL, application/vnd.apple.mpegurl, application/json, text/plain",
-        )?;
-
         let mut media_playlist = Self {
             urls: PrefetchUrls::default(),
             duration: Duration::default(),
-            request,
+            request: Request::get(url.clone())?,
         };
 
         media_playlist.reload()?;
