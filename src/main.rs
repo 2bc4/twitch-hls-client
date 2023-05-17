@@ -27,7 +27,10 @@ use simplelog::{
 mod hls;
 mod http;
 mod segment_worker;
-use hls::{MasterPlaylist, MediaPlaylist, PrefetchUrlKind};
+use hls::{
+    Error::{Advertisement, Discontinuity, InvalidDuration, InvalidPrefetchUrl, Unchanged},
+    MasterPlaylist, MediaPlaylist, PrefetchUrlKind,
+};
 use segment_worker::{Player, Worker};
 
 #[derive(Default, Debug)]
@@ -102,7 +105,7 @@ fn init_playlist(args: &Args, master_playlist: &MasterPlaylist) -> Result<MediaP
     match MediaPlaylist::new(&url) {
         Ok(playlist) => Ok(playlist),
         Err(e) => match e.downcast_ref::<hls::Error>() {
-            Some(hls::Error::InvalidPrefetchUrl) => {
+            Some(InvalidPrefetchUrl) => {
                 info!("Stream is not low latency, opening player with playlist URL");
                 let player_args = args
                     .player_args
@@ -159,7 +162,7 @@ fn main() -> Result<()> {
         let mut playlist = match init_playlist(&args, &master_playlist) {
             Ok(playlist) => playlist,
             Err(e) => match e.downcast_ref::<hls::Error>() {
-                Some(hls::Error::Advertisement | hls::Error::Discontinuity) => {
+                Some(Advertisement | Discontinuity) => {
                     warn!("{e} on startup, resetting...");
                     continue;
                 }
@@ -177,7 +180,7 @@ fn main() -> Result<()> {
             match playlist.reload() {
                 Ok(_) => retry_count = 0,
                 Err(e) => match e.downcast_ref::<hls::Error>() {
-                    Some(hls::Error::Unchanged | hls::Error::InvalidPrefetchUrl) => {
+                    Some(Unchanged | InvalidPrefetchUrl | InvalidDuration) => {
                         retry_count += 1;
                         if retry_count == args.max_retries {
                             info!("Maximum retries on media playlist reached, exiting...");
@@ -187,11 +190,11 @@ fn main() -> Result<()> {
                         debug!("{e}, retrying...");
                         continue;
                     }
-                    Some(hls::Error::Advertisement) => {
+                    Some(Advertisement) => {
                         warn!("{e}, resetting...");
                         break;
                     }
-                    Some(hls::Error::Discontinuity) => {
+                    Some(Discontinuity) => {
                         warn!("{e}, stream may be broken");
                     }
                     _ => return Err(e),
