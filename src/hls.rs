@@ -58,10 +58,16 @@ pub struct PrefetchUrls {
 }
 
 impl PrefetchUrls {
-    pub fn new(newest: &str, next: &str) -> Result<Self, Error> {
+    pub fn new(playlist: &str) -> Result<Self, Error> {
+        let mut iter = playlist
+            .lines()
+            .rev()
+            .take_while(|s| s.starts_with("#EXT-X-TWITCH-PREFETCH"))
+            .filter_map(|s| s.split_once(':').and_then(|s| Url::parse(s.1).ok()));
+
         Ok(Self {
-            newest: Some(Url::parse(newest).or(Err(Error::InvalidPrefetchUrl))?),
-            next: Some(Url::parse(next).or(Err(Error::InvalidPrefetchUrl))?),
+            newest: Some(iter.next().ok_or(Error::InvalidPrefetchUrl)?),
+            next: Some(iter.next().ok_or(Error::InvalidPrefetchUrl)?),
         })
     }
 
@@ -111,7 +117,7 @@ impl MediaPlaylist {
             return Err(Error::Discontinuity.into());
         }
 
-        let urls = Self::parse_prefetch_urls(&playlist)?;
+        let urls = PrefetchUrls::new(&playlist)?;
         if urls == self.urls {
             return Err(Error::Unchanged.into());
         }
@@ -121,43 +127,16 @@ impl MediaPlaylist {
         Ok(())
     }
 
-    fn parse_prefetch_urls(playlist: &str) -> Result<PrefetchUrls, Error> {
-        let newest = playlist
-            .lines()
-            .rev()
-            .find(|s| s.starts_with("#EXT-X-TWITCH-PREFETCH"))
-            .ok_or(Error::InvalidPrefetchUrl)?
-            .split_once(':')
-            .ok_or(Error::InvalidPrefetchUrl)?
-            .1;
-
-        let next = playlist
-            .lines()
-            .rev()
-            .skip_while(|s| !s.starts_with("#EXT-X-TWITCH-PREFETCH"))
-            .skip(1)
-            .find(|s| s.starts_with("#EXT-X-TWITCH-PREFETCH"))
-            .ok_or(Error::InvalidPrefetchUrl)?
-            .split_once(':')
-            .ok_or(Error::InvalidPrefetchUrl)?
-            .1;
-
-        PrefetchUrls::new(newest, next)
-    }
-
     fn parse_duration(playlist: &str) -> Result<Duration, Error> {
         Duration::try_from_secs_f32(
             playlist
                 .lines()
                 .rev()
                 .find(|s| s.starts_with("#EXTINF"))
+                .and_then(|s| s.split_once(':'))
+                .and_then(|s| s.1.split_once(','))
+                .map(|s| s.0)
                 .ok_or(Error::InvalidDuration)?
-                .split_once(':')
-                .ok_or(Error::InvalidDuration)?
-                .1
-                .split_once(',')
-                .ok_or(Error::InvalidDuration)?
-                .0
                 .parse()
                 .or(Err(Error::InvalidDuration))?,
         )
