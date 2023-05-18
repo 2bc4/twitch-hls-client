@@ -19,7 +19,7 @@ mod hls;
 mod http;
 mod segment_worker;
 
-use std::{process, thread, time::Instant};
+use std::{path::PathBuf, process, thread, time::Instant};
 
 use anyhow::Result;
 use log::{debug, info, warn};
@@ -37,7 +37,7 @@ use segment_worker::{Player, Worker};
 #[derive(Default, Debug)]
 struct Args {
     servers: Vec<String>,
-    player_path: String,
+    player_path: PathBuf,
     player_args: String,
     debug: bool,
     max_retries: u32,
@@ -74,7 +74,7 @@ impl Args {
                 .split(',')
                 .map(String::from)
                 .collect(),
-            player_path: String::default(),
+            player_path: PathBuf::default(),
             player_args: parser
                 .opt_value_from_str("-a")?
                 .unwrap_or_else(|| DEFAULT_PLAYER_ARGS.to_owned()),
@@ -92,6 +92,12 @@ impl Args {
         }
 
         args.player_path = parser.value_from_str("-p")?;
+        args.player_args += &match args.player_path.file_stem() {
+            Some(f) if f == "mpv" => format!(" --force-media-title=twitch.tv/{}", args.channel),
+            Some(f) if f == "vlc" => format!(" --input-title-format=twitch.tv/{}", args.channel),
+            _ => String::default(),
+        };
+
         Ok(args)
     }
 }

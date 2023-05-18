@@ -15,6 +15,7 @@
 
 use std::{
     io::{self, ErrorKind::BrokenPipe},
+    path::PathBuf,
     process::{self, Child, ChildStdin, Command, ExitStatus, Stdio},
     sync::mpsc::{channel, sync_channel, Receiver, SendError, Sender, SyncSender},
     thread::Builder,
@@ -39,8 +40,8 @@ impl Drop for Player {
 }
 
 impl Player {
-    pub fn spawn(path: &str, args: &str) -> Result<Self> {
-        info!("Opening player: {} {}", path, args);
+    pub fn spawn(path: &PathBuf, args: &str) -> Result<Self> {
+        info!("Opening player: {} {}", path.display(), args);
         Ok(Self {
             process: Command::new(path)
                 .args(args.split_whitespace())
