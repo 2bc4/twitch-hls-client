@@ -28,6 +28,7 @@ pub enum Error {
     InvalidDuration,
     Advertisement,
     Discontinuity,
+    NotLowLatency(String),
 }
 
 impl std::error::Error for Error {}
@@ -40,6 +41,7 @@ impl fmt::Display for Error {
             Self::InvalidDuration => write!(f, "Invalid or missing segment duration"),
             Self::Advertisement => write!(f, "Encountered an embedded advertisement segment"),
             Self::Discontinuity => write!(f, "Encountered a discontinuity"),
+            Self::NotLowLatency(_) => write!(f, "Stream is not low latency"),
         }
     }
 }
@@ -99,15 +101,22 @@ pub struct MediaPlaylist {
 }
 
 impl MediaPlaylist {
-    pub fn new(url: &Url) -> Result<Self> {
-        let mut media_playlist = Self {
+    pub fn new(url: Url) -> Result<Self> {
+        let mut playlist = Self {
             urls: PrefetchUrls::default(),
             duration: Duration::default(),
-            request: Request::get(url.clone())?,
+            request: Request::get(url)?,
         };
 
-        media_playlist.reload()?;
-        Ok(media_playlist)
+        match playlist.reload() {
+            Ok(_) => Ok(playlist),
+            Err(e) => match e.downcast_ref::<Error>() {
+                Some(Error::InvalidPrefetchUrl) => {
+                    Err(Error::NotLowLatency(playlist.request.url_string()).into())
+                }
+                _ => Err(e),
+            },
+        }
     }
 
     pub fn reload(&mut self) -> Result<()> {

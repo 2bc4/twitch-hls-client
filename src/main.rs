@@ -28,10 +28,7 @@ use simplelog::{
     format_description, ColorChoice, ConfigBuilder, LevelFilter, TermLogger, TerminalMode,
 };
 
-use hls::{
-    Error::{Advertisement, Discontinuity, InvalidDuration, InvalidPrefetchUrl, Unchanged},
-    MasterPlaylist, MediaPlaylist, PrefetchUrlKind,
-};
+use hls::{Error as HlsErr, MasterPlaylist, MediaPlaylist, PrefetchUrlKind};
 use segment_worker::{Player, Worker};
 
 #[derive(Default, Debug)]
@@ -102,38 +99,52 @@ impl Args {
     }
 }
 
-fn init_playlist(args: &Args, master_playlist: &MasterPlaylist) -> Result<MediaPlaylist> {
-    let url = master_playlist.fetch_variant_playlist(&args.channel, &args.quality)?;
-    if args.passthrough {
-        println!("{url}");
-        process::exit(0);
-    }
+enum Reason {
+    Exit,
+    Reset,
+}
 
-    match MediaPlaylist::new(&url) {
-        Ok(playlist) => Ok(playlist),
-        Err(e) => match e.downcast_ref::<hls::Error>() {
-            Some(InvalidPrefetchUrl) => {
-                info!("Stream is not low latency, opening player with playlist URL");
-                let player_args = args
-                    .player_args
-                    .split_whitespace()
-                    .map(|s| {
-                        if s == "-" {
-                            url.to_string()
-                        } else {
-                            s.to_owned()
-                        }
-                    })
-                    .collect::<Vec<String>>()
-                    .join(" ");
+fn run(args: &Args, mut playlist: MediaPlaylist) -> Result<Reason> {
+    let worker = Worker::new(Player::spawn(&args.player_path, &args.player_args)?)?;
+    worker.send(playlist.urls.take(PrefetchUrlKind::Newest)?)?;
+    worker.sync()?;
 
-                let mut player = Player::spawn(&args.player_path, &player_args)?;
-                player.wait()?;
+    let mut retry_count: u32 = 0;
+    loop {
+        let time = Instant::now();
+        match playlist.reload() {
+            Ok(_) => retry_count = 0,
+            Err(e) => match e.downcast_ref::<HlsErr>() {
+                Some(HlsErr::Unchanged | HlsErr::InvalidPrefetchUrl | HlsErr::InvalidDuration) => {
+                    retry_count += 1;
+                    if retry_count == args.max_retries {
+                        info!("Maximum retries on media playlist reached, exiting...");
+                        return Ok(Reason::Exit);
+                    }
 
-                process::exit(0);
-            }
-            _ => Err(e),
-        },
+                    debug!("{e}, retrying...");
+                    continue;
+                }
+                Some(HlsErr::Advertisement) => {
+                    warn!("{e}, resetting...");
+                    return Ok(Reason::Reset);
+                }
+                Some(HlsErr::Discontinuity) => {
+                    warn!("{e}, stream may be broken");
+                }
+                _ => return Err(e),
+            },
+        }
+
+        let segment_url = playlist.urls.take(PrefetchUrlKind::Next)?;
+        if worker.send(segment_url).is_err() {
+            info!("Player closed, exiting...");
+            return Ok(Reason::Exit);
+        }
+
+        if let Some(sleep_time) = playlist.duration.checked_sub(time.elapsed()) {
+            thread::sleep(sleep_time);
+        }
     }
 }
 
@@ -166,57 +177,43 @@ fn main() -> Result<()> {
 
     let master_playlist = MasterPlaylist::new(&args.servers)?;
     loop {
-        let mut playlist = match init_playlist(&args, &master_playlist) {
+        let playlist_url = master_playlist.fetch_variant_playlist(&args.channel, &args.quality)?;
+        if args.passthrough {
+            println!("{playlist_url}");
+            return Ok(());
+        }
+
+        let playlist = match MediaPlaylist::new(playlist_url) {
             Ok(playlist) => playlist,
-            Err(e) => match e.downcast_ref::<hls::Error>() {
-                Some(Advertisement | Discontinuity) => {
+            Err(e) => match e.downcast_ref::<HlsErr>() {
+                Some(HlsErr::Advertisement | HlsErr::Discontinuity) => {
                     warn!("{e} on startup, resetting...");
                     continue;
+                }
+                Some(HlsErr::NotLowLatency(url)) => {
+                    info!("{e}, opening player with playlist URL");
+                    let player_args = args
+                        .player_args
+                        .split_whitespace()
+                        .map(|s| if s == "-" { url.clone() } else { s.to_owned() })
+                        .collect::<Vec<String>>()
+                        .join(" ");
+
+                    let mut player = Player::spawn(&args.player_path, &player_args)?;
+                    player.wait()?;
+
+                    return Ok(());
                 }
                 _ => return Err(e),
             },
         };
 
-        let worker = Worker::new(Player::spawn(&args.player_path, &args.player_args)?)?;
-        worker.send(playlist.urls.take(PrefetchUrlKind::Newest)?)?;
-        worker.sync()?;
-
-        let mut retry_count: u32 = 0;
-        loop {
-            let time = Instant::now();
-            match playlist.reload() {
-                Ok(_) => retry_count = 0,
-                Err(e) => match e.downcast_ref::<hls::Error>() {
-                    Some(Unchanged | InvalidPrefetchUrl | InvalidDuration) => {
-                        retry_count += 1;
-                        if retry_count == args.max_retries {
-                            info!("Maximum retries on media playlist reached, exiting...");
-                            return Ok(());
-                        }
-
-                        debug!("{e}, retrying...");
-                        continue;
-                    }
-                    Some(Advertisement) => {
-                        warn!("{e}, resetting...");
-                        break;
-                    }
-                    Some(Discontinuity) => {
-                        warn!("{e}, stream may be broken");
-                    }
-                    _ => return Err(e),
-                },
-            }
-
-            let segment_url = playlist.urls.take(PrefetchUrlKind::Next)?;
-            if worker.send(segment_url).is_err() {
-                info!("Player closed, exiting...");
-                return Ok(());
-            }
-
-            if let Some(sleep_time) = playlist.duration.checked_sub(time.elapsed()) {
-                thread::sleep(sleep_time);
-            }
+        match run(&args, playlist) {
+            Ok(reason) => match reason {
+                Reason::Reset => continue,
+                Reason::Exit => return Ok(()),
+            },
+            Err(e) => return Err(e),
         }
     }
 }

@@ -118,6 +118,10 @@ impl Request {
         Ok(())
     }
 
+    pub fn url_string(&self) -> String {
+        self.url.to_string()
+    }
+
     fn reconnect(&mut self, url: Option<Url>) -> Result<()> {
         let request = if let Some(url) = url {
             Self::get(url)?
