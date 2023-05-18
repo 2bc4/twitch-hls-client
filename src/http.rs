@@ -94,7 +94,7 @@ impl Request {
             Ok(Status::Partial) => bail!("Partial HTTP response"),
             Ok(Status::Complete(_)) => match response.code {
                 Some(code) if code == 200 => (),
-                Some(code) => return Err(Error::Status(code, self.url.to_string()).into()),
+                Some(code) => return Err(Error::Status(code, self.url_string()).into()),
                 None => bail!("Invalid HTTP response"),
             },
         }
@@ -144,7 +144,7 @@ impl Request {
         let mut consumed = 0;
         while consumed != HEADERS_END_SIZE {
             if self.stream.fill_buf()?.is_empty() {
-                return Err(io::Error::from(io::ErrorKind::UnexpectedEof));
+                return Err(io::Error::from(UnexpectedEof));
             }
 
             consumed = self.stream.read_until(b'\n', &mut buf)?;
