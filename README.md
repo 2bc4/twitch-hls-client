@@ -36,8 +36,8 @@ Options:
 
 ### Example
 ```
-$ twitch-hls-client twitch.tv/twitchchannel best -s https://api.ttv.lol/[ttvlol],https://eu.luminous.dev/live/[channel] -p /usr/bin/mpv -a '- --profile=low-latency'
-[INFO] Opening player: mpv - --profile=low-latency
+$ twitch-hls-client twitch.tv/twitchchannel best -s https://api.ttv.lol/[ttvlol],https://eu.luminous.dev/live/[channel] -p mpv -a '- --profile=low-latency'
+[INFO] Opening player: mpv - --profile=low-latency --force-media-title=twitch.tv/twitchchannel
 [INFO] Fetching playlist for channel twitchchannel
 [INFO] Using server https://api.ttv.lol (TTVLOL API)
  (+) Video --vid=1 (h264)
