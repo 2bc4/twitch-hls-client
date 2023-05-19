@@ -44,6 +44,6 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      - run: cargo clippy --all --no-default-features --features rustls-webpki -- -Wclippy::pedantic -Dwarnings
-      - run: cargo clippy --all --no-default-features --features rustls-native-certs -- -Wclippy::pedantic -Dwarnings
-      - run: cargo clippy --all --no-default-features --features native-tls -- -Wclippy::pedantic -Dwarnings
+      - run: cargo clippy --all --no-default-features --features rustls-webpki
+      - run: cargo clippy --all --no-default-features --features rustls-native-certs
+      - run: cargo clippy --all --no-default-features --features native-tls

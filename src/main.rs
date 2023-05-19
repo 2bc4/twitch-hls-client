@@ -14,6 +14,8 @@
 //    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #![forbid(unsafe_code)]
+#![deny(warnings)]
+#![deny(clippy::pedantic)]
 
 mod hls;
 mod http;
