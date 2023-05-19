@@ -102,12 +102,12 @@ impl Args {
 }
 
 enum Reason {
-    Exit,
     Reset,
+    Exit,
 }
 
-fn run(args: &Args, mut playlist: MediaPlaylist) -> Result<Reason> {
-    let worker = Worker::new(Player::spawn(&args.player_path, &args.player_args)?)?;
+#[allow(clippy::needless_pass_by_value)]
+fn run(mut playlist: MediaPlaylist, worker: Worker, max_retries: u32) -> Result<Reason> {
     worker.send(playlist.urls.take(PrefetchUrlKind::Newest)?)?;
     worker.sync()?;
 
@@ -119,7 +119,7 @@ fn run(args: &Args, mut playlist: MediaPlaylist) -> Result<Reason> {
             Err(e) => match e.downcast_ref::<HlsErr>() {
                 Some(HlsErr::Unchanged | HlsErr::InvalidPrefetchUrl | HlsErr::InvalidDuration) => {
                     retry_count += 1;
-                    if retry_count == args.max_retries {
+                    if retry_count == max_retries {
                         info!("Maximum retries on media playlist reached, exiting...");
                         return Ok(Reason::Exit);
                     }
@@ -210,7 +210,8 @@ fn main() -> Result<()> {
             },
         };
 
-        match run(&args, playlist) {
+        let worker = Worker::new(Player::spawn(&args.player_path, &args.player_args)?)?;
+        match run(playlist, worker, args.max_retries) {
             Ok(reason) => match reason {
                 Reason::Reset => continue,
                 Reason::Exit => return Ok(()),
