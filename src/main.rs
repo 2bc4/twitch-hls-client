@@ -106,8 +106,7 @@ enum Reason {
     Exit,
 }
 
-#[allow(clippy::needless_pass_by_value)]
-fn run(mut playlist: MediaPlaylist, worker: Worker, max_retries: u32) -> Result<Reason> {
+fn run(worker: &Worker, mut playlist: MediaPlaylist, max_retries: u32) -> Result<Reason> {
     worker.send(playlist.urls.take(PrefetchUrlKind::Newest)?)?;
     worker.sync()?;
 
@@ -211,7 +210,7 @@ fn main() -> Result<()> {
         };
 
         let worker = Worker::new(Player::spawn(&args.player_path, &args.player_args)?)?;
-        match run(playlist, worker, args.max_retries) {
+        match run(&worker, playlist, args.max_retries) {
             Ok(reason) => match reason {
                 Reason::Reset => continue,
                 Reason::Exit => return Ok(()),
