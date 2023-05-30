@@ -48,7 +48,7 @@ struct Args {
 impl Args {
     pub fn parse() -> Result<Self> {
         const DEFAULT_PLAYER_ARGS: &str = "-";
-        const DEFAULT_MAX_RETRIES: u32 = 30;
+        const DEFAULT_MAX_RETRIES: u32 = 50;
 
         let mut parser = Arguments::from_env();
         if parser.contains("-h") || parser.contains("--help") {

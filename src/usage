@@ -19,7 +19,7 @@ Options:
   -d, --debug
           Enable debug logging
       --max-retries <COUNT>
-          Attempt to fetch the media playlist <COUNT> times before exiting (default: 30)
+          Attempt to fetch the media playlist <COUNT> times before exiting (default: 50)
       --passthrough
           Print the playlist URL to stdout and exit
   -h, --help
