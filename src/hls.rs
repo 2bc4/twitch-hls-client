@@ -130,10 +130,6 @@ impl MediaPlaylist {
             return Err(Error::Advertisement.into());
         }
 
-        if playlist.contains("#EXT-X-DISCONTINUITY") {
-            return Err(Error::Discontinuity.into());
-        }
-
         let urls = PrefetchUrls::new(&playlist)?;
         if urls == self.urls {
             return Err(Error::Unchanged.into());
@@ -141,6 +137,11 @@ impl MediaPlaylist {
 
         self.urls = urls;
         self.duration = Self::parse_duration(&playlist)?;
+
+        if playlist.contains("#EXT-X-DISCONTINUITY") {
+            return Err(Error::Discontinuity.into());
+        }
+
         Ok(())
     }
 
