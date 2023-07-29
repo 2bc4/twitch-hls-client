@@ -1,3 +1,5 @@
+Archived for the forseeable future due to demotivation and lack of time. Was a fun first Rust project though.
+
 ## twitch-hls-client
 Lightweight CLI client for watching low latency Twitch streams with ad blocking.
 
