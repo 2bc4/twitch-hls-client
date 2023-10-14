@@ -1,5 +1,3 @@
-Archived for the forseeable future due to demotivation and lack of time. Was a fun first Rust project though.
-
 ## twitch-hls-client
 Lightweight CLI client for watching low latency Twitch streams with ad blocking.
 
@@ -58,6 +56,4 @@ Binaries are built by [GitHub CI](https://github.com/2bc4/twitch-hls-client/acti
 ### Building
 First, install [Rust](https://rustup.rs).
 
-If you wish to build from the latest commit run `cargo install --locked --git https://github.com/2bc4/twitch-hls-client.git` or clone the repo and run `cargo build --release`.
-
-If you just want to build the latest release it's on [crates.io](https://crates.io/crates/twitch-hls-client). Run `cargo install twitch-hls-client`.
+Run `cargo install --locked --git https://github.com/2bc4/twitch-hls-client.git` or clone the repo and run `cargo build --release`.
