@@ -21,16 +21,16 @@ rustls-native-certs = ["dep:rustls", "dep:rustls-native-certs"]
 native-tls = ["dep:native-tls"]
 
 [dependencies]
-anyhow = "1.0.71"
+anyhow = "1.0.75"
 chunked_transfer = "1.4.1"
-flate2 = "1.0.26"
+flate2 = "1.0.28"
 httparse = "1.8.0"
-log = "0.4.19"
+log = "0.4.20"
 native-tls = { version = "0.2.11", optional = true }
 pico-args = "0.5.0"
-rustls = { version = "0.21.2", optional = true }
+rustls = { version = "0.21.7", optional = true }
 rustls-native-certs = { version = "0.6.3", optional = true }
 simplelog = "0.12.1"
-time = "0.3.22"
-url = "2.4.0"
+time = "0.3.30"
+url = "2.4.1"
 webpki-roots = { version = "0.23.1", optional = true }
