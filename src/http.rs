@@ -62,18 +62,8 @@ impl Request {
         })
     }
 
-    pub fn get_with_header(url: &str, header: &str) -> Result<Self> {
-        let mut r = Self::get(url.parse()?)?;
-
-        //Before end of headers.
-        //Will be overwritten if set_url is called but this is only needed for the TTVLOL API.
-        r.request.insert_str(r.request.len() - 2, header);
-        r.request += "\r\n";
-        Ok(r)
-    }
-
     pub fn reader(&mut self) -> Result<Decoder> {
-        const MAX_HEADERS: usize = 16;
+        const MAX_HEADERS: usize = 30;
 
         let buf = match self.do_io() {
             Ok(buf) => buf,

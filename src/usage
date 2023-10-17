@@ -10,7 +10,6 @@ Options:
   -s <URL>
           Playlist proxy server to fetch the master playlist from.
           Can be multiple comma separated servers, will try each in order until successful.
-          If URL path is "[ttvlol]" the playlist will be requested using the TTVLOL API.
           If URL includes "[channel]" it will be replaced with the channel argument at runtime.
   -p <PATH>
           Path to the player that the stream will be piped to

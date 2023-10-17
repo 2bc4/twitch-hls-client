@@ -16,7 +16,6 @@ Options:
   -s <URL>
           Playlist proxy server to fetch the master playlist from.
           Can be multiple comma separated servers, will try each in order until successful.
-          If URL path is "[ttvlol]" the playlist will be requested using the TTVLOL API.
           If URL includes "[channel]" it will be replaced with the channel argument at runtime.
   -p <PATH>
           Path to the player that the stream will be piped to
@@ -36,10 +35,10 @@ Options:
 
 ### Example
 ```
-$ twitch-hls-client twitch.tv/twitchchannel best -s https://api.ttv.lol/[ttvlol],https://eu.luminous.dev/live/[channel] -p mpv -a '- --profile=low-latency'
+$ twitch-hls-client twitch.tv/twitchchannel best -s https://eu.luminous.dev/live/[channel],https://lb-eu.cdn-perfprod.com/live/[channel] -p mpv -a '- --profile=low-latency'
 [INFO] Opening player: mpv - --profile=low-latency --force-media-title=twitch.tv/twitchchannel
 [INFO] Fetching playlist for channel twitchchannel
-[INFO] Using server https://api.ttv.lol (TTVLOL API)
+[INFO] Using server https://eu.luminous.dev
  (+) Video --vid=1 (h264)
  (+) Audio --aid=1 (aac)
 Using hardware decoding (vaapi).

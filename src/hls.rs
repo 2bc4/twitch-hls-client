@@ -195,36 +195,22 @@ impl MasterPlaylist {
             .servers
             .iter()
             .find_map(|s| {
-                let scheme = s.scheme();
-                let host = s.host_str().expect("Somehow invalid host?");
+                info!(
+                    "Using server {}://{}",
+                    s.scheme(),
+                    s.host_str().expect("Somehow invalid host?")
+                );
 
-                let request = if s.path() == "/[ttvlol]" {
-                    info!("Using server {scheme}://{host} (TTVLOL API)");
-
-                    let mut url = s.clone();
-                    url.set_path(&format!("/playlist/{channel}.m3u8"));
-
-                    Request::get_with_header(
-                        &url.as_str()
-                            .replace('?', "%3F")
-                            .replace('=', "%3D")
-                            .replace('&', "%26"),
-                        "X-Donate-To: https://ttv.lol/donate",
-                    )
-                } else {
-                    info!("Using server {scheme}://{host}");
-                    Request::get(s.clone())
+                let mut request = match Request::get(s.clone()) {
+                    Ok(request) => request,
+                    Err(e) => {
+                        error!("{e}");
+                        return None;
+                    }
                 };
 
-                //Awkward but I do just want to print the error and move on
-                match request {
-                    Ok(mut res) => match res.read_string() {
-                        Ok(res) => Some(res),
-                        Err(e) => {
-                            error!("{e}");
-                            None
-                        }
-                    },
+                match request.read_string() {
+                    Ok(playlist_url) => Some(playlist_url),
                     Err(e) => {
                         error!("{e}");
                         None
