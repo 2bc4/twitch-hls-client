@@ -47,12 +47,7 @@ AO: [pipewire] 48000Hz stereo 2ch floatp
 AV: 03:57:23 / 03:57:23 (100%) A-V:  0.000 Cache: 0.7s/482KB
 ```
 
-### Installing prebuilt binaries
-Head to [releases](https://github.com/2bc4/twitch-hls-client/releases/latest) and download the .zip file for your platform and then extract it. The twitch-hls-client(.exe) binary is self-contained and can be moved anywhere.
-
-Binaries are built by [GitHub CI](https://github.com/2bc4/twitch-hls-client/actions/workflows/release.yaml) from this repo, the sha512sums file is then generated locally and signed with my [public key](https://github.com/2bc4/2bc4).
-
 ### Building
 First, install [Rust](https://rustup.rs).
 
-Run `cargo install --locked --git https://github.com/2bc4/twitch-hls-client.git` or clone the repo and run `cargo build --release`.
+Then run `cargo install --locked --git https://github.com/2bc4/twitch-hls-client.git` or clone the repo and run `cargo build --release`.
