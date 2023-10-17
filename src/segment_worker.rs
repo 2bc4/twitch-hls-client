@@ -125,7 +125,9 @@ impl Worker {
             .context("Failed to send sync state from segment worker thread")?;
 
         loop {
-            let Ok(url) = url_rx.recv() else { return Ok(()); };
+            let Ok(url) = url_rx.recv() else {
+                return Ok(());
+            };
             request.set_url(url)?;
 
             if let Err(e) = io::copy(&mut request.reader()?, &mut pipe) {

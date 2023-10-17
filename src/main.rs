@@ -47,7 +47,7 @@ fn run(worker: &Worker, mut playlist: MediaPlaylist, max_retries: u32) -> Result
     loop {
         let time = Instant::now();
         match playlist.reload() {
-            Ok(_) => retry_count = 0,
+            Ok(()) => retry_count = 0,
             Err(e) => match e.downcast_ref::<HlsErr>() {
                 Some(HlsErr::Unchanged | HlsErr::InvalidPrefetchUrl | HlsErr::InvalidDuration) => {
                     retry_count += 1;

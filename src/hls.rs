@@ -109,7 +109,7 @@ impl MediaPlaylist {
         };
 
         match playlist.reload() {
-            Ok(_) => Ok(playlist),
+            Ok(()) => Ok(playlist),
             Err(e) => match e.downcast_ref::<Error>() {
                 Some(Error::InvalidPrefetchUrl) => {
                     Err(Error::NotLowLatency(playlist.request.url_string()).into())

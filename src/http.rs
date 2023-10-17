@@ -93,7 +93,7 @@ impl Request {
             Err(e) => return Err(e.into()),
             Ok(Status::Partial) => bail!("Partial HTTP response"),
             Ok(Status::Complete(_)) => match response.code {
-                Some(code) if code == 200 => (),
+                Some(200) => (),
                 Some(code) => return Err(Error::Status(code, self.url_string()).into()),
                 None => bail!("Invalid HTTP response"),
             },
