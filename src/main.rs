@@ -17,89 +17,22 @@
 #![deny(warnings)]
 #![deny(clippy::pedantic)]
 
+mod args;
 mod hls;
 mod http;
 mod segment_worker;
 
-use std::{path::PathBuf, process, thread, time::Instant};
+use std::{thread, time::Instant};
 
 use anyhow::Result;
 use log::{debug, info, warn};
-use pico_args::Arguments;
 use simplelog::{
     format_description, ColorChoice, ConfigBuilder, LevelFilter, TermLogger, TerminalMode,
 };
 
+use args::Args;
 use hls::{Error as HlsErr, MasterPlaylist, MediaPlaylist, PrefetchUrlKind};
 use segment_worker::{Player, Worker};
-
-#[derive(Default, Debug)]
-struct Args {
-    servers: Vec<String>,
-    player_path: PathBuf,
-    player_args: String,
-    debug: bool,
-    max_retries: u32,
-    passthrough: bool,
-    channel: String,
-    quality: String,
-}
-
-impl Args {
-    pub fn parse() -> Result<Self> {
-        const DEFAULT_PLAYER_ARGS: &str = "-";
-        const DEFAULT_MAX_RETRIES: u32 = 50;
-
-        let mut parser = Arguments::from_env();
-        if parser.contains("-h") || parser.contains("--help") {
-            eprintln!(include_str!("usage"));
-            process::exit(0);
-        }
-
-        if parser.contains("-V") || parser.contains("--version") {
-            eprintln!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
-            process::exit(0);
-        }
-
-        let channel = parser
-            .free_from_str::<String>()?
-            .to_lowercase()
-            .replace("twitch.tv/", "");
-
-        let mut args = Self {
-            servers: parser
-                .value_from_str::<&str, String>("-s")?
-                .replace("[channel]", &channel)
-                .split(',')
-                .map(String::from)
-                .collect(),
-            player_path: PathBuf::default(),
-            player_args: parser
-                .opt_value_from_str("-a")?
-                .unwrap_or_else(|| DEFAULT_PLAYER_ARGS.to_owned()),
-            debug: parser.contains("-d") || parser.contains("--debug"),
-            max_retries: parser
-                .opt_value_from_str("--max-retries")?
-                .unwrap_or(DEFAULT_MAX_RETRIES),
-            passthrough: parser.contains("--passthrough"),
-            channel,
-            quality: parser.free_from_str::<String>()?,
-        };
-
-        if args.passthrough {
-            return Ok(args);
-        }
-
-        args.player_path = parser.value_from_str("-p")?;
-        args.player_args += &match args.player_path.file_stem() {
-            Some(f) if f == "mpv" => format!(" --force-media-title=twitch.tv/{}", args.channel),
-            Some(f) if f == "vlc" => format!(" --input-title-format=twitch.tv/{}", args.channel),
-            _ => String::default(),
-        };
-
-        Ok(args)
-    }
-}
 
 enum Reason {
     Reset,
