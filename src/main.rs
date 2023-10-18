@@ -11,7 +11,7 @@ mod segment_worker;
 use std::{thread, time::Instant};
 
 use anyhow::Result;
-use log::{debug, info, warn};
+use log::{debug, info};
 use simplelog::{
     format_description, ColorChoice, ConfigBuilder, LevelFilter, TermLogger, TerminalMode,
 };
@@ -21,12 +21,7 @@ use hls::{Error as HlsErr, MasterPlaylist, MediaPlaylist, PrefetchUrlKind};
 use player::Player;
 use segment_worker::{Error as WorkerErr, Worker};
 
-enum Reason {
-    Reset,
-    Exit,
-}
-
-fn run(mut player: Player, mut playlist: MediaPlaylist, max_retries: u32) -> Result<Reason> {
+fn run(mut player: Player, mut playlist: MediaPlaylist, max_retries: u32) -> Result<()> {
     let mut worker = Worker::new(player.stdin())?;
     worker.send(playlist.urls.take(PrefetchUrlKind::Newest)?)?;
     worker.sync()?;
@@ -41,18 +36,11 @@ fn run(mut player: Player, mut playlist: MediaPlaylist, max_retries: u32) -> Res
                     retry_count += 1;
                     if retry_count == max_retries {
                         info!("Maximum retries on media playlist reached, exiting...");
-                        return Ok(Reason::Exit);
+                        return Ok(());
                     }
 
                     debug!("{e}, retrying...");
                     continue;
-                }
-                Some(HlsErr::Advertisement) => {
-                    warn!("{e}, resetting...");
-                    return Ok(Reason::Reset);
-                }
-                Some(HlsErr::Discontinuity) => {
-                    warn!("{e}, stream may be broken");
                 }
                 _ => return Err(e),
             },
@@ -105,51 +93,42 @@ fn main() -> Result<()> {
     debug!("{:?}", args);
 
     let master_playlist = MasterPlaylist::new(&args.servers)?;
-    loop {
-        let playlist_url = master_playlist.fetch_variant_playlist(&args.channel, &args.quality)?;
-        if args.passthrough {
-            println!("{playlist_url}");
-            return Ok(());
-        }
+    let playlist_url = master_playlist.fetch_variant_playlist(&args.channel, &args.quality)?;
+    if args.passthrough {
+        println!("{playlist_url}");
+        return Ok(());
+    }
 
-        let playlist = match MediaPlaylist::new(playlist_url) {
-            Ok(playlist) => playlist,
-            Err(e) => match e.downcast_ref::<HlsErr>() {
-                Some(HlsErr::Advertisement | HlsErr::Discontinuity) => {
-                    warn!("{e} on startup, resetting...");
-                    continue;
-                }
-                Some(HlsErr::NotLowLatency(url)) => {
-                    info!("{e}, opening player with playlist URL");
-                    let player_args = args
-                        .player_args
-                        .split_whitespace()
-                        .map(|s| if s == "-" { url.clone() } else { s.to_owned() })
-                        .collect::<Vec<String>>()
-                        .join(" ");
+    let playlist = match MediaPlaylist::new(playlist_url) {
+        Ok(playlist) => playlist,
+        Err(e) => match e.downcast_ref::<HlsErr>() {
+            Some(HlsErr::NotLowLatency(url)) => {
+                info!("{e}, opening player with playlist URL");
+                let player_args = args
+                    .player_args
+                    .split_whitespace()
+                    .map(|s| if s == "-" { url.clone() } else { s.to_owned() })
+                    .collect::<Vec<String>>()
+                    .join(" ");
 
-                    let mut player = Player::spawn(&args.player_path, &player_args)?;
-                    player.wait()?;
+                let mut player = Player::spawn(&args.player_path, &player_args)?;
+                player.wait()?;
 
-                    return Ok(());
-                }
-                _ => return Err(e),
-            },
-        };
+                return Ok(());
+            }
+            _ => return Err(e),
+        },
+    };
 
-        let player = Player::spawn(&args.player_path, &args.player_args)?;
-        match run(player, playlist, args.max_retries) {
-            Ok(reason) => match reason {
-                Reason::Reset => continue,
-                Reason::Exit => return Ok(()),
-            },
-            Err(e) => match e.downcast_ref::<WorkerErr>() {
-                Some(WorkerErr::SendFailed | WorkerErr::SyncFailed) => {
-                    info!("Player closed, exiting...");
-                    return Ok(());
-                }
-                _ => return Err(e),
-            },
-        }
+    let player = Player::spawn(&args.player_path, &args.player_args)?;
+    match run(player, playlist, args.max_retries) {
+        Ok(()) => Ok(()),
+        Err(e) => match e.downcast_ref::<WorkerErr>() {
+            Some(WorkerErr::SendFailed | WorkerErr::SyncFailed) => {
+                info!("Player closed, exiting...");
+                Ok(())
+            }
+            _ => Err(e),
+        },
     }
 }

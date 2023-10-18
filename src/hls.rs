@@ -11,8 +11,6 @@ pub enum Error {
     Unchanged,
     InvalidPrefetchUrl,
     InvalidDuration,
-    Advertisement,
-    Discontinuity,
     NotLowLatency(String),
 }
 
@@ -24,8 +22,6 @@ impl fmt::Display for Error {
             Self::Unchanged => write!(f, "Media playlist is the same as previous"),
             Self::InvalidPrefetchUrl => write!(f, "Invalid or missing prefetch URLs"),
             Self::InvalidDuration => write!(f, "Invalid or missing segment duration"),
-            Self::Advertisement => write!(f, "Encountered an embedded advertisement segment"),
-            Self::Discontinuity => write!(f, "Encountered a discontinuity"),
             Self::NotLowLatency(_) => write!(f, "Stream is not low latency"),
         }
     }
@@ -108,13 +104,6 @@ impl MediaPlaylist {
         let playlist = self.request.read_string()?;
         debug!("Playlist:\n{playlist}");
 
-        if playlist.contains("Amazon")
-            || playlist.contains("stitched-ad")
-            || playlist.contains("X-TV-TWITCH-AD")
-        {
-            return Err(Error::Advertisement.into());
-        }
-
         let urls = PrefetchUrls::new(&playlist)?;
         if urls == self.urls {
             return Err(Error::Unchanged.into());
@@ -122,10 +111,6 @@ impl MediaPlaylist {
 
         self.urls = urls;
         self.duration = Self::parse_duration(&playlist)?;
-
-        if playlist.contains("#EXT-X-DISCONTINUITY") {
-            return Err(Error::Discontinuity.into());
-        }
 
         Ok(())
     }
