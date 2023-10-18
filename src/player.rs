@@ -31,10 +31,7 @@ impl Player {
 
         Ok(Self {
             stdin: Arc::new(Mutex::new(
-                process
-                    .stdin
-                    .take()
-                    .context("Failed to open player stdin")?,
+                process.stdin.take().context("Failed to open player stdin")?,
             )),
             process,
         })

@@ -293,18 +293,14 @@ impl Read for Decoder<'_> {
 
 impl<'a> Decoder<'a> {
     pub fn new(stream: &'a mut Stream, headers: &[Header]) -> Result<Decoder<'a>> {
-        let content_length = headers
-            .iter()
-            .find(|h| h.name.to_lowercase() == "content-length");
+        let content_length = headers.iter().find(|h| h.name.to_lowercase() == "content-length");
 
         let is_chunked = headers.iter().any(|h| {
-            h.name.to_lowercase() == "transfer-encoding"
-                && String::from_utf8_lossy(h.value) == "chunked"
+            h.name.to_lowercase() == "transfer-encoding" && String::from_utf8_lossy(h.value) == "chunked"
         });
 
         let is_gzipped = headers.iter().any(|h| {
-            h.name.to_lowercase() == "content-encoding"
-                && String::from_utf8_lossy(h.value) == "gzip"
+            h.name.to_lowercase() == "content-encoding" && String::from_utf8_lossy(h.value) == "gzip"
         });
 
         match (is_chunked, is_gzipped) {

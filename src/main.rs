@@ -12,9 +12,7 @@ use std::{thread, time::Instant};
 
 use anyhow::Result;
 use log::{debug, info};
-use simplelog::{
-    format_description, ColorChoice, ConfigBuilder, LevelFilter, TermLogger, TerminalMode,
-};
+use simplelog::{format_description, ColorChoice, ConfigBuilder, LevelFilter, TermLogger, TerminalMode};
 
 use args::Args;
 use hls::{Error as HlsErr, MasterPlaylist, MediaPlaylist, PrefetchUrlKind};
@@ -83,9 +81,7 @@ fn main() -> Result<()> {
     } else {
         TermLogger::init(
             LevelFilter::Info,
-            ConfigBuilder::new()
-                .set_time_level(LevelFilter::Off)
-                .build(),
+            ConfigBuilder::new().set_time_level(LevelFilter::Off).build(),
             TerminalMode::Stderr,
             ColorChoice::Auto,
         )?;

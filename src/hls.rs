@@ -186,9 +186,7 @@ impl MasterPlaylist {
 
         Ok(playlist
             .lines()
-            .skip_while(|s| {
-                !(s.contains("#EXT-X-MEDIA") && (s.contains(quality) || quality == "best"))
-            })
+            .skip_while(|s| !(s.contains("#EXT-X-MEDIA") && (s.contains(quality) || quality == "best")))
             .nth(2)
             .context("Invalid quality or malformed master playlist")?
             .parse()?)
