@@ -82,13 +82,8 @@ impl Request {
     }
 
     pub fn set_url(&mut self, url: Url) -> Result<()> {
-        if get_host(&self.url)? == get_host(&url)? {
-            self.url = url;
-            self.request = Self::format_request(&self.url)?;
-        } else {
-            debug!("Host changed, creating new request");
-            self.reconnect(Some(url))?;
-        }
+        self.url = url;
+        self.request = Self::format_request(&self.url)?;
 
         Ok(())
     }

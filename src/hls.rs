@@ -180,12 +180,7 @@ impl MasterPlaylist {
             .servers
             .iter()
             .find_map(|s| {
-                info!(
-                    "Using server {}://{}",
-                    s.scheme(),
-                    s.host_str().expect("Somehow invalid host?")
-                );
-
+                info!("Using server {}://{}", s.scheme(), s.host_str().unwrap());
                 let mut request = match Request::get(s.clone()) {
                     Ok(request) => request,
                     Err(e) => {
