@@ -1,8 +1,4 @@
 ## twitch-hls-client
-Lightweight CLI client for watching low latency Twitch streams with ad blocking.
-
-Fetches the playlist from the ad blocking playlist proxy server of your choosing, fetches the latest prefetch segment, and then writes the MPEG-TS stream to your player.
-
 ```
 Usage: twitch-hls-client [OPTIONS] -s <URL> -p <PATH> <CHANNEL> <QUALITY>
 
