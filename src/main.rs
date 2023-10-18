@@ -5,6 +5,7 @@
 mod args;
 mod hls;
 mod http;
+mod player;
 mod segment_worker;
 
 use std::{thread, time::Instant};
@@ -17,7 +18,8 @@ use simplelog::{
 
 use args::Args;
 use hls::{Error as HlsErr, MasterPlaylist, MediaPlaylist, PrefetchUrlKind};
-use segment_worker::{Player, Worker};
+use player::Player;
+use segment_worker::Worker;
 
 enum Reason {
     Reset,
