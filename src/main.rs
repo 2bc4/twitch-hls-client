@@ -99,16 +99,7 @@ fn main() -> Result<()> {
         Err(e) => match e.downcast_ref::<HlsErr>() {
             Some(HlsErr::NotLowLatency(url)) => {
                 info!("{e}, opening player with playlist URL");
-                let player_args = args
-                    .player_args
-                    .split_whitespace()
-                    .map(|s| if s == "-" { url.clone() } else { s.to_owned() })
-                    .collect::<Vec<String>>()
-                    .join(" ");
-
-                let mut player = Player::spawn(&args.player_path, &player_args)?;
-                player.wait()?;
-
+                Player::spawn_and_wait(&args.player_path, &args.player_args, url)?;
                 return Ok(());
             }
             _ => return Err(e),

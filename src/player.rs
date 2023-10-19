@@ -37,6 +37,18 @@ impl Player {
         })
     }
 
+    pub fn spawn_and_wait(path: &PathBuf, args: &str, url: &str) -> Result<()> {
+        let new_args = args
+            .split_whitespace()
+            .map(|s| if s == "-" { url.to_owned() } else { s.to_owned() })
+            .collect::<Vec<String>>()
+            .join(" ");
+
+        let mut player = Self::spawn(path, &new_args)?;
+        player.wait()?;
+        Ok(())
+    }
+
     pub fn stdin(&mut self) -> Arc<Mutex<ChildStdin>> {
         self.stdin.clone()
     }
