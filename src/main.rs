@@ -51,7 +51,6 @@ fn run(mut player: Player, mut playlist: MediaPlaylist, max_retries: u32) -> Res
         } else {
             worker.send(next_url)?;
 
-            debug!("Host changed, spawning new segment worker");
             worker = Worker::new(player.stdin())?;
             worker.send(newest_url)?;
             worker.sync()?;

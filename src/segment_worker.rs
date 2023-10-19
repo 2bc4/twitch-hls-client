@@ -94,7 +94,6 @@ impl Worker {
             };
 
             request.set_url(url)?;
-
             if let Err(e) = io::copy(&mut request.reader()?, &mut *pipe.lock().unwrap()) {
                 match e.kind() {
                     BrokenPipe => return Ok(()),
