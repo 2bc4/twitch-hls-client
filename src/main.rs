@@ -6,7 +6,7 @@ mod args;
 mod hls;
 mod http;
 mod player;
-mod segment_worker;
+mod worker;
 
 use std::{thread, time::Instant};
 
@@ -17,7 +17,7 @@ use simplelog::{format_description, ColorChoice, ConfigBuilder, LevelFilter, Ter
 use args::Args;
 use hls::{Error as HlsErr, MasterPlaylist, MediaPlaylist, PrefetchUrlKind};
 use player::Player;
-use segment_worker::{Error as WorkerErr, Worker};
+use worker::{Error as WorkerErr, Worker};
 
 fn run(mut player: Player, mut playlist: MediaPlaylist, max_retries: u32) -> Result<()> {
     let mut worker = Worker::new(player.stdin())?;
