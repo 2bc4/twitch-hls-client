@@ -47,6 +47,7 @@ impl Worker {
                 // :(
 
                 if let Err(e) = Self::thread_main(&url_rx, &sync_tx, &pipe) {
+                    eprintln!("{}", e.backtrace());
                     eprintln!("Error: {e}");
                     process::exit(1);
                 }
