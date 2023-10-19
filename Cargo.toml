@@ -12,7 +12,6 @@ rust-version = "1.60"
 codegen-units = 1
 lto = true
 panic = "abort"
-strip = "symbols"
 
 [features]
 default = ["rustls-webpki"]
@@ -21,7 +20,7 @@ rustls-native-certs = ["dep:rustls", "dep:rustls-native-certs"]
 native-tls = ["dep:native-tls"]
 
 [dependencies]
-anyhow = "1.0.75"
+anyhow = { version = "1.0.75", features = ["backtrace"] }
 chunked_transfer = "1.4.1"
 flate2 = "1.0.28"
 httparse = "1.8.0"
