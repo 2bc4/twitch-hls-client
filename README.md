@@ -1,4 +1,6 @@
 ## twitch-hls-client
+A very minimal (and buggy) HLS client for Twitch
+
 ```
 Usage: twitch-hls-client [OPTIONS] -s <URL> -p <PATH> <CHANNEL> <QUALITY>
 
