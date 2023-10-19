@@ -31,18 +31,11 @@ impl Args {
             process::exit(0);
         }
 
-        let channel = parser
-            .free_from_str::<String>()?
-            .to_lowercase()
-            .replace("twitch.tv/", "");
+        let servers = parser.value_from_str::<&str, String>("-s")?;
+        let player_path = parser.value_from_str("-p")?;
 
         let mut args = Self {
-            servers: parser
-                .value_from_str::<&str, String>("-s")?
-                .replace("[channel]", &channel)
-                .split(',')
-                .map(String::from)
-                .collect(),
+            servers: Vec::default(),
             player_path: PathBuf::default(),
             player_args: parser
                 .opt_value_from_str("-a")?
@@ -52,15 +45,24 @@ impl Args {
                 .opt_value_from_str("--max-retries")?
                 .unwrap_or(DEFAULT_MAX_RETRIES),
             passthrough: parser.contains("--passthrough"),
-            channel,
+            channel: parser
+                .free_from_str::<String>()?
+                .to_lowercase()
+                .replace("twitch.tv/", ""),
             quality: parser.free_from_str::<String>()?,
         };
+
+        args.servers = servers
+            .replace("[channel]", &args.channel)
+            .split(',')
+            .map(String::from)
+            .collect();
 
         if args.passthrough {
             return Ok(args);
         }
 
-        args.player_path = parser.value_from_str("-p")?;
+        args.player_path = player_path;
         args.player_args += &match args.player_path.file_stem() {
             Some(f) if f == "mpv" => format!(" --force-media-title=twitch.tv/{}", args.channel),
             Some(f) if f == "vlc" => format!(" --input-title-format=twitch.tv/{}", args.channel),
