@@ -26,7 +26,7 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::SendFailed => write!(f, "Failed to send URL to segment worker"),
-            Self::SyncFailed => write!(f, "Failed to recieve sync state from segment worker"),
+            Self::SyncFailed => write!(f, "Failed to sync to segment worker"),
         }
     }
 }
@@ -52,7 +52,7 @@ impl Worker {
                     process::exit(1);
                 }
             })
-            .context("Failed to spawn segment worker thread")?;
+            .context("Failed to spawn segment worker")?;
 
         Ok(Self { url_tx, sync_rx })
     }
@@ -70,32 +70,28 @@ impl Worker {
         sync_tx: &SyncSender<()>,
         pipe: &Arc<Mutex<ChildStdin>>,
     ) -> Result<()> {
-        let mut request = match url_rx.recv() {
-            Ok(url) => {
-                let mut request = Request::get(url)?;
-                if let Err(e) = io::copy(&mut request.reader()?, &mut *pipe.lock().unwrap()) {
-                    match e.kind() {
-                        BrokenPipe => return Ok(()),
-                        _ => return Err(e.into()),
-                    }
-                }
-
-                request
-            }
-            _ => return Ok(()),
+        let Ok(url) = url_rx.recv() else {
+            return Ok(());
         };
 
-        sync_tx
-            .send(())
-            .context("Failed to send sync state from segment worker")?;
+        let mut request = Request::get(url)?;
+        let mut pipe = pipe.lock().unwrap();
 
+        if let Err(e) = io::copy(&mut request.reader()?, &mut *pipe) {
+            match e.kind() {
+                BrokenPipe => return Ok(()),
+                _ => return Err(e.into()),
+            }
+        }
+
+        sync_tx.send(()).context("Failed to sync from segment worker")?;
         loop {
             let Ok(url) = url_rx.recv() else {
                 return Ok(());
             };
 
             request.set_url(url)?;
-            if let Err(e) = io::copy(&mut request.reader()?, &mut *pipe.lock().unwrap()) {
+            if let Err(e) = io::copy(&mut request.reader()?, &mut *pipe) {
                 match e.kind() {
                     BrokenPipe => return Ok(()),
                     _ => return Err(e.into()),
