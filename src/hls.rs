@@ -182,7 +182,12 @@ pub fn fetch_proxy_playlist(servers: &[String], channel: &str, quality: &str) ->
     parse_variant_playlist(&playlist, quality)
 }
 
-pub fn fetch_twitch_playlist(channel: &str, quality: &str) -> Result<Url> {
+pub fn fetch_twitch_playlist(
+    client_id: &Option<String>,
+    auth_token: &Option<String>,
+    channel: &str,
+    quality: &str,
+) -> Result<Url> {
     info!("Fetching playlist for channel {} (Twitch)", channel);
     let gql = json!({
         "operationName": "PlaybackAccessToken",
@@ -201,7 +206,7 @@ pub fn fetch_twitch_playlist(channel: &str, quality: &str) -> Result<Url> {
         },
     });
 
-    let mut request = Request::post_gql(&gen_id(), &gql.to_string())?;
+    let mut request = Request::post_gql(&gen_id(), client_id, auth_token, &gql.to_string())?;
     let response: Value = serde_json::from_str(&request.read_string()?)?;
     let url = Url::parse_with_params(
         &format!("https://usher.ttvnw.net/api/channel/hls/{channel}.m3u8"),

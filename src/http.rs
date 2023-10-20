@@ -50,12 +50,17 @@ impl Request {
         })
     }
 
-    pub fn post_gql(device_id: &str, data: &str) -> Result<Self> {
+    pub fn post_gql(
+        device_id: &str,
+        client_id: &Option<String>,
+        token: &Option<String>,
+        data: &str,
+    ) -> Result<Self> {
         let url = Url::parse("https://gql.twitch.tv/gql")?;
 
         Ok(Self {
             stream: BufReader::new(Transport::new(&url)?),
-            request: Self::format_gql_request(device_id, data),
+            request: Self::format_gql_request(device_id, client_id, token, data),
             url,
         })
     }
@@ -164,8 +169,15 @@ impl Request {
         ))
     }
 
-    fn format_gql_request(device_id: &str, data: &str) -> String {
-        format!(
+    fn format_gql_request(
+        device_id: &str,
+        client_id: &Option<String>,
+        auth_token: &Option<String>,
+        data: &str,
+    ) -> String {
+        const DEFAULT_CLIENT_ID: &str = "kimne78kx3ncx6brgo4mv6wki5h1ko";
+
+        let mut headers = format!(
             "POST /gql HTTP/1.1\r\n\
              Host: gql.twitch.tv\r\n\
              User-Agent: {}\r\n\
@@ -173,7 +185,7 @@ impl Request {
              Accept-Language: en-US\r\n\
              Accept-Encoding: gzip\r\n\
              Referer: https://player.twitch.tv\r\n\
-             Client-Id: kimne78kx3ncx6brgo4mv6wki5h1ko\r\n\
+             Client-Id: {}\r\n\
              X-Device-ID: {}\r\n\
              Content-Type: text/plain;charset=UTF-8\r\n\
              Content-Length: {}\r\n\
@@ -181,13 +193,24 @@ impl Request {
              Connection: keep-alive\r\n\
              Sec-Fetch-Dest: empty\r\n\
              Sec-Fetch-Mode: cors\r\n\
-             Sec-Fetch-Site: same-site\r\n\
-             \r\n\
-             {}",
+             Sec-Fetch-Site: same-site\r\n",
             Self::USER_AGENT,
+            client_id.clone().unwrap_or_else(|| DEFAULT_CLIENT_ID.into()),
             device_id,
             data.len(),
-            data,
+        );
+
+        if let Some(auth_token) = auth_token {
+            headers = format!(
+                "{headers}\
+                 Authorization: OAuth {auth_token}\r\n"
+            );
+        }
+
+        format!(
+            "{headers}
+             \r\n\
+             {data})"
         )
     }
 }

@@ -11,6 +11,8 @@ pub struct Args {
     pub debug: bool,
     pub max_retries: u32,
     pub passthrough: bool,
+    pub client_id: Option<String>,
+    pub auth_token: Option<String>,
     pub channel: String,
     pub quality: String,
 }
@@ -42,6 +44,8 @@ impl Args {
                 .opt_value_from_str("--max-retries")?
                 .unwrap_or(DEFAULT_MAX_RETRIES),
             passthrough: parser.contains("--passthrough"),
+            client_id: parser.opt_value_from_str("--client-id")?,
+            auth_token: parser.opt_value_from_str("--auth-token")?,
             channel: parser
                 .free_from_str::<String>()?
                 .to_lowercase()
@@ -58,6 +62,11 @@ impl Args {
                     .map(String::from)
                     .collect(),
             );
+        }
+
+        if args.servers.is_some() && (args.client_id.is_some() || args.auth_token.is_some()) {
+            eprintln!("Error: Client ID or auth token cannot be set while using a playlist proxy.");
+            process::exit(1);
         }
 
         if args.passthrough {

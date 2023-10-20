@@ -89,7 +89,7 @@ fn main() -> Result<()> {
 
     let playlist_url = match args.servers {
         Some(servers) => hls::fetch_proxy_playlist(&servers, &args.channel, &args.quality)?,
-        None => hls::fetch_twitch_playlist(&args.channel, &args.quality)?,
+        None => hls::fetch_twitch_playlist(&args.client_id, &args.auth_token, &args.channel, &args.quality)?,
     };
 
     if args.passthrough {
