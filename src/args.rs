@@ -51,6 +51,7 @@ impl Args {
         };
 
         if args.passthrough {
+            parser.value_from_str::<&str, String>("-p")?; //consume player arg
             args.finish(&mut parser)?;
             return Ok(args);
         }
