@@ -27,7 +27,7 @@ impl fmt::Display for Error {
             Self::Unchanged => write!(f, "Media playlist is the same as previous"),
             Self::InvalidPrefetchUrl => write!(f, "Invalid or missing prefetch URLs"),
             Self::InvalidDuration => write!(f, "Invalid or missing segment duration"),
-            Self::NotLowLatency(_) => write!(f, "Stream is not low latency"),
+            Self::NotLowLatency(_) => write!(f, "Stream is not low latency or is missing prefetch URLs"),
         }
     }
 }
