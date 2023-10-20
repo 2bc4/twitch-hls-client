@@ -210,7 +210,7 @@ impl Request {
         format!(
             "{headers}
              \r\n\
-             {data})"
+             {data}"
         )
     }
 }
