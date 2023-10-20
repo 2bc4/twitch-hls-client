@@ -33,7 +33,7 @@ impl Args {
 
         let mut args = Self {
             servers: Option::default(),
-            player_path: parser.value_from_str("-p")?,
+            player_path: PathBuf::default(),
             player_args: parser
                 .opt_value_from_str("-a")?
                 .unwrap_or_else(|| DEFAULT_PLAYER_ARGS.to_owned()),
@@ -64,6 +64,7 @@ impl Args {
             return Ok(args);
         }
 
+        args.player_path = parser.value_from_str("-p")?;
         args.player_args += &match args.player_path.file_stem() {
             Some(f) if f == "mpv" => format!(" --force-media-title=twitch.tv/{}", args.channel),
             Some(f) if f == "vlc" => format!(" --input-title-format=twitch.tv/{}", args.channel),
