@@ -3,7 +3,7 @@ use std::{path::PathBuf, process};
 use anyhow::{bail, Result};
 use pico_args::Arguments;
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct Args {
     pub servers: Option<Vec<String>>,
     pub player_path: PathBuf,
@@ -46,11 +46,8 @@ impl Args {
             passthrough: parser.contains("--passthrough"),
             client_id: parser.opt_value_from_str("--client-id")?,
             auth_token: parser.opt_value_from_str("--auth-token")?,
-            channel: parser
-                .free_from_str::<String>()?
-                .to_lowercase()
-                .replace("twitch.tv/", ""),
-            quality: parser.free_from_str::<String>()?,
+            channel: String::default(),
+            quality: String::default(),
         };
 
         let servers = parser.opt_value_from_str::<&str, String>("-s")?;
@@ -69,6 +66,7 @@ impl Args {
         }
 
         if args.passthrough {
+            args.parse_free_args(&mut parser)?;
             return Ok(args);
         }
 
@@ -79,6 +77,17 @@ impl Args {
             _ => String::default(),
         };
 
+        args.parse_free_args(&mut parser)?;
         Ok(args)
+    }
+
+    fn parse_free_args(&mut self, parser: &mut Arguments) -> Result<()> {
+        self.channel = parser
+            .free_from_str::<String>()?
+            .to_lowercase()
+            .replace("twitch.tv/", "");
+        self.quality = parser.free_from_str::<String>()?;
+
+        Ok(())
     }
 }
