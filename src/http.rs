@@ -208,7 +208,7 @@ impl Request {
         }
 
         format!(
-            "{headers}
+            "{headers}\
              \r\n\
              {data}"
         )
