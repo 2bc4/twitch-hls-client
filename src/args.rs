@@ -5,7 +5,7 @@ use pico_args::Arguments;
 
 #[derive(Default, Debug)]
 pub struct Args {
-    pub servers: Vec<String>,
+    pub servers: Option<Vec<String>>,
     pub player_path: PathBuf,
     pub player_args: String,
     pub debug: bool,
@@ -31,12 +31,9 @@ impl Args {
             process::exit(0);
         }
 
-        let servers = parser.value_from_str::<&str, String>("-s")?;
-        let player_path = parser.value_from_str("-p")?;
-
         let mut args = Self {
-            servers: Vec::default(),
-            player_path: PathBuf::default(),
+            servers: Option::default(),
+            player_path: parser.value_from_str("-p")?,
             player_args: parser
                 .opt_value_from_str("-a")?
                 .unwrap_or_else(|| DEFAULT_PLAYER_ARGS.to_owned()),
@@ -52,17 +49,21 @@ impl Args {
             quality: parser.free_from_str::<String>()?,
         };
 
-        args.servers = servers
-            .replace("[channel]", &args.channel)
-            .split(',')
-            .map(String::from)
-            .collect();
+        let servers = parser.opt_value_from_str::<&str, String>("-s")?;
+        if let Some(servers) = servers {
+            args.servers = Some(
+                servers
+                    .replace("[channel]", &args.channel)
+                    .split(',')
+                    .map(String::from)
+                    .collect(),
+            );
+        }
 
         if args.passthrough {
             return Ok(args);
         }
 
-        args.player_path = player_path;
         args.player_args += &match args.player_path.file_stem() {
             Some(f) if f == "mpv" => format!(" --force-media-title=twitch.tv/{}", args.channel),
             Some(f) if f == "vlc" => format!(" --input-title-format=twitch.tv/{}", args.channel),

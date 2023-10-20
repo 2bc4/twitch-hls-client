@@ -39,10 +39,23 @@ pub struct Request {
 }
 
 impl Request {
+    const USER_AGENT: &str =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/118.0";
+
     pub fn get(url: Url) -> Result<Self> {
         Ok(Self {
             stream: BufReader::new(Transport::new(&url)?),
-            request: Self::format_request(&url)?,
+            request: Self::format_get_request(&url)?,
+            url,
+        })
+    }
+
+    pub fn post_gql(device_id: &str, data: &str) -> Result<Self> {
+        let url = Url::parse("https://gql.twitch.tv/gql")?;
+
+        Ok(Self {
+            stream: BufReader::new(Transport::new(&url)?),
+            request: Self::format_gql_request(device_id, data),
             url,
         })
     }
@@ -83,7 +96,7 @@ impl Request {
 
     pub fn set_url(&mut self, url: Url) -> Result<()> {
         self.url = url;
-        self.request = Self::format_request(&self.url)?;
+        self.request = Self::format_get_request(&self.url)?;
 
         Ok(())
     }
@@ -125,7 +138,7 @@ impl Request {
         Ok(buf)
     }
 
-    fn format_request(url: &Url) -> Result<String> {
+    fn format_get_request(url: &Url) -> Result<String> {
         let query = url
             .query()
             .map_or_else(String::default, |query| format!("?{query}"));
@@ -133,10 +146,11 @@ impl Request {
         Ok(format!(
             "GET {}{} HTTP/1.1\r\n\
              Host: {}\r\n\
-             User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/118.0\r\n\
+             User-Agent: {}\r\n\
              Accept: */*\r\n\
              Accept-Language: en-US\r\n\
              Accept-Encoding: gzip\r\n\
+             Referer: https://player.twitch.tv\r\n\
              Origin: https://player.twitch.tv\r\n\
              Connection: keep-alive\r\n\
              Sec-Fetch-Dest: empty\r\n\
@@ -146,7 +160,35 @@ impl Request {
             url.path(),
             query,
             get_host(url)?,
+            Self::USER_AGENT,
         ))
+    }
+
+    fn format_gql_request(device_id: &str, data: &str) -> String {
+        format!(
+            "POST /gql HTTP/1.1\r\n\
+             Host: gql.twitch.tv\r\n\
+             User-Agent: {}\r\n\
+             Accept: */*\r\n\
+             Accept-Language: en-US\r\n\
+             Accept-Encoding: gzip\r\n\
+             Referer: https://player.twitch.tv\r\n\
+             Client-Id: kimne78kx3ncx6brgo4mv6wki5h1ko\r\n\
+             X-Device-ID: {}\r\n\
+             Content-Type: text/plain;charset=UTF-8\r\n\
+             Content-Length: {}\r\n\
+             Origin: https://player.twitch.tv\r\n\
+             Connection: keep-alive\r\n\
+             Sec-Fetch-Dest: empty\r\n\
+             Sec-Fetch-Mode: cors\r\n\
+             Sec-Fetch-Site: same-site\r\n\
+             \r\n\
+             {}",
+            Self::USER_AGENT,
+            device_id,
+            data.len(),
+            data,
+        )
     }
 }
 
@@ -294,7 +336,6 @@ impl Read for Decoder<'_> {
 impl<'a> Decoder<'a> {
     pub fn new(stream: &'a mut Stream, headers: &[Header]) -> Result<Decoder<'a>> {
         let content_length = headers.iter().find(|h| h.name.to_lowercase() == "content-length");
-
         let is_chunked = headers.iter().any(|h| {
             h.name.to_lowercase() == "transfer-encoding" && String::from_utf8_lossy(h.value) == "chunked"
         });

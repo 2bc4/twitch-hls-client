@@ -1,4 +1,4 @@
-Usage: twitch-hls-client [OPTIONS] -s <URL> -p <PATH> <CHANNEL> <QUALITY>
+Usage: twitch-hls-client [OPTIONS] -p <PATH> <CHANNEL> <QUALITY>
 
 Arguments:
   <CHANNEL>
@@ -9,6 +9,7 @@ Arguments:
 Options:
   -s <URL>
           Playlist proxy server to fetch the master playlist from.
+          If not specified will fetch master playlist from Twitch servers.
           Can be multiple comma separated servers, will try each in order until successful.
           If URL includes "[channel]" it will be replaced with the channel argument at runtime.
   -p <PATH>

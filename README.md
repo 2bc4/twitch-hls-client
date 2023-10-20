@@ -2,7 +2,7 @@
 A very minimal (and buggy) HLS client for Twitch
 
 ```
-Usage: twitch-hls-client [OPTIONS] -s <URL> -p <PATH> <CHANNEL> <QUALITY>
+Usage: twitch-hls-client [OPTIONS] -p <PATH> <CHANNEL> <QUALITY>
 
 Arguments:
   <CHANNEL>
@@ -13,6 +13,7 @@ Arguments:
 Options:
   -s <URL>
           Playlist proxy server to fetch the master playlist from.
+          If not specified will fetch master playlist from Twitch servers.
           Can be multiple comma separated servers, will try each in order until successful.
           If URL includes "[channel]" it will be replaced with the channel argument at runtime.
   -p <PATH>
@@ -22,7 +23,7 @@ Options:
   -d, --debug
           Enable debug logging
       --max-retries <COUNT>
-          Attempt to fetch the media playlist <COUNT> times before exiting (default: 30)
+          Attempt to fetch the media playlist <COUNT> times before exiting (default: 50)
       --passthrough
           Print the playlist URL to stdout and exit
   -h, --help
@@ -35,7 +36,7 @@ Options:
 ```
 $ twitch-hls-client twitch.tv/twitchchannel best -s https://eu.luminous.dev/live/[channel],https://lb-eu.cdn-perfprod.com/live/[channel] -p mpv -a '- --profile=low-latency'
 [INFO] Opening player: mpv - --profile=low-latency --force-media-title=twitch.tv/twitchchannel
-[INFO] Fetching playlist for channel twitchchannel
+[INFO] Fetching playlist for channel twitchchannel (proxy)
 [INFO] Using server https://eu.luminous.dev
  (+) Video --vid=1 (h264)
  (+) Audio --aid=1 (aac)

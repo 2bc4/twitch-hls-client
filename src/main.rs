@@ -15,7 +15,7 @@ use log::{debug, info};
 use simplelog::{format_description, ColorChoice, ConfigBuilder, LevelFilter, TermLogger, TerminalMode};
 
 use args::Args;
-use hls::{Error as HlsErr, MasterPlaylist, MediaPlaylist, PrefetchUrlKind};
+use hls::{Error as HlsErr, MediaPlaylist, PrefetchUrlKind};
 use player::Player;
 use worker::{Error as WorkerErr, Worker};
 
@@ -87,8 +87,11 @@ fn main() -> Result<()> {
     }
     debug!("{:?}", args);
 
-    let master_playlist = MasterPlaylist::new(&args.servers)?;
-    let playlist_url = master_playlist.fetch_variant_playlist(&args.channel, &args.quality)?;
+    let playlist_url = match args.servers {
+        Some(servers) => hls::fetch_proxy_playlist(&servers, &args.channel, &args.quality)?,
+        None => hls::fetch_twitch_playlist(&args.channel, &args.quality)?,
+    };
+
     if args.passthrough {
         println!("{playlist_url}");
         return Ok(());
