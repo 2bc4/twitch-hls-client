@@ -50,23 +50,8 @@ impl Args {
             quality: String::default(),
         };
 
-        let servers = parser.opt_value_from_str::<&str, String>("-s")?;
-        if let Some(servers) = servers {
-            args.servers = Some(
-                servers
-                    .replace("[channel]", &args.channel)
-                    .split(',')
-                    .map(String::from)
-                    .collect(),
-            );
-        }
-
-        if args.servers.is_some() && (args.client_id.is_some() || args.auth_token.is_some()) {
-            bail!("Client ID or auth token cannot be set while using a playlist proxy");
-        }
-
         if args.passthrough {
-            args.parse_free_args(&mut parser)?;
+            args.finish(&mut parser)?;
             return Ok(args);
         }
 
@@ -77,16 +62,31 @@ impl Args {
             _ => String::default(),
         };
 
-        args.parse_free_args(&mut parser)?;
+        args.finish(&mut parser)?;
         Ok(args)
     }
 
-    fn parse_free_args(&mut self, parser: &mut Arguments) -> Result<()> {
+    fn finish(&mut self, parser: &mut Arguments) -> Result<()> {
         self.channel = parser
             .free_from_str::<String>()?
             .to_lowercase()
             .replace("twitch.tv/", "");
         self.quality = parser.free_from_str::<String>()?;
+
+        let servers = parser.opt_value_from_str::<&str, String>("-s")?;
+        if let Some(servers) = servers {
+            self.servers = Some(
+                servers
+                    .replace("[channel]", &self.channel)
+                    .split(',')
+                    .map(String::from)
+                    .collect(),
+            );
+        }
+
+        if self.servers.is_some() && (self.client_id.is_some() || self.auth_token.is_some()) {
+            bail!("Client ID or auth token cannot be set while using a playlist proxy");
+        }
 
         Ok(())
     }
