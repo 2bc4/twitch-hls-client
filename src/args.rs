@@ -1,6 +1,6 @@
 use std::{path::PathBuf, process};
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use pico_args::Arguments;
 
 #[derive(Default, Debug)]
@@ -65,8 +65,7 @@ impl Args {
         }
 
         if args.servers.is_some() && (args.client_id.is_some() || args.auth_token.is_some()) {
-            eprintln!("Error: Client ID or auth token cannot be set while using a playlist proxy.");
-            process::exit(1);
+            bail!("Client ID or auth token cannot be set while using a playlist proxy");
         }
 
         if args.passthrough {
