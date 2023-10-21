@@ -1,4 +1,10 @@
-use std::{collections::hash_map::DefaultHasher, fmt, hash::Hasher, time::Duration};
+use std::{
+    collections::hash_map::DefaultHasher,
+    fmt,
+    hash::Hasher,
+    thread,
+    time::{Duration, Instant},
+};
 
 use anyhow::{anyhow, Context, Result};
 use log::{debug, error, info};
@@ -27,7 +33,7 @@ impl fmt::Display for Error {
             Self::Unchanged => write!(f, "Media playlist is the same as previous"),
             Self::InvalidPrefetchUrl => write!(f, "Invalid or missing prefetch URLs"),
             Self::InvalidDuration => write!(f, "Invalid or missing segment duration"),
-            Self::NotLowLatency(_) => write!(f, "Stream is not low latency or is missing prefetch URLs"),
+            Self::NotLowLatency(_) => write!(f, "Stream is not low latency"),
         }
     }
 }
@@ -82,7 +88,7 @@ impl PrefetchUrls {
 
 pub struct MediaPlaylist {
     pub urls: PrefetchUrls,
-    pub duration: Duration,
+    duration: Duration,
     request: Request,
 }
 
@@ -99,10 +105,17 @@ impl MediaPlaylist {
     }
 
     pub fn reload(&mut self) -> Result<()> {
-        let playlist = self.request.read_string()?;
-        debug!("Playlist:\n{playlist}");
+        let mut playlist = self.fetch()?;
 
-        let urls = PrefetchUrls::new(&playlist)?;
+        let urls = if let Ok(urls) = PrefetchUrls::new(&playlist) {
+            urls
+        } else {
+            let (urls, new_playlist) = self.filter_ads()?;
+            playlist = new_playlist;
+
+            urls
+        };
+
         if urls == self.urls {
             return Err(Error::Unchanged.into());
         }
@@ -111,6 +124,34 @@ impl MediaPlaylist {
         self.duration = Self::parse_duration(&playlist)?;
 
         Ok(())
+    }
+
+    pub fn sleep_segment_duration(&self, elapsed: Duration) {
+        if let Some(sleep_time) = self.duration.checked_sub(elapsed) {
+            thread::sleep(sleep_time);
+        }
+    }
+
+    fn fetch(&mut self) -> Result<String> {
+        let playlist = self.request.read_string()?;
+        debug!("Playlist:\n{playlist}");
+
+        Ok(playlist)
+    }
+
+    fn filter_ads(&mut self) -> Result<(PrefetchUrls, String)> {
+        info!("Filtering ads...");
+        loop {
+            //Ads don't have prefetch URLs, wait until they come back to filter ads
+            let time = Instant::now();
+            let playlist = self.fetch()?;
+            if let Ok(urls) = PrefetchUrls::new(&playlist) {
+                break Ok((urls, playlist));
+            }
+
+            self.duration = Self::parse_duration(&playlist)?;
+            self.sleep_segment_duration(time.elapsed());
+        }
     }
 
     fn parse_duration(playlist: &str) -> Result<Duration, Error> {

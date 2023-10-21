@@ -8,7 +8,7 @@ mod http;
 mod player;
 mod worker;
 
-use std::{thread, time::Instant};
+use std::time::Instant;
 
 use anyhow::Result;
 use log::{debug, info};
@@ -56,9 +56,7 @@ fn run(mut player: Player, mut playlist: MediaPlaylist, max_retries: u32) -> Res
             worker.sync()?;
         }
 
-        if let Some(sleep_time) = playlist.duration.checked_sub(time.elapsed()) {
-            thread::sleep(sleep_time);
-        }
+        playlist.sleep_segment_duration(time.elapsed());
     }
 }
 
