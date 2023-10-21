@@ -243,6 +243,7 @@ pub fn fetch_twitch_playlist(
 }
 
 fn parse_variant_playlist(playlist: &str, quality: &str) -> Result<Url> {
+    debug!("Master playlist:\n{playlist}");
     Ok(playlist
         .lines()
         .skip_while(|s| !(s.contains("#EXT-X-MEDIA") && (s.contains(quality) || quality == "best")))
