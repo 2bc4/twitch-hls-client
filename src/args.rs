@@ -62,13 +62,14 @@ impl Args {
     }
 
     fn finish(&mut self, parser: &mut Arguments) -> Result<()> {
+        let servers = parser.opt_value_from_str::<&str, String>("-s")?;
+
         self.channel = parser
             .free_from_str::<String>()?
             .to_lowercase()
             .replace("twitch.tv/", "");
         self.quality = parser.free_from_str::<String>()?;
 
-        let servers = parser.opt_value_from_str::<&str, String>("-s")?;
         if let Some(servers) = servers {
             self.servers = Some(
                 servers
