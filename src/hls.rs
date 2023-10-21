@@ -191,7 +191,7 @@ pub fn fetch_proxy_playlist(servers: &[String], channel: &str, quality: &str) ->
         .collect::<Result<Vec<Url>, _>>()
         .context("Invalid server URL")?;
 
-    let (request, playlist) = servers
+    let playlist = servers
         .iter()
         .find_map(|s| {
             info!("Using server {}://{}", s.scheme(), s.host_str().unwrap());
@@ -204,7 +204,7 @@ pub fn fetch_proxy_playlist(servers: &[String], channel: &str, quality: &str) ->
             };
 
             match request.read_string() {
-                Ok(playlist_url) => Some((request, playlist_url)),
+                Ok(playlist_url) => Some(playlist_url),
                 Err(e) => {
                     error!("{e}");
                     None
@@ -213,7 +213,7 @@ pub fn fetch_proxy_playlist(servers: &[String], channel: &str, quality: &str) ->
         })
         .ok_or_else(|| anyhow!("No servers available"))?;
 
-    parse_variant_playlist(request.url_string(), &playlist, quality)
+    parse_variant_playlist(&playlist, quality)
 }
 
 pub fn fetch_twitch_playlist(
@@ -239,7 +239,6 @@ pub fn fetch_twitch_playlist(
             "playerType": "site",
         },
     });
-
     let mut request = Request::post_gql(&gen_id(), client_id, auth_token, &gql.to_string())?;
     let response: Value = serde_json::from_str(&request.read_string()?)?;
 
@@ -273,23 +272,24 @@ pub fn fetch_twitch_playlist(
             ("player_version", "1.23.0"),
         ],
     )?;
-    request = Request::get(url)?;
 
-    parse_variant_playlist(request.url_string(), &request.read_string()?, quality)
+    parse_variant_playlist(&Request::get(url)?.read_string()?, quality)
 }
 
-fn parse_variant_playlist(url: String, playlist: &str, quality: &str) -> Result<Url> {
-    debug!("Master playlist:\n{playlist}");
-    if !playlist.contains(r#"FUTURE="true""#) {
-        return Err(Error::NotLowLatency(url).into());
-    }
-
-    Ok(playlist
+fn parse_variant_playlist(master_playlist: &str, quality: &str) -> Result<Url> {
+    debug!("Master playlist:\n{master_playlist}");
+    let variant_playlist: Url = master_playlist
         .lines()
         .skip_while(|s| !(s.contains("#EXT-X-MEDIA") && (s.contains(quality) || quality == "best")))
         .nth(2)
         .context("Invalid quality or malformed master playlist")?
-        .parse()?)
+        .parse()?;
+
+    if !master_playlist.contains(r#"FUTURE="true""#) {
+        return Err(Error::NotLowLatency(variant_playlist.to_string()).into());
+    }
+
+    Ok(variant_playlist)
 }
 
 fn gen_id() -> String {
