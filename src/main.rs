@@ -88,17 +88,12 @@ fn main() -> Result<()> {
     debug!("{:?}", args);
 
     let playlist_url = match args.servers {
-        Some(servers) => hls::fetch_proxy_playlist(&servers, &args.channel, &args.quality)?,
-        None => hls::fetch_twitch_playlist(&args.client_id, &args.auth_token, &args.channel, &args.quality)?,
+        Some(servers) => hls::fetch_proxy_playlist(&servers, &args.channel, &args.quality),
+        None => hls::fetch_twitch_playlist(&args.client_id, &args.auth_token, &args.channel, &args.quality),
     };
 
-    if args.passthrough {
-        println!("{playlist_url}");
-        return Ok(());
-    }
-
-    let playlist = match MediaPlaylist::new(playlist_url) {
-        Ok(playlist) => playlist,
+    let playlist_url = match playlist_url {
+        Ok(playlist_url) => playlist_url,
         Err(e) => match e.downcast_ref::<HlsErr>() {
             Some(HlsErr::NotLowLatency(url)) => {
                 info!("{e}, opening player with playlist URL");
@@ -109,6 +104,12 @@ fn main() -> Result<()> {
         },
     };
 
+    if args.passthrough {
+        println!("{playlist_url}");
+        return Ok(());
+    }
+
+    let playlist = MediaPlaylist::new(playlist_url)?;
     let player = Player::spawn(&args.player_path, &args.player_args)?;
     match run(player, playlist, args.max_retries) {
         Ok(()) => Ok(()),

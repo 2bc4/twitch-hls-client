@@ -94,15 +94,8 @@ impl MediaPlaylist {
             request: Request::get(url)?,
         };
 
-        match playlist.reload() {
-            Ok(()) => Ok(playlist),
-            Err(e) => match e.downcast_ref::<Error>() {
-                Some(Error::InvalidPrefetchUrl) => {
-                    Err(Error::NotLowLatency(playlist.request.url_string()).into())
-                }
-                _ => Err(e),
-            },
-        }
+        playlist.reload()?;
+        Ok(playlist)
     }
 
     pub fn reload(&mut self) -> Result<()> {
@@ -157,7 +150,7 @@ pub fn fetch_proxy_playlist(servers: &[String], channel: &str, quality: &str) ->
         .collect::<Result<Vec<Url>, _>>()
         .context("Invalid server URL")?;
 
-    let playlist = servers
+    let (request, playlist) = servers
         .iter()
         .find_map(|s| {
             info!("Using server {}://{}", s.scheme(), s.host_str().unwrap());
@@ -170,7 +163,7 @@ pub fn fetch_proxy_playlist(servers: &[String], channel: &str, quality: &str) ->
             };
 
             match request.read_string() {
-                Ok(playlist_url) => Some(playlist_url),
+                Ok(playlist_url) => Some((request, playlist_url)),
                 Err(e) => {
                     error!("{e}");
                     None
@@ -179,7 +172,7 @@ pub fn fetch_proxy_playlist(servers: &[String], channel: &str, quality: &str) ->
         })
         .ok_or_else(|| anyhow!("No servers available"))?;
 
-    parse_variant_playlist(&playlist, quality)
+    parse_variant_playlist(request.url_string(), &playlist, quality)
 }
 
 pub fn fetch_twitch_playlist(
@@ -208,6 +201,7 @@ pub fn fetch_twitch_playlist(
 
     let mut request = Request::post_gql(&gen_id(), client_id, auth_token, &gql.to_string())?;
     let response: Value = serde_json::from_str(&request.read_string()?)?;
+
     let url = Url::parse_with_params(
         &format!("https://usher.ttvnw.net/api/channel/hls/{channel}.m3u8"),
         &[
@@ -238,12 +232,17 @@ pub fn fetch_twitch_playlist(
             ("player_version", "1.23.0"),
         ],
     )?;
+    request = Request::get(url)?;
 
-    parse_variant_playlist(&Request::get(url)?.read_string()?, quality)
+    parse_variant_playlist(request.url_string(), &request.read_string()?, quality)
 }
 
-fn parse_variant_playlist(playlist: &str, quality: &str) -> Result<Url> {
+fn parse_variant_playlist(url: String, playlist: &str, quality: &str) -> Result<Url> {
     debug!("Master playlist:\n{playlist}");
+    if !playlist.contains(r#"FUTURE="true""#) {
+        return Err(Error::NotLowLatency(url).into());
+    }
+
     Ok(playlist
         .lines()
         .skip_while(|s| !(s.contains("#EXT-X-MEDIA") && (s.contains(quality) || quality == "best")))
