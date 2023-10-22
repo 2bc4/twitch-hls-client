@@ -3,7 +3,7 @@ use std::{path::PathBuf, process};
 use anyhow::{bail, Result};
 use pico_args::Arguments;
 
-#[derive(Debug)]
+#[derive(Default, Debug)]
 pub struct Args {
     pub servers: Option<Vec<String>>,
     pub player_path: PathBuf,
@@ -34,8 +34,6 @@ impl Args {
         }
 
         let mut args = Self {
-            servers: Option::default(),
-            player_path: PathBuf::default(),
             player_args: parser
                 .opt_value_from_str("-a")?
                 .unwrap_or_else(|| DEFAULT_PLAYER_ARGS.to_owned()),
@@ -46,8 +44,7 @@ impl Args {
             passthrough: parser.contains("--passthrough"),
             client_id: parser.opt_value_from_str("--client-id")?,
             auth_token: parser.opt_value_from_str("--auth-token")?,
-            channel: String::default(),
-            quality: String::default(),
+            ..Default::default()
         };
 
         if args.passthrough {
