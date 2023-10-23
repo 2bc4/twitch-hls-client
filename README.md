@@ -1,5 +1,5 @@
 ## twitch-hls-client
-A very minimal (and buggy) HLS client for Twitch
+A very minimal (and buggy) low latency HLS client for Twitch
 
 ```
 Usage: twitch-hls-client [OPTIONS] -p <PATH> <CHANNEL> <QUALITY>
@@ -20,6 +20,8 @@ Options:
           Path to the player that the stream will be piped to
   -a <ARGUMENTS>
           Arguments to pass to the player
+  -c <PATH>
+  	      Path to config file
   -d, --debug
           Enable debug logging
       --max-retries <COUNT>
@@ -28,11 +30,11 @@ Options:
           Print the playlist URL to stdout and exit
       --client-id <ID>
           Value to be used in the Client-Id header.
-          Cannot be used if -s is set.
-          If not specified will use the default header.
+	  Cannot be used if -s is set.
+	  If not specified will use the default header.
       --auth-token <TOKEN>
           Value to be used in the Authorization header.
-          Cannot be used if -s is set.
+	  Cannot be used if -s is set.
   -h, --help
           Print help
   -V, --version
@@ -42,7 +44,7 @@ Options:
 ### Example
 ```
 $ twitch-hls-client twitch.tv/twitchchannel best -s https://eu.luminous.dev/live/[channel],https://lb-eu.cdn-perfprod.com/live/[channel] -p mpv -a '- --profile=low-latency'
-[INFO] Opening player: mpv - --profile=low-latency --force-media-title=twitch.tv/twitchchannel
+[INFO] Opening player: mpv - --profile=low-latency
 [INFO] Fetching playlist for channel twitchchannel (proxy)
 [INFO] Using server https://eu.luminous.dev
  (+) Video --vid=1 (h264)
