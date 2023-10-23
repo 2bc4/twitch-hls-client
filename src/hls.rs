@@ -15,7 +15,7 @@ use rand::{
 use serde_json::{json, Value};
 use url::Url;
 
-use crate::http::Request;
+use crate::{constants, http::Request};
 
 #[derive(Debug)]
 pub enum Error {
@@ -240,7 +240,7 @@ pub fn fetch_twitch_playlist(
         },
     });
 
-    let mut request = Request::post("https://gql.twitch.tv/gql".parse()?, gql.to_string())?;
+    let mut request = Request::post(constants::TWITCH_GQL_ENDPOINT.parse()?, gql.to_string())?;
     request.add_header("Content-Type: text/plain;charset=UTF-8");
     request.add_header(&format!("X-Device-ID: {}", &gen_id()));
     request.add_header(&format!(
@@ -254,7 +254,7 @@ pub fn fetch_twitch_playlist(
 
     let response: Value = serde_json::from_str(&request.read_string()?)?;
     let url = Url::parse_with_params(
-        &format!("https://usher.ttvnw.net/api/channel/hls/{channel}.m3u8"),
+        &format!("{}{channel}.m3u8", constants::TWITCH_HLS_BASE),
         &[
             ("acmb", "e30="),
             ("allow_source", "true"),
@@ -304,13 +304,11 @@ fn parse_variant_playlist(master_playlist: &str, quality: &str) -> Result<Url> {
 }
 
 fn choose_client_id(client_id: &Option<String>, auth_token: &Option<String>) -> Result<String> {
-    const DEFAULT_CLIENT_ID: &str = "kimne78kx3ncx6brgo4mv6wki5h1ko";
-
     //--client-id > (if auth token) client id from twitch > default
     let client_id = if let Some(client_id) = client_id {
         client_id.clone()
     } else if let Some(auth_token) = auth_token {
-        let mut request = Request::get("https://id.twitch.tv/oauth2/validate".parse()?)?;
+        let mut request = Request::get(constants::TWITCH_OAUTH_ENDPOINT.parse()?)?;
         request.add_header(&format!("Authorization: OAuth {auth_token}"));
 
         let response: Value = serde_json::from_str(&request.read_string()?)?;
@@ -321,7 +319,7 @@ fn choose_client_id(client_id: &Option<String>, auth_token: &Option<String>) -> 
             .context("Invalid client id in response")?
             .to_owned()
     } else {
-        DEFAULT_CLIENT_ID.to_owned()
+        constants::DEFAULT_CLIENT_ID.to_owned()
     };
 
     Ok(client_id)

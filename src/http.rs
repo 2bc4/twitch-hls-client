@@ -15,6 +15,8 @@ use httparse::{Header, Response, Status, EMPTY_HEADER};
 use log::debug;
 use url::Url;
 
+use crate::constants;
+
 #[derive(Debug)]
 pub enum Error {
     Status(u16, String),
@@ -156,9 +158,6 @@ impl Request {
     }
 
     fn build_headers(method: &str, url: &Url) -> Result<String> {
-        const USER_AGENT: &str =
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/118.0";
-
         let query = url
             .query()
             .map_or_else(String::default, |query| format!("?{query}"));
@@ -176,7 +175,7 @@ impl Request {
             method = method,
             path = url.path(),
             host = get_host(url)?,
-            user_agent = USER_AGENT,
+            user_agent = constants::USER_AGENT,
         ))
     }
 }

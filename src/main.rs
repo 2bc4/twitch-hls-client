@@ -3,6 +3,7 @@
 #![deny(clippy::pedantic)]
 
 mod args;
+mod constants;
 mod hls;
 mod http;
 mod player;
