@@ -34,35 +34,41 @@ type Stream = BufReader<Transport>;
 
 pub struct Request {
     stream: Stream,
-    request: String,
+    headers: String,
+    data: String,
     url: Url,
 }
 
 impl Request {
-    const USER_AGENT: &'static str =
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/118.0";
-
     pub fn get(url: Url) -> Result<Self> {
-        Ok(Self {
+        let request = Self {
             stream: BufReader::new(Transport::new(&url)?),
-            request: Self::format_get_request(&url)?,
+            headers: Self::build_headers("GET", &url)?,
+            data: String::default(),
             url,
-        })
+        };
+
+        Ok(request)
     }
 
-    pub fn post_gql(
-        device_id: &str,
-        client_id: &Option<String>,
-        token: &Option<String>,
-        data: &str,
-    ) -> Result<Self> {
-        let url = Url::parse("https://gql.twitch.tv/gql")?;
-
-        Ok(Self {
+    pub fn post(url: Url, data: String) -> Result<Self> {
+        let mut request = Self {
             stream: BufReader::new(Transport::new(&url)?),
-            request: Self::format_gql_request(device_id, client_id, token, data),
+            headers: Self::build_headers("POST", &url)?,
+            data,
             url,
-        })
+        };
+
+        request.add_header(&format!("Content-Length: {}", request.data.len()));
+        Ok(request)
+    }
+
+    pub fn add_header(&mut self, header: &str) {
+        self.headers = format!(
+            "{}\
+             {header}\r\n",
+            self.headers
+        );
     }
 
     pub fn reader(&mut self) -> Result<Decoder> {
@@ -99,9 +105,10 @@ impl Request {
         Ok(io::read_to_string(&mut self.reader()?)?)
     }
 
+    //TODO: currently only works with Request::get
     pub fn set_url(&mut self, url: Url) -> Result<()> {
         self.url = url;
-        self.request = Self::format_get_request(&self.url)?;
+        self.headers = Self::build_headers("GET", &self.url)?;
 
         Ok(())
     }
@@ -125,8 +132,9 @@ impl Request {
         const BUF_INIT_SIZE: usize = 1024;
         const HEADERS_END_SIZE: usize = 2; //read only \r\n
 
-        debug!("Request:\n{}", self.request);
-        self.stream.get_mut().write_all(self.request.as_bytes())?;
+        let request = self.format_request();
+        debug!("Request:\n{}", request);
+        self.stream.get_mut().write_all(request.as_bytes())?;
 
         let mut buf = vec![0u8; BUF_INIT_SIZE]; //has to be initialized or read_until can return 0
         let mut consumed = 0;
@@ -143,75 +151,33 @@ impl Request {
         Ok(buf)
     }
 
-    fn format_get_request(url: &Url) -> Result<String> {
+    fn format_request(&self) -> String {
+        format!("{}\r\n{}", self.headers, self.data)
+    }
+
+    fn build_headers(method: &str, url: &Url) -> Result<String> {
+        const USER_AGENT: &str =
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/118.0";
+
         let query = url
             .query()
             .map_or_else(String::default, |query| format!("?{query}"));
 
         Ok(format!(
-            "GET {}{} HTTP/1.1\r\n\
-             Host: {}\r\n\
-             User-Agent: {}\r\n\
+            "{method} {path}{query} HTTP/1.1\r\n\
+             Host: {host}\r\n\
+             User-Agent: {user_agent}\r\n\
              Accept: */*\r\n\
              Accept-Language: en-US\r\n\
              Accept-Encoding: gzip\r\n\
              Referer: https://player.twitch.tv\r\n\
              Origin: https://player.twitch.tv\r\n\
-             Connection: keep-alive\r\n\
-             Sec-Fetch-Dest: empty\r\n\
-             Sec-Fetch-Mode: cors\r\n\
-             Sec-Fetch-Site: cross-site\r\n\
-             \r\n",
-            url.path(),
-            query,
-            get_host(url)?,
-            Self::USER_AGENT,
+             Connection: keep-alive\r\n",
+            method = method,
+            path = url.path(),
+            host = get_host(url)?,
+            user_agent = USER_AGENT,
         ))
-    }
-
-    fn format_gql_request(
-        device_id: &str,
-        client_id: &Option<String>,
-        auth_token: &Option<String>,
-        data: &str,
-    ) -> String {
-        const DEFAULT_CLIENT_ID: &str = "kimne78kx3ncx6brgo4mv6wki5h1ko";
-
-        let mut headers = format!(
-            "POST /gql HTTP/1.1\r\n\
-             Host: gql.twitch.tv\r\n\
-             User-Agent: {}\r\n\
-             Accept: */*\r\n\
-             Accept-Language: en-US\r\n\
-             Accept-Encoding: gzip\r\n\
-             Referer: https://player.twitch.tv\r\n\
-             Client-Id: {}\r\n\
-             X-Device-ID: {}\r\n\
-             Content-Type: text/plain;charset=UTF-8\r\n\
-             Content-Length: {}\r\n\
-             Origin: https://player.twitch.tv\r\n\
-             Connection: keep-alive\r\n\
-             Sec-Fetch-Dest: empty\r\n\
-             Sec-Fetch-Mode: cors\r\n\
-             Sec-Fetch-Site: same-site\r\n",
-            Self::USER_AGENT,
-            client_id.clone().unwrap_or_else(|| DEFAULT_CLIENT_ID.into()),
-            device_id,
-            data.len(),
-        );
-
-        if let Some(auth_token) = auth_token {
-            headers = format!(
-                "{headers}\
-                 Authorization: OAuth {auth_token}\r\n"
-            );
-        }
-
-        format!(
-            "{headers}\
-             \r\n\
-             {data}"
-        )
     }
 }
 

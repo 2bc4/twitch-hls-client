@@ -222,6 +222,8 @@ pub fn fetch_twitch_playlist(
     channel: &str,
     quality: &str,
 ) -> Result<Url> {
+    const DEFAULT_CLIENT_ID: &str = "kimne78kx3ncx6brgo4mv6wki5h1ko";
+
     info!("Fetching playlist for channel {} (Twitch)", channel);
     let gql = json!({
         "operationName": "PlaybackAccessToken",
@@ -239,9 +241,20 @@ pub fn fetch_twitch_playlist(
             "playerType": "site",
         },
     });
-    let mut request = Request::post_gql(&gen_id(), client_id, auth_token, &gql.to_string())?;
-    let response: Value = serde_json::from_str(&request.read_string()?)?;
 
+    let mut request = Request::post("https://gql.twitch.tv/gql".parse()?, gql.to_string())?;
+    request.add_header("Content-Type: text/plain;charset=UTF-8");
+    request.add_header(&format!(
+        "Client-Id: {}",
+        client_id.clone().unwrap_or_else(|| DEFAULT_CLIENT_ID.into())
+    ));
+    request.add_header(&format!("X-Device-ID: {}", &gen_id()));
+
+    if let Some(auth_token) = auth_token {
+        request.add_header(&format!("Authorization: OAuth {auth_token}"));
+    }
+
+    let response: Value = serde_json::from_str(&request.read_string()?)?;
     let url = Url::parse_with_params(
         &format!("https://usher.ttvnw.net/api/channel/hls/{channel}.m3u8"),
         &[
