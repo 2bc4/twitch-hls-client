@@ -222,8 +222,6 @@ pub fn fetch_twitch_playlist(
     channel: &str,
     quality: &str,
 ) -> Result<Url> {
-    const DEFAULT_CLIENT_ID: &str = "kimne78kx3ncx6brgo4mv6wki5h1ko";
-
     info!("Fetching playlist for channel {} (Twitch)", channel);
     let gql = json!({
         "operationName": "PlaybackAccessToken",
@@ -244,11 +242,11 @@ pub fn fetch_twitch_playlist(
 
     let mut request = Request::post("https://gql.twitch.tv/gql".parse()?, gql.to_string())?;
     request.add_header("Content-Type: text/plain;charset=UTF-8");
+    request.add_header(&format!("X-Device-ID: {}", &gen_id()));
     request.add_header(&format!(
         "Client-Id: {}",
-        client_id.clone().unwrap_or_else(|| DEFAULT_CLIENT_ID.into())
+        choose_client_id(client_id, auth_token)?
     ));
-    request.add_header(&format!("X-Device-ID: {}", &gen_id()));
 
     if let Some(auth_token) = auth_token {
         request.add_header(&format!("Authorization: OAuth {auth_token}"));
@@ -303,6 +301,30 @@ fn parse_variant_playlist(master_playlist: &str, quality: &str) -> Result<Url> {
     }
 
     Ok(variant_playlist)
+}
+
+fn choose_client_id(client_id: &Option<String>, auth_token: &Option<String>) -> Result<String> {
+    const DEFAULT_CLIENT_ID: &str = "kimne78kx3ncx6brgo4mv6wki5h1ko";
+
+    //--client-id > (if auth token) client id from twitch > default
+    let client_id = if let Some(client_id) = client_id {
+        client_id.clone()
+    } else if let Some(auth_token) = auth_token {
+        let mut request = Request::get("https://id.twitch.tv/oauth2/validate".parse()?)?;
+        request.add_header(&format!("Authorization: OAuth {auth_token}"));
+
+        let response: Value = serde_json::from_str(&request.read_string()?)?;
+
+        //.to_string() adds quotes while .as_str() doesn't for some reason
+        response["client_id"]
+            .as_str()
+            .context("Invalid client id in response")?
+            .to_owned()
+    } else {
+        DEFAULT_CLIENT_ID.to_owned()
+    };
+
+    Ok(client_id)
 }
 
 fn gen_id() -> String {
