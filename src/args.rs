@@ -203,3 +203,8 @@ fn default_config_path() -> Result<String> {
         constants::DEFAULT_CONFIG_PATH,
     ))
 }
+
+#[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
+fn default_config_path() -> Result<String> {
+    Ok(constants::DEFAULT_CONFIG_PATH)
+}
