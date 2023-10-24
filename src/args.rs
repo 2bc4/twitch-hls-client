@@ -195,7 +195,7 @@ fn default_config_path() -> Result<String> {
     //I have no idea if this is correct
     Ok(format!(
         "{}/Library/Application Support/{}",
-        env::var("HOME"),
+        env::var("HOME")?,
         constants::DEFAULT_CONFIG_PATH,
     ))
 }
