@@ -172,7 +172,7 @@ fn merge_opt_arg<T>(dst: &mut Option<T>, val: Option<T>) {
 
 #[cfg(target_os = "linux")]
 fn default_config_path() -> Result<String> {
-    let dir = if let Ok(dir) = env::var("XDG_CONFIG_DIR") {
+    let dir = if let Ok(dir) = env::var("XDG_CONFIG_HOME") {
         dir
     } else {
         format!("{}/.config", env::var("HOME")?)
