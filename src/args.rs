@@ -96,6 +96,10 @@ impl Args {
 
         let config = fs::read_to_string(path)?;
         for line in config.lines() {
+            if line.starts_with('#') {
+                continue;
+            }
+
             let split = line.split_once('=');
             if let Some(split) = split {
                 match split.0 {
