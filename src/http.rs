@@ -74,8 +74,6 @@ impl Request {
     }
 
     pub fn reader(&mut self) -> Result<Decoder> {
-        const MAX_HEADERS: usize = 30;
-
         let buf = match self.do_io() {
             Ok(buf) => buf,
             Err(e) => match e.kind() {
@@ -88,7 +86,7 @@ impl Request {
             },
         };
 
-        let mut headers = [EMPTY_HEADER; MAX_HEADERS];
+        let mut headers = [EMPTY_HEADER; constants::HTTP_MAX_HEADERS];
         let mut response = Response::new(&mut headers);
         match response.parse(&buf) {
             Err(e) => return Err(e.into()),
