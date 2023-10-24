@@ -167,8 +167,6 @@ impl Request {
              Accept: */*\r\n\
              Accept-Language: en-US\r\n\
              Accept-Encoding: gzip\r\n\
-             Referer: https://player.twitch.tv\r\n\
-             Origin: https://player.twitch.tv\r\n\
              Connection: keep-alive\r\n",
             method = method,
             path = url.path(),
