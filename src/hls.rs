@@ -179,11 +179,8 @@ pub fn fetch_proxy_playlist(servers: &[String], channel: &str, quality: &str) ->
             Url::parse_with_params(
                 s,
                 &[
-                    ("player", "twitchweb"),
-                    ("type", "any"),
                     ("allow_source", "true"),
                     ("allow_audio_only", "true"),
-                    ("allow_spectre", "false"),
                     ("fast_bread", "true"),
                 ],
             )
