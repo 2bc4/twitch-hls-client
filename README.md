@@ -21,7 +21,7 @@ Options:
   -a <ARGUMENTS>
           Arguments to pass to the player
   -c <PATH>
-  	      Path to config file
+          Path to config file
   -d, --debug
           Enable debug logging
       --max-retries <COUNT>
