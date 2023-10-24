@@ -19,9 +19,12 @@ pub struct Args {
     pub passthrough: bool,
     pub client_id: Option<String>,
     pub auth_token: Option<String>,
+    pub never_proxy: Option<Vec<String>>,
     pub channel: String,
     pub quality: String,
+
     servers_raw: Option<String>,
+    never_proxy_raw: Option<String>,
 }
 
 impl Default for Args {
@@ -35,9 +38,12 @@ impl Default for Args {
             passthrough: bool::default(),
             client_id: Option::default(),
             auth_token: Option::default(),
+            never_proxy: Option::default(),
             channel: String::default(),
             quality: String::default(),
+
             servers_raw: Option::default(),
+            never_proxy_raw: Option::default(),
         }
     }
 }
@@ -66,8 +72,15 @@ impl Args {
 
         merge_opt_val::<String>(&mut args.player_args, parser.opt_value_from_str("-a")?);
         merge_opt_val::<u32>(&mut args.max_retries, parser.opt_value_from_str("--max-retries")?);
+
         merge_opt_arg::<String>(&mut args.client_id, parser.opt_value_from_str("--client-id")?);
         merge_opt_arg::<String>(&mut args.auth_token, parser.opt_value_from_str("--auth-token")?);
+        merge_opt_arg::<String>(
+            &mut args.never_proxy_raw,
+            parser.opt_value_from_str("--never-proxy")?,
+        );
+        args.parse_never_proxy();
+
         merge_switch(&mut args.passthrough, parser.contains("--passthrough"));
         merge_switch(
             &mut args.debug,
@@ -82,7 +95,7 @@ impl Args {
 
         merge_opt_val::<PathBuf>(&mut args.player_path, parser.opt_value_from_str("-p")?);
         if args.player_path.to_string_lossy().is_empty() {
-            bail!("Player (-p) must be set");
+            bail!("player (-p) must be set");
         }
 
         args.finish(&mut parser)?;
@@ -111,6 +124,7 @@ impl Args {
                     "passthrough" => self.passthrough = split.1.parse()?,
                     "client-id" => self.client_id = Some(split.1.into()),
                     "auth-token" => self.auth_token = Some(split.1.into()),
+                    "never-proxy" => self.never_proxy_raw = Some(split.1.into()),
                     _ => bail!("Unknown key in config: {}", split.0),
                 }
             } else {
@@ -121,36 +135,39 @@ impl Args {
         Ok(())
     }
 
-    fn parse_servers(&mut self, servers: &str) {
-        self.servers = Some(
-            servers
-                .replace("[channel]", &self.channel)
-                .split(',')
-                .map(String::from)
-                .collect(),
-        );
+    fn parse_never_proxy(&mut self) {
+        if let Some(never_proxy) = &self.never_proxy_raw {
+            self.never_proxy = Some(split_comma(never_proxy));
+            self.never_proxy_raw = Option::default();
+        }
+    }
+
+    fn parse_servers(&mut self) {
+        if let Some(never_proxy) = &self.never_proxy {
+            if never_proxy.iter().any(|channel| channel.eq(&self.channel)) {
+                return;
+            }
+        }
+
+        if let Some(servers) = &self.servers_raw {
+            self.servers = Some(split_comma(&servers.replace("[channel]", &self.channel)));
+            self.servers_raw = Option::default();
+        }
     }
 
     fn finish(&mut self, parser: &mut Arguments) -> Result<()> {
-        let servers = parser.opt_value_from_str::<&str, String>("-s")?;
+        merge_opt_arg::<String>(
+            &mut self.servers_raw,
+            parser.opt_value_from_str::<&str, String>("-s")?,
+        );
 
         self.channel = parser
             .free_from_str::<String>()?
             .to_lowercase()
             .replace("twitch.tv/", "");
-
         self.quality = parser.free_from_str::<String>()?;
 
-        if let Some(servers) = servers {
-            self.parse_servers(&servers);
-        } else if let Some(servers) = self.servers_raw.clone() {
-            self.parse_servers(&servers);
-            self.servers_raw = Option::default();
-        }
-
-        if self.servers.is_some() && (self.client_id.is_some() || self.auth_token.is_some()) {
-            bail!("Client ID or auth token cannot be set while using a playlist proxy");
-        }
+        self.parse_servers();
 
         Ok(())
     }
@@ -172,6 +189,10 @@ fn merge_opt_arg<T>(dst: &mut Option<T>, val: Option<T>) {
     if val.is_some() {
         *dst = val;
     }
+}
+
+fn split_comma(arg: &str) -> Vec<String> {
+    arg.split(',').map(String::from).collect()
 }
 
 #[cfg(target_os = "linux")]

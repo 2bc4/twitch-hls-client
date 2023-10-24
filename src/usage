@@ -31,6 +31,9 @@ Options:
       --auth-token <TOKEN>
           Value to be used in the Authorization header.
 	  Cannot be used if -s is set.
+      --never-proxy <CHANNEL>
+          Prevent specified channels from using a playlist proxy.
+          Can be multiple comma separated channels.
   -h, --help
           Print help
   -V, --version

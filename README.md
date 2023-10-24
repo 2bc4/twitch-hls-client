@@ -30,11 +30,14 @@ Options:
           Print the playlist URL to stdout and exit
       --client-id <ID>
           Value to be used in the Client-Id header.
-	  Cannot be used if -s is set.
-	  If not specified will use the default header.
+          Cannot be used if -s is set.
+          If not specified will use the default header.
       --auth-token <TOKEN>
           Value to be used in the Authorization header.
-	  Cannot be used if -s is set.
+          Cannot be used if -s is set.
+      --never-proxy <CHANNEL>
+          Prevent specified channels from using a playlist proxy.
+          Can be multiple comma separated channels.
   -h, --help
           Print help
   -V, --version
