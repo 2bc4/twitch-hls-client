@@ -52,14 +52,6 @@ impl Args {
     pub fn parse() -> Result<Self> {
         let mut args = Self::default();
         let mut parser = Arguments::from_env();
-
-        let config_path = if let Some(path) = parser.opt_value_from_str("-c")? {
-            path
-        } else {
-            default_config_path()?
-        };
-        args.parse_config(&config_path)?;
-
         if parser.contains("-h") || parser.contains("--help") {
             eprintln!(include_str!("usage"));
             process::exit(0);
@@ -70,22 +62,14 @@ impl Args {
             process::exit(0);
         }
 
-        merge_opt_val::<String>(&mut args.player_args, parser.opt_value_from_str("-a")?);
-        merge_opt_val::<u32>(&mut args.max_retries, parser.opt_value_from_str("--max-retries")?);
+        let config_path = if let Some(path) = parser.opt_value_from_str("-c")? {
+            path
+        } else {
+            default_config_path()?
+        };
 
-        merge_opt_arg::<String>(&mut args.client_id, parser.opt_value_from_str("--client-id")?);
-        merge_opt_arg::<String>(&mut args.auth_token, parser.opt_value_from_str("--auth-token")?);
-        merge_opt_arg::<String>(
-            &mut args.never_proxy_raw,
-            parser.opt_value_from_str("--never-proxy")?,
-        );
-        args.parse_never_proxy();
-
-        merge_switch(&mut args.passthrough, parser.contains("--passthrough"));
-        merge_switch(
-            &mut args.debug,
-            parser.contains("-d") || parser.contains("--debug"),
-        );
+        args.parse_config(&config_path)?;
+        args.merge(&mut parser)?;
 
         if args.passthrough {
             parser.opt_value_from_str::<&str, String>("-p")?; //consume player arg
@@ -132,6 +116,27 @@ impl Args {
             }
         }
 
+        Ok(())
+    }
+
+    fn merge(&mut self, parser: &mut Arguments) -> Result<()> {
+        merge_opt_val::<String>(&mut self.player_args, parser.opt_value_from_str("-a")?);
+        merge_opt_val::<u32>(&mut self.max_retries, parser.opt_value_from_str("--max-retries")?);
+
+        merge_opt_arg::<String>(&mut self.client_id, parser.opt_value_from_str("--client-id")?);
+        merge_opt_arg::<String>(&mut self.auth_token, parser.opt_value_from_str("--auth-token")?);
+        merge_opt_arg::<String>(
+            &mut self.never_proxy_raw,
+            parser.opt_value_from_str("--never-proxy")?,
+        );
+
+        merge_switch(&mut self.passthrough, parser.contains("--passthrough"));
+        merge_switch(
+            &mut self.debug,
+            parser.contains("-d") || parser.contains("--debug"),
+        );
+
+        self.parse_never_proxy();
         Ok(())
     }
 
