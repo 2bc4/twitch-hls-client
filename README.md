@@ -30,11 +30,10 @@ Options:
           Print the playlist URL to stdout and exit
       --client-id <ID>
           Value to be used in the Client-Id header.
-          Cannot be used if -s is set.
-          If not specified will use the default header.
+          If not specified will use the default client ID.
       --auth-token <TOKEN>
           Value to be used in the Authorization header.
-          Cannot be used if -s is set.
+          If --client-id is not specified will retrieve client ID from Twitch.
       --never-proxy <CHANNEL>
           Prevent specified channels from using a playlist proxy.
           Can be multiple comma separated channels.
