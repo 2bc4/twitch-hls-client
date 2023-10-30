@@ -1,6 +1,5 @@
 use std::{
-    path::PathBuf,
-    process::{Child, ChildStdin, Command, ExitStatus, Stdio},
+    process::{Child, ChildStdin, Command, Stdio},
     sync::{Arc, Mutex},
 };
 
@@ -21,8 +20,8 @@ impl Drop for Player {
 }
 
 impl Player {
-    pub fn spawn(path: &PathBuf, args: &str) -> Result<Self> {
-        info!("Opening player: {} {}", path.display(), args);
+    pub fn spawn(path: &str, args: &str) -> Result<Self> {
+        info!("Opening player: {path} {args}");
         let mut process = Command::new(path)
             .args(args.split_whitespace())
             .stdin(Stdio::piped())
@@ -37,7 +36,7 @@ impl Player {
         })
     }
 
-    pub fn spawn_and_wait(path: &PathBuf, args: &str, url: &str) -> Result<()> {
+    pub fn spawn_and_wait(path: &str, args: &str, url: &str) -> Result<()> {
         let new_args = args
             .split_whitespace()
             .map(|s| if s == "-" { url.to_owned() } else { s.to_owned() })
@@ -45,15 +44,11 @@ impl Player {
             .join(" ");
 
         let mut player = Self::spawn(path, &new_args)?;
-        player.wait()?;
+        player.process.wait()?;
         Ok(())
     }
 
     pub fn stdin(&mut self) -> Arc<Mutex<ChildStdin>> {
         self.stdin.clone()
-    }
-
-    pub fn wait(&mut self) -> Result<ExitStatus> {
-        Ok(self.process.wait()?)
     }
 }

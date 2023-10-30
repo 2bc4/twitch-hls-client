@@ -177,7 +177,7 @@ pub fn fetch_proxy_playlist(servers: &[String], channel: &str, quality: &str) ->
         .iter()
         .map(|s| {
             Url::parse_with_params(
-                s,
+                &s.replace("[channel]", channel),
                 &[
                     ("allow_source", "true"),
                     ("allow_audio_only", "true"),
@@ -219,7 +219,9 @@ pub fn fetch_twitch_playlist(
     channel: &str,
     quality: &str,
 ) -> Result<Url> {
-    info!("Fetching playlist for channel {} (Twitch)", channel);
+    let channel = channel.replace("[channel]", channel);
+
+    info!("Fetching playlist for channel {channel} (Twitch)");
     let gql = json!({
         "operationName": "PlaybackAccessToken",
         "extensions": {

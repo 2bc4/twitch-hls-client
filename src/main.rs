@@ -96,7 +96,7 @@ fn main() -> Result<()> {
         Err(e) => match e.downcast_ref::<HlsErr>() {
             Some(HlsErr::NotLowLatency(url)) => {
                 info!("{e}, opening player with playlist URL");
-                Player::spawn_and_wait(&args.player_path, &args.player_args, url)?;
+                Player::spawn_and_wait(&args.player, &args.player_args, url)?;
                 return Ok(());
             }
             _ => return Err(e),
@@ -109,7 +109,7 @@ fn main() -> Result<()> {
     }
 
     let playlist = MediaPlaylist::new(playlist_url)?;
-    let player = Player::spawn(&args.player_path, &args.player_args)?;
+    let player = Player::spawn(&args.player, &args.player_args)?;
     match run(player, playlist, args.max_retries) {
         Ok(()) => Ok(()),
         Err(e) => match e.downcast_ref::<WorkerErr>() {

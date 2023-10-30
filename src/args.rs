@@ -1,8 +1,4 @@
-use std::{
-    env, fs,
-    path::{Path, PathBuf},
-    process,
-};
+use std::{env, fs, path::Path, process};
 
 use anyhow::{bail, Result};
 use pico_args::Arguments;
@@ -12,7 +8,7 @@ use crate::constants;
 #[derive(Debug)]
 pub struct Args {
     pub servers: Option<Vec<String>>,
-    pub player_path: PathBuf,
+    pub player: String,
     pub player_args: String,
     pub debug: bool,
     pub max_retries: u32,
@@ -22,16 +18,13 @@ pub struct Args {
     pub never_proxy: Option<Vec<String>>,
     pub channel: String,
     pub quality: String,
-
-    servers_raw: Option<String>,
-    never_proxy_raw: Option<String>,
 }
 
 impl Default for Args {
     fn default() -> Self {
         Self {
             servers: Option::default(),
-            player_path: PathBuf::default(),
+            player: String::default(),
             player_args: String::from("-"),
             debug: bool::default(),
             max_retries: 50,
@@ -41,9 +34,6 @@ impl Default for Args {
             never_proxy: Option::default(),
             channel: String::default(),
             quality: String::default(),
-
-            servers_raw: Option::default(),
-            never_proxy_raw: Option::default(),
         }
     }
 }
@@ -67,22 +57,17 @@ impl Args {
         } else {
             default_config_path()?
         };
-
         args.parse_config(&config_path)?;
-        args.merge(&mut parser)?;
 
+        args.merge_args(&mut parser)?;
         if args.passthrough {
-            parser.opt_value_from_str::<&str, String>("-p")?; //consume player arg
-            args.finish(&mut parser)?;
             return Ok(args);
         }
 
-        merge_opt_val::<PathBuf>(&mut args.player_path, parser.opt_value_from_str("-p")?);
-        if args.player_path.to_string_lossy().is_empty() {
-            bail!("player (-p) must be set");
+        if args.player.is_empty() {
+            bail!("player must be set");
         }
 
-        args.finish(&mut parser)?;
         Ok(args)
     }
 
@@ -100,15 +85,15 @@ impl Args {
             let split = line.split_once('=');
             if let Some(split) = split {
                 match split.0 {
-                    "servers" => self.servers_raw = Some(split.1.into()),
-                    "player" => self.player_path = split.1.into(),
+                    "servers" => self.servers = Some(split_comma(split.1)?),
+                    "player" => self.player = split.1.into(),
                     "player-args" => self.player_args = split.1.into(),
                     "debug" => self.debug = split.1.parse()?,
                     "max-retries" => self.max_retries = split.1.parse()?,
                     "passthrough" => self.passthrough = split.1.parse()?,
                     "client-id" => self.client_id = Some(split.1.into()),
                     "auth-token" => self.auth_token = Some(split.1.into()),
-                    "never-proxy" => self.never_proxy_raw = Some(split.1.into()),
+                    "never-proxy" => self.never_proxy = Some(split_comma(split.1)?),
                     _ => bail!("Unknown key in config: {}", split.0),
                 }
             } else {
@@ -119,16 +104,18 @@ impl Args {
         Ok(())
     }
 
-    fn merge(&mut self, parser: &mut Arguments) -> Result<()> {
-        merge_opt_val::<String>(&mut self.player_args, parser.opt_value_from_str("-a")?);
-        merge_opt_val::<u32>(&mut self.max_retries, parser.opt_value_from_str("--max-retries")?);
+    fn merge_args(&mut self, parser: &mut Arguments) -> Result<()> {
+        merge_opt::<String>(&mut self.player, parser.opt_value_from_str("-p")?);
+        merge_opt::<String>(&mut self.player_args, parser.opt_value_from_str("-a")?);
+        merge_opt::<u32>(&mut self.max_retries, parser.opt_value_from_str("--max-retries")?);
 
-        merge_opt_arg::<String>(&mut self.client_id, parser.opt_value_from_str("--client-id")?);
-        merge_opt_arg::<String>(&mut self.auth_token, parser.opt_value_from_str("--auth-token")?);
-        merge_opt_arg::<String>(
-            &mut self.never_proxy_raw,
-            parser.opt_value_from_str("--never-proxy")?,
+        merge_opt_opt::<String>(&mut self.client_id, parser.opt_value_from_str("--client-id")?);
+        merge_opt_opt::<String>(&mut self.auth_token, parser.opt_value_from_str("--auth-token")?);
+        merge_opt_opt::<Vec<String>>(
+            &mut self.never_proxy,
+            parser.opt_value_from_fn("--never-proxy", split_comma)?,
         );
+        merge_opt_opt::<Vec<String>>(&mut self.servers, parser.opt_value_from_fn("-s", split_comma)?);
 
         merge_switch(&mut self.passthrough, parser.contains("--passthrough"));
         merge_switch(
@@ -136,49 +123,24 @@ impl Args {
             parser.contains("-d") || parser.contains("--debug"),
         );
 
-        self.parse_never_proxy();
-        Ok(())
-    }
-
-    fn parse_never_proxy(&mut self) {
-        if let Some(never_proxy) = &self.never_proxy_raw {
-            self.never_proxy = Some(split_comma(never_proxy));
-            self.never_proxy_raw = Option::default();
-        }
-    }
-
-    fn parse_servers(&mut self) {
-        if let Some(never_proxy) = &self.never_proxy {
-            if never_proxy.iter().any(|channel| channel.eq(&self.channel)) {
-                return;
-            }
-        }
-
-        if let Some(servers) = &self.servers_raw {
-            self.servers = Some(split_comma(&servers.replace("[channel]", &self.channel)));
-            self.servers_raw = Option::default();
-        }
-    }
-
-    fn finish(&mut self, parser: &mut Arguments) -> Result<()> {
-        merge_opt_arg::<String>(
-            &mut self.servers_raw,
-            parser.opt_value_from_str::<&str, String>("-s")?,
-        );
-
         self.channel = parser
             .free_from_str::<String>()?
             .to_lowercase()
             .replace("twitch.tv/", "");
-        self.quality = parser.free_from_str::<String>()?;
 
-        self.parse_servers();
+        self.quality = parser.free_from_str()?;
+
+        if let Some(never_proxy) = &self.never_proxy {
+            if never_proxy.iter().any(|a| a.eq(&self.channel)) {
+                self.servers = None;
+            }
+        }
 
         Ok(())
     }
 }
 
-fn merge_opt_val<T>(dst: &mut T, val: Option<T>) {
+fn merge_opt<T>(dst: &mut T, val: Option<T>) {
     if let Some(val) = val {
         *dst = val;
     }
@@ -190,14 +152,15 @@ fn merge_switch(dst: &mut bool, val: bool) {
     }
 }
 
-fn merge_opt_arg<T>(dst: &mut Option<T>, val: Option<T>) {
+fn merge_opt_opt<T>(dst: &mut Option<T>, val: Option<T>) {
     if val.is_some() {
         *dst = val;
     }
 }
 
-fn split_comma(arg: &str) -> Vec<String> {
-    arg.split(',').map(String::from).collect()
+#[allow(clippy::unnecessary_wraps)] //function pointer
+fn split_comma(arg: &str) -> Result<Vec<String>> {
+    Ok(arg.split(',').map(String::from).collect())
 }
 
 #[cfg(target_os = "linux")]
