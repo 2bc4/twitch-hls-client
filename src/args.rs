@@ -94,6 +94,7 @@ impl Args {
                     "client-id" => self.client_id = Some(split.1.into()),
                     "auth-token" => self.auth_token = Some(split.1.into()),
                     "never-proxy" => self.never_proxy = Some(split_comma(split.1)?),
+                    "quality" => self.quality = split.1.into(),
                     _ => bail!("Unknown key in config: {}", split.0),
                 }
             } else {
@@ -128,7 +129,10 @@ impl Args {
             .to_lowercase()
             .replace("twitch.tv/", "");
 
-        self.quality = parser.free_from_str()?;
+        merge_opt::<String>(&mut self.quality, parser.opt_free_from_str()?);
+        if self.quality.is_empty() {
+            bail!("quality must be set");
+        }
 
         if let Some(never_proxy) = &self.never_proxy {
             if never_proxy.iter().any(|a| a.eq(&self.channel)) {
