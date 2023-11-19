@@ -20,31 +20,35 @@ impl Drop for Player {
 }
 
 impl Player {
-    pub fn spawn(path: &str, args: &str) -> Result<Self> {
+    pub fn spawn(path: &str, args: &str, quiet: bool) -> Result<Self> {
         info!("Opening player: {path} {args}");
-        let mut process = Command::new(path)
-            .args(args.split_whitespace())
-            .stdin(Stdio::piped())
-            .spawn()
-            .context("Failed to open player")?;
+        let mut command = Command::new(path);
+        command.args(args.split_whitespace()).stdin(Stdio::piped());
 
-        Ok(Self {
-            stdin: Arc::new(Mutex::new(
-                process.stdin.take().context("Failed to open player stdin")?,
-            )),
-            process,
-        })
+        if quiet {
+            command.stdout(Stdio::null()).stderr(Stdio::null());
+        }
+
+        let mut process = command.spawn().context("Failed to open player")?;
+        let stdin = Arc::new(Mutex::new(
+            process.stdin.take().context("Failed to open player stdin")?,
+        ));
+
+        Ok(Self { stdin, process })
     }
 
-    pub fn spawn_and_wait(path: &str, args: &str, url: &str) -> Result<()> {
+    pub fn spawn_and_wait(path: &str, args: &str, url: &str, quiet: bool) -> Result<()> {
         let new_args = args
             .split_whitespace()
             .map(|s| if s == "-" { url.to_owned() } else { s.to_owned() })
             .collect::<Vec<String>>()
             .join(" ");
 
-        let mut player = Self::spawn(path, &new_args)?;
-        player.process.wait()?;
+        let mut player = Self::spawn(path, &new_args, quiet)?;
+        player
+            .process
+            .wait()
+            .context("Failed to wait for player process")?;
         Ok(())
     }
 

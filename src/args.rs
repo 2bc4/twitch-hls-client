@@ -18,6 +18,7 @@ pub struct Args {
     pub never_proxy: Option<Vec<String>>,
     pub channel: String,
     pub quality: String,
+    pub quiet: bool,
 }
 
 impl Default for Args {
@@ -34,6 +35,7 @@ impl Default for Args {
             never_proxy: Option::default(),
             channel: String::default(),
             quality: String::default(),
+            quiet: bool::default(),
         }
     }
 }
@@ -95,6 +97,7 @@ impl Args {
                     "auth-token" => self.auth_token = Some(split.1.into()),
                     "never-proxy" => self.never_proxy = Some(split_comma(split.1)?),
                     "quality" => self.quality = split.1.into(),
+                    "quiet" => self.quiet = split.1.parse()?,
                     _ => bail!("Unknown key in config: {}", split.0),
                 }
             } else {
@@ -122,6 +125,10 @@ impl Args {
         merge_switch(
             &mut self.debug,
             parser.contains("-d") || parser.contains("--debug"),
+        );
+        merge_switch(
+            &mut self.quiet,
+            parser.contains("-q") || parser.contains("--quiet"),
         );
 
         self.channel = parser

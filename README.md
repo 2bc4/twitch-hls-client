@@ -24,6 +24,8 @@ Options:
           Path to config file
   -d, --debug
           Enable debug logging
+  -q, --quiet
+          Silences the player's output
       --max-retries <COUNT>
           Attempt to fetch the media playlist <COUNT> times before exiting (default: 50)
       --passthrough
