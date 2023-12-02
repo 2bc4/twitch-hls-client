@@ -182,6 +182,7 @@ pub fn fetch_proxy_playlist(servers: &[String], channel: &str, quality: &str) ->
                     ("allow_source", "true"),
                     ("allow_audio_only", "true"),
                     ("fast_bread", "true"),
+                    ("warp", "true"),
                 ],
             )
         })
