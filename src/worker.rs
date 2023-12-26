@@ -1,4 +1,5 @@
 use std::{
+    error::Error as StdError,
     fmt,
     io::{self, ErrorKind::BrokenPipe},
     process::{self, ChildStdin},
@@ -12,7 +13,7 @@ use std::{
 use anyhow::{Context, Result};
 use url::Url;
 
-use crate::http::Request;
+use crate::CLIENT;
 
 #[derive(Debug)]
 pub enum Error {
@@ -44,8 +45,6 @@ impl Worker {
         Builder::new()
             .name(String::from("Segment Worker"))
             .spawn(move || {
-                // :(
-
                 if let Err(e) = Self::thread_main(&url_rx, &sync_tx, &pipe) {
                     eprintln!("Worker error: {e}");
                     eprintln!("{}", e.backtrace());
@@ -74,14 +73,10 @@ impl Worker {
             return Ok(());
         };
 
-        let mut request = Request::get(url)?;
         let mut pipe = pipe.lock().unwrap();
 
-        if let Err(e) = io::copy(&mut request.reader()?, &mut *pipe) {
-            match e.kind() {
-                BrokenPipe => return Ok(()),
-                _ => return Err(e.into()),
-            }
+        if copy_segment(url, &mut pipe)?.is_some() {
+            return Ok(());
         }
 
         sync_tx.send(()).context("Failed to sync from segment worker")?;
@@ -90,13 +85,26 @@ impl Worker {
                 return Ok(());
             };
 
-            request.set_url(url)?;
-            if let Err(e) = io::copy(&mut request.reader()?, &mut *pipe) {
-                match e.kind() {
-                    BrokenPipe => return Ok(()),
-                    _ => return Err(e.into()),
-                }
+            if copy_segment(url, &mut pipe)?.is_some() {
+                return Ok(());
             }
         }
     }
+}
+
+fn copy_segment(url: Url, pipe: &mut ChildStdin) -> Result<Option<()>> {
+    if let Err(e) = CLIENT.get(url).send()?.copy_to(pipe) {
+        match e.source() {
+            Some(s) => match s.downcast_ref::<io::Error>() {
+                Some(s) => match s.kind() {
+                    BrokenPipe => return Ok(Some(())),
+                    _ => return Err(e.into()),
+                },
+                _ => return Err(e.into()),
+            },
+            _ => return Err(e.into()),
+        }
+    }
+
+    Ok(None)
 }

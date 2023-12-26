@@ -15,7 +15,7 @@ use rand::{
 use serde_json::{json, Value};
 use url::Url;
 
-use crate::{constants, http::Request};
+use crate::{constants, CLIENT};
 
 #[derive(Debug)]
 pub enum Error {
@@ -89,7 +89,7 @@ impl PrefetchUrls {
 pub struct MediaPlaylist {
     pub urls: PrefetchUrls,
     duration: Duration,
-    request: Request,
+    playlist_url: Url,
 }
 
 impl MediaPlaylist {
@@ -97,7 +97,7 @@ impl MediaPlaylist {
         let mut playlist = Self {
             urls: PrefetchUrls::default(),
             duration: Duration::default(),
-            request: Request::get(url)?,
+            playlist_url: url,
         };
 
         playlist.reload()?;
@@ -133,7 +133,7 @@ impl MediaPlaylist {
     }
 
     fn fetch(&mut self) -> Result<String> {
-        let playlist = self.request.read_string()?;
+        let playlist = CLIENT.get(self.playlist_url.clone()).send()?.text()?;
         debug!("Playlist:\n{playlist}");
 
         Ok(playlist)
@@ -193,7 +193,7 @@ pub fn fetch_proxy_playlist(servers: &[String], channel: &str, quality: &str) ->
         .iter()
         .find_map(|s| {
             info!("Using server {}://{}", s.scheme(), s.host_str().unwrap());
-            let mut request = match Request::get(s.clone()) {
+            let request = match CLIENT.get(s.clone()).send() {
                 Ok(request) => request,
                 Err(e) => {
                     error!("{e}");
@@ -201,7 +201,7 @@ pub fn fetch_proxy_playlist(servers: &[String], channel: &str, quality: &str) ->
                 }
             };
 
-            match request.read_string() {
+            match request.text() {
                 Ok(playlist_url) => Some(playlist_url),
                 Err(e) => {
                     error!("{e}");
@@ -240,19 +240,18 @@ pub fn fetch_twitch_playlist(
         },
     });
 
-    let mut request = Request::post(constants::TWITCH_GQL_ENDPOINT.parse()?, gql.to_string())?;
-    request.add_header("Content-Type: text/plain;charset=UTF-8");
-    request.add_header(&format!("X-Device-ID: {}", &gen_id()));
-    request.add_header(&format!(
-        "Client-Id: {}",
-        choose_client_id(client_id, auth_token)?
-    ));
+    let mut request = CLIENT
+        .post(constants::TWITCH_GQL_ENDPOINT)
+        .json(&gql)
+        .header("Content-Type", "text/plain;charset=UTF-8")
+        .header("X-Device-ID", gen_id())
+        .header("Client-Id", choose_client_id(client_id, auth_token)?);
 
     if let Some(auth_token) = auth_token {
-        request.add_header(&format!("Authorization: OAuth {auth_token}"));
+        request = request.header("Authorization", format!("OAuth {auth_token}"));
     }
 
-    let response: Value = serde_json::from_str(&request.read_string()?)?;
+    let response: Value = serde_json::from_str(&request.send()?.text()?)?;
     let url = Url::parse_with_params(
         &format!("{}{channel}.m3u8", constants::TWITCH_HLS_BASE),
         &[
@@ -281,10 +280,11 @@ pub fn fetch_twitch_playlist(
                     .context("Invalid token")?,
             ),
             ("player_version", "1.23.0"),
+            ("warp", "true"),
         ],
     )?;
 
-    parse_variant_playlist(&Request::get(url)?.read_string()?, quality)
+    parse_variant_playlist(&CLIENT.get(url).send()?.text()?, quality)
 }
 
 fn parse_variant_playlist(master_playlist: &str, quality: &str) -> Result<Url> {
@@ -308,10 +308,12 @@ fn choose_client_id(client_id: &Option<String>, auth_token: &Option<String>) -> 
     let client_id = if let Some(client_id) = client_id {
         client_id.clone()
     } else if let Some(auth_token) = auth_token {
-        let mut request = Request::get(constants::TWITCH_OAUTH_ENDPOINT.parse()?)?;
-        request.add_header(&format!("Authorization: OAuth {auth_token}"));
+        let request = CLIENT
+            .get(constants::TWITCH_OAUTH_ENDPOINT)
+            .header("Authorization", format!("OAuth {auth_token}"))
+            .send()?;
 
-        let response: Value = serde_json::from_str(&request.read_string()?)?;
+        let response: Value = serde_json::from_str(&request.text()?)?;
 
         //.to_string() adds quotes while .as_str() doesn't for some reason
         response["client_id"]
