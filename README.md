@@ -1,5 +1,5 @@
 ## twitch-hls-client
-A minimal (and buggy) low latency HLS client for Twitch
+A very minimal (and buggy) low latency HLS client for Twitch
 
 ```
 Usage: twitch-hls-client [OPTIONS] -p <PATH> <CHANNEL> <QUALITY>

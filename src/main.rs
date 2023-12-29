@@ -5,6 +5,7 @@
 mod args;
 mod constants;
 mod hls;
+mod http;
 mod player;
 mod worker;
 
@@ -12,21 +13,12 @@ use std::time::Instant;
 
 use anyhow::Result;
 use log::{debug, info};
-use once_cell::sync::Lazy;
-use reqwest::blocking::Client;
 use simplelog::{format_description, ColorChoice, ConfigBuilder, LevelFilter, TermLogger, TerminalMode};
 
 use args::Args;
 use hls::{Error as HlsErr, MediaPlaylist, PrefetchUrlKind};
 use player::Player;
 use worker::{Error as WorkerErr, Worker};
-
-static CLIENT: Lazy<Client> = Lazy::new(|| {
-    Client::builder()
-        .user_agent(constants::USER_AGENT)
-        .build()
-        .unwrap()
-});
 
 fn run(mut player: Player, mut playlist: MediaPlaylist, max_retries: u32) -> Result<()> {
     let mut worker = Worker::new(player.stdin())?;

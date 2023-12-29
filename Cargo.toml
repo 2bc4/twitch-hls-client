@@ -1,8 +1,8 @@
 [package]
 name = "twitch-hls-client"
-version = "0.6.0"
+version = "0.5.6"
 authors = ["2bc4 <119853089+2bc4@users.noreply.github.com>"]
-description = "A minimal (and buggy) low latency HLS client for Twitch"
+description = "Lightweight CLI client for watching low latency Twitch streams with ad blocking"
 license = "GPL-3.0-or-later"
 repository = "https://github.com/2bc4/twitch-hls-client"
 edition = "2021"
@@ -13,14 +13,25 @@ codegen-units = 1
 lto = true
 panic = "abort"
 
+[features]
+default = ["rustls-webpki"]
+rustls-webpki = ["dep:rustls", "dep:webpki-roots"]
+rustls-native-certs = ["dep:rustls", "dep:rustls-native-certs"]
+native-tls = ["dep:native-tls"]
+
 [dependencies]
-anyhow = { version = "1.0.76", features = ["backtrace"] }
+anyhow = { version = "1.0.75", features = ["backtrace"] }
+chunked_transfer = "1.5.0"
+flate2 = "1.0.28"
+httparse = "1.8.0"
 log = "0.4.20"
-once_cell = "1.19.0"
+native-tls = { version = "0.2.11", optional = true }
 pico-args = { version = "0.5.0", features = ["eq-separator"] }
 rand = "0.8.5"
-reqwest = { version = "0.11.23", default-features = false, features = ["json", "blocking", "gzip", "rustls-tls", "rustls-native-certs"] }
+rustls = { version = "0.21.9", optional = true }
+rustls-native-certs = { version = "0.6.3", optional = true }
 serde_json = "1.0.108"
 simplelog = "0.12.1"
-time = "0.3.31"
+time = "0.3.30"
 url = "2.5.0"
+webpki-roots = { version = "0.25.3", optional = true }
