@@ -39,7 +39,18 @@ fn init_curl<T: Write>(handle: &mut Easy2<RequestHandler<T>>, url: &Url) -> Resu
 }
 
 fn perform<T: Write>(handle: &mut Easy2<RequestHandler<T>>) -> Result<()> {
-    handle.perform()?;
+    let mut retries = 0;
+    loop {
+        match handle.perform() {
+            Ok(()) => break,
+            Err(_) if retries < constants::HTTP_RETRIES => {
+                retries += 1;
+                continue;
+            },
+            Err(e) => return Err(e.into()),
+        }
+    }
+
     handle.get_ref().check_error()?;
 
     let code = handle.response_code()?;
