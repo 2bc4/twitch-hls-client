@@ -27,7 +27,10 @@ impl fmt::Display for Error {
 }
 
 fn init_curl<T: Write>(handle: &mut Easy2<RequestHandler<T>>, url: &Url) -> Result<()> {
-    handle.verbose(true)?;
+    if log::max_level() == log::LevelFilter::Debug {
+        handle.verbose(true)?;
+    }
+
     handle.tcp_nodelay(true)?;
     handle.useragent(constants::USER_AGENT)?;
     handle.url(url.as_ref())?;
