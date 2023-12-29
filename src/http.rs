@@ -46,7 +46,7 @@ fn perform<T: Write>(handle: &mut Easy2<RequestHandler<T>>) -> Result<()> {
             Err(_) if retries < constants::HTTP_RETRIES => {
                 retries += 1;
                 continue;
-            },
+            }
             Err(e) => return Err(e.into()),
         }
     }
