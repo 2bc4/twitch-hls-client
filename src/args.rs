@@ -6,6 +6,7 @@ use pico_args::Arguments;
 use crate::constants;
 
 #[derive(Debug)]
+#[allow(clippy::struct_field_names)]
 pub struct Args {
     pub servers: Option<Vec<String>>,
     pub player: String,

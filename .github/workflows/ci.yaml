@@ -20,9 +20,7 @@ jobs:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo check --no-default-features --features rustls-webpki
-      - run: cargo check --no-default-features --features rustls-native-certs
-      - run: cargo check --no-default-features --features native-tls
+      - run: cargo check
 
   fmt:
     name: Rustfmt
@@ -44,6 +42,4 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      - run: cargo clippy --all --no-default-features --features rustls-webpki
-      - run: cargo clippy --all --no-default-features --features rustls-native-certs
-      - run: cargo clippy --all --no-default-features --features native-tls
+      - run: cargo clippy --all

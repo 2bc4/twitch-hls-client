@@ -52,11 +52,8 @@ jobs:
     needs: lint
     runs-on: ${{ matrix.os }}
     env:
-      CC_aarch64_unknown_linux_musl: "clang"
-      AR_aarch64_unknown_linux_musl: "llvm-ar"
-      CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_RUSTFLAGS: "-Clink-self-contained=yes -Clinker=rust-lld"
       CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS: "-Ctarget-cpu=x86-64-v2"
-      CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_RUSTFLAGS: "-Ctarget-cpu=x86-64-v2"
+      CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: "-Ctarget-cpu=x86-64-v2"
     strategy:
       fail-fast: false
       matrix:
@@ -67,10 +64,7 @@ jobs:
           - target: i686-pc-windows-msvc
             os: windows-latest
             binName: twitch-hls-client.exe
-          - target: x86_64-unknown-linux-musl
-            os: ubuntu-latest
-            binName: twitch-hls-client
-          - target: aarch64-unknown-linux-musl
+          - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             binName: twitch-hls-client
           - target: x86_64-apple-darwin
@@ -81,9 +75,6 @@ jobs:
             binName: twitch-hls-client
     steps:
       - uses: actions/checkout@v3
-      - name: Install Musl Tools
-        if: ${{ contains(matrix.os, 'ubuntu') }}
-        run: sudo apt-get install -y musl-dev musl-tools clang llvm
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:

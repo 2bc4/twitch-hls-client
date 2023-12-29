@@ -1,13 +1,9 @@
-use std::{
-    process::{Child, ChildStdin, Command, Stdio},
-    sync::{Arc, Mutex},
-};
+use std::process::{Child, ChildStdin, Command, Stdio};
 
 use anyhow::{Context, Result};
 use log::{info, warn};
 
 pub struct Player {
-    stdin: Arc<Mutex<ChildStdin>>,
     process: Child,
 }
 
@@ -29,12 +25,9 @@ impl Player {
             command.stdout(Stdio::null()).stderr(Stdio::null());
         }
 
-        let mut process = command.spawn().context("Failed to open player")?;
-        let stdin = Arc::new(Mutex::new(
-            process.stdin.take().context("Failed to open player stdin")?,
-        ));
-
-        Ok(Self { stdin, process })
+        Ok(Self {
+            process: command.spawn().context("Failed to open player")?,
+        })
     }
 
     pub fn spawn_and_wait(path: &str, args: &str, url: &str, quiet: bool) -> Result<()> {
@@ -52,7 +45,7 @@ impl Player {
         Ok(())
     }
 
-    pub fn stdin(&mut self) -> Arc<Mutex<ChildStdin>> {
-        self.stdin.clone()
+    pub fn stdin(&mut self) -> Result<ChildStdin> {
+        self.process.stdin.take().context("Failed to open player stdin")
     }
 }

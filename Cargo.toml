@@ -6,32 +6,20 @@ description = "Lightweight CLI client for watching low latency Twitch streams wi
 license = "GPL-3.0-or-later"
 repository = "https://github.com/2bc4/twitch-hls-client"
 edition = "2021"
-rust-version = "1.60"
+rust-version = "1.75"
 
 [profile.release]
 codegen-units = 1
 lto = true
 panic = "abort"
 
-[features]
-default = ["rustls-webpki"]
-rustls-webpki = ["dep:rustls", "dep:webpki-roots"]
-rustls-native-certs = ["dep:rustls", "dep:rustls-native-certs"]
-native-tls = ["dep:native-tls"]
-
 [dependencies]
 anyhow = { version = "1.0.75", features = ["backtrace"] }
-chunked_transfer = "1.5.0"
-flate2 = "1.0.28"
-httparse = "1.8.0"
+curl = { version = "0.4.44", features = ["http2"] }
 log = "0.4.20"
-native-tls = { version = "0.2.11", optional = true }
 pico-args = { version = "0.5.0", features = ["eq-separator"] }
 rand = "0.8.5"
-rustls = { version = "0.21.9", optional = true }
-rustls-native-certs = { version = "0.6.3", optional = true }
 serde_json = "1.0.108"
 simplelog = "0.12.1"
 time = "0.3.30"
 url = "2.5.0"
-webpki-roots = { version = "0.25.3", optional = true }
