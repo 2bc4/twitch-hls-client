@@ -15,7 +15,7 @@ panic = "abort"
 
 [dependencies]
 anyhow = { version = "1.0.75", features = ["backtrace"] }
-curl = { version = "0.4.44", features = ["http2"] }
+curl = { git = "https://github.com/alexcrichton/curl-rust.git", rev = "0c1dddf", features = ["http2"] }
 log = "0.4.20"
 pico-args = { version = "0.5.0", features = ["eq-separator"] }
 rand = "0.8.5"
