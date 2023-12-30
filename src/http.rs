@@ -154,6 +154,12 @@ impl<T: Write> Handler for RequestHandler<T> {
     fn debug(&mut self, kind: InfoType, data: &[u8]) {
         if matches!(kind, InfoType::Text) {
             let text = String::from_utf8_lossy(data);
+
+            #[cfg(target_os = "windows")]
+            if text.starts_with("schannel: failed to decrypt data") {
+                return;
+            }
+
             debug!("{}", text.strip_suffix('\n').unwrap_or(&text));
         }
     }
