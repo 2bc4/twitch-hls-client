@@ -12,14 +12,16 @@ pub struct Args {
     pub player: String,
     pub player_args: String,
     pub debug: bool,
+    pub quiet: bool,
     pub max_retries: u32,
     pub passthrough: bool,
     pub client_id: Option<String>,
     pub auth_token: Option<String>,
     pub never_proxy: Option<Vec<String>>,
+    pub http_retries: u32,
+    pub http_connect_timeout: u64,
     pub channel: String,
     pub quality: String,
-    pub quiet: bool,
 }
 
 impl Default for Args {
@@ -29,14 +31,16 @@ impl Default for Args {
             player: String::default(),
             player_args: String::from("-"),
             debug: bool::default(),
+            quiet: bool::default(),
             max_retries: 50,
             passthrough: bool::default(),
             client_id: Option::default(),
             auth_token: Option::default(),
             never_proxy: Option::default(),
+            http_retries: 3,
+            http_connect_timeout: 5,
             channel: String::default(),
             quality: String::default(),
-            quiet: bool::default(),
         }
     }
 }
@@ -92,13 +96,15 @@ impl Args {
                     "player" => self.player = split.1.into(),
                     "player-args" => self.player_args = split.1.into(),
                     "debug" => self.debug = split.1.parse()?,
+                    "quiet" => self.quiet = split.1.parse()?,
                     "max-retries" => self.max_retries = split.1.parse()?,
                     "passthrough" => self.passthrough = split.1.parse()?,
                     "client-id" => self.client_id = Some(split.1.into()),
                     "auth-token" => self.auth_token = Some(split.1.into()),
                     "never-proxy" => self.never_proxy = Some(split_comma(split.1)?),
+                    "http-retries" => self.http_retries = split.1.parse()?,
+                    "http-connect-timeout" => self.http_connect_timeout = split.1.parse()?,
                     "quality" => self.quality = split.1.into(),
-                    "quiet" => self.quiet = split.1.parse()?,
                     _ => bail!("Unknown key in config: {}", split.0),
                 }
             } else {
@@ -113,6 +119,8 @@ impl Args {
         merge_opt::<String>(&mut self.player, parser.opt_value_from_str("-p")?);
         merge_opt::<String>(&mut self.player_args, parser.opt_value_from_str("-a")?);
         merge_opt::<u32>(&mut self.max_retries, parser.opt_value_from_str("--max-retries")?);
+        merge_opt::<u32>(&mut self.http_retries, parser.opt_value_from_str("--http-retries")?);
+        merge_opt::<u64>(&mut self.http_connect_timeout, parser.opt_value_from_str("--http-connect-timeout")?);
 
         merge_opt_opt::<String>(&mut self.client_id, parser.opt_value_from_str("--client-id")?);
         merge_opt_opt::<String>(&mut self.auth_token, parser.opt_value_from_str("--auth-token")?);
@@ -158,15 +166,15 @@ fn merge_opt<T>(dst: &mut T, val: Option<T>) {
     }
 }
 
-fn merge_switch(dst: &mut bool, val: bool) {
-    if val {
-        *dst = true;
-    }
-}
-
 fn merge_opt_opt<T>(dst: &mut Option<T>, val: Option<T>) {
     if val.is_some() {
         *dst = val;
+    }
+}
+
+fn merge_switch(dst: &mut bool, val: bool) {
+    if val {
+        *dst = true;
     }
 }
 

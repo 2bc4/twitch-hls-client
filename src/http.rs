@@ -10,7 +10,7 @@ use curl::easy::{Easy2, Handler, InfoType, List, WriteError};
 use log::debug;
 use url::Url;
 
-use crate::constants;
+use crate::{constants, ARGS};
 
 #[derive(Debug)]
 pub enum Error {
@@ -28,8 +28,10 @@ impl fmt::Display for Error {
 }
 
 fn init_curl<T: Write>(handle: &mut Easy2<RequestHandler<T>>, url: &Url) -> Result<()> {
+    let args = ARGS.get().unwrap();
+
     handle.verbose(log::max_level() == log::LevelFilter::Debug)?;
-    handle.connect_timeout(Duration::from_secs(constants::HTTP_CONNECT_TIMEOUT_SECS))?;
+    handle.connect_timeout(Duration::from_secs(args.http_connect_timeout))?;
     handle.tcp_nodelay(true)?;
     handle.accept_encoding("")?;
     handle.useragent(constants::USER_AGENT)?;
@@ -39,14 +41,13 @@ fn init_curl<T: Write>(handle: &mut Easy2<RequestHandler<T>>, url: &Url) -> Resu
 }
 
 fn perform<T: Write>(handle: &Easy2<RequestHandler<T>>) -> Result<()> {
+    let args = ARGS.get().unwrap();
+
     let mut retries = 0;
     loop {
         match handle.perform() {
             Ok(()) => break,
-            Err(_) if retries < constants::HTTP_RETRIES => {
-                retries += 1;
-                continue;
-            }
+            Err(_) if retries < args.http_retries => retries += 1,
             Err(e) => return Err(e.into()),
         }
     }
