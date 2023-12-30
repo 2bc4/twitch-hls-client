@@ -281,6 +281,7 @@ pub fn fetch_twitch_playlist(
                     .context("Invalid token")?,
             ),
             ("player_version", "1.23.0"),
+            ("warp", "true"),
         ],
     )?;
 
