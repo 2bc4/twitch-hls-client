@@ -66,7 +66,7 @@ impl Worker {
         };
 
         let mut request = RawRequest::get(&url, pipe)?;
-        if check_error(request.call())?.is_some() {
+        if should_exit(request.call())? {
             return Ok(());
         };
 
@@ -77,19 +77,19 @@ impl Worker {
             };
 
             request.url(&url)?;
-            if check_error(request.call())?.is_some() {
+            if should_exit(request.call())? {
                 return Ok(());
             };
         }
     }
 }
 
-fn check_error(result: Result<()>) -> Result<Option<()>> {
+fn should_exit(result: Result<()>) -> Result<bool> {
     match result {
-        Ok(()) => Ok(None),
+        Ok(()) => Ok(false),
         Err(e) => match e.downcast_ref::<io::Error>() {
             Some(r) => match r.kind() {
-                BrokenPipe => Ok(Some(())),
+                BrokenPipe => Ok(true),
                 _ => Err(e),
             },
             _ => Err(e),

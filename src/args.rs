@@ -119,8 +119,14 @@ impl Args {
         merge_opt::<String>(&mut self.player, parser.opt_value_from_str("-p")?);
         merge_opt::<String>(&mut self.player_args, parser.opt_value_from_str("-a")?);
         merge_opt::<u32>(&mut self.max_retries, parser.opt_value_from_str("--max-retries")?);
-        merge_opt::<u32>(&mut self.http_retries, parser.opt_value_from_str("--http-retries")?);
-        merge_opt::<u64>(&mut self.http_connect_timeout, parser.opt_value_from_str("--http-connect-timeout")?);
+        merge_opt::<u32>(
+            &mut self.http_retries,
+            parser.opt_value_from_str("--http-retries")?,
+        );
+        merge_opt::<u64>(
+            &mut self.http_connect_timeout,
+            parser.opt_value_from_str("--http-connect-timeout")?,
+        );
 
         merge_opt_opt::<String>(&mut self.client_id, parser.opt_value_from_str("--client-id")?);
         merge_opt_opt::<String>(&mut self.auth_token, parser.opt_value_from_str("--auth-token")?);

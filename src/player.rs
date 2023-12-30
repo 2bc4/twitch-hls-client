@@ -42,6 +42,7 @@ impl Player {
             .process
             .wait()
             .context("Failed to wait for player process")?;
+
         Ok(())
     }
 

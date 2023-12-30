@@ -27,15 +27,15 @@ fn run(worker: &Worker, mut playlist: MediaPlaylist, max_retries: u32) -> Result
     worker.send(playlist.urls.take(PrefetchUrlKind::Newest)?)?;
     worker.sync()?;
 
-    let mut retry_count: u32 = 0;
+    let mut retries: u32 = 0;
     loop {
         let time = Instant::now();
         match playlist.reload() {
-            Ok(()) => retry_count = 0,
+            Ok(()) => retries = 0,
             Err(e) => match e.downcast_ref::<HlsErr>() {
                 Some(HlsErr::Unchanged | HlsErr::InvalidPrefetchUrl | HlsErr::InvalidDuration) => {
-                    retry_count += 1;
-                    if retry_count == max_retries {
+                    retries += 1;
+                    if retries == max_retries {
                         info!("Maximum retries on media playlist reached, exiting...");
                         return Ok(());
                     }

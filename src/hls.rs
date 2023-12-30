@@ -193,7 +193,7 @@ pub fn fetch_proxy_playlist(servers: &[String], channel: &str, quality: &str) ->
         .iter()
         .find_map(|s| {
             info!("Using server {}://{}", s.scheme(), s.host_str().unwrap());
-            let mut request = match TextRequest::get(&s.clone()) {
+            let mut request = match TextRequest::get(s) {
                 Ok(request) => request,
                 Err(e) => {
                     error!("{e}");
@@ -289,18 +289,18 @@ pub fn fetch_twitch_playlist(
 
 fn parse_variant_playlist(master_playlist: &str, quality: &str) -> Result<Url> {
     debug!("Master playlist:\n{master_playlist}");
-    let variant_playlist: Url = master_playlist
+    let playlist_url = master_playlist
         .lines()
         .skip_while(|s| !(s.contains("#EXT-X-MEDIA") && (s.contains(quality) || quality == "best")))
         .nth(2)
         .context("Invalid quality or malformed master playlist")?
-        .parse()?;
+        .parse::<Url>()?;
 
-    if !master_playlist.contains(r#"FUTURE="true""#) {
-        return Err(Error::NotLowLatency(variant_playlist.to_string()).into());
+    if !master_playlist.contains("FUTURE=\"true\"") {
+        return Err(Error::NotLowLatency(playlist_url.to_string()).into());
     }
 
-    Ok(variant_playlist)
+    Ok(playlist_url)
 }
 
 fn choose_client_id(client_id: &Option<String>, auth_token: &Option<String>) -> Result<String> {

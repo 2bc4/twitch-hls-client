@@ -27,41 +27,6 @@ impl fmt::Display for Error {
     }
 }
 
-fn init_curl<T: Write>(handle: &mut Easy2<RequestHandler<T>>, url: &Url) -> Result<()> {
-    let args = ARGS.get().unwrap();
-
-    handle.verbose(log::max_level() == log::LevelFilter::Debug)?;
-    handle.connect_timeout(Duration::from_secs(args.http_connect_timeout))?;
-    handle.tcp_nodelay(true)?;
-    handle.accept_encoding("")?;
-    handle.useragent(constants::USER_AGENT)?;
-    handle.url(url.as_ref())?;
-
-    Ok(())
-}
-
-fn perform<T: Write>(handle: &Easy2<RequestHandler<T>>) -> Result<()> {
-    let args = ARGS.get().unwrap();
-
-    let mut retries = 0;
-    loop {
-        match handle.perform() {
-            Ok(()) => break,
-            Err(_) if retries < args.http_retries => retries += 1,
-            Err(e) => return Err(e.into()),
-        }
-    }
-
-    handle.get_ref().check_error()?;
-
-    let code = handle.response_code()?;
-    if code != 200 {
-        return Err(Error::Status(code, handle.effective_url()?.unwrap().to_owned()).into());
-    }
-
-    Ok(())
-}
-
 pub struct RawRequest<T>
 where
     T: Write,
@@ -97,19 +62,17 @@ pub struct TextRequest {
 
 impl TextRequest {
     pub fn get(url: &Url) -> Result<Self> {
-        let mut request = Self::create();
-
-        init_curl(&mut request.handle, url)?;
+        let mut request = Self::create(url)?;
         request.handle.get(true)?;
+
         Ok(request)
     }
 
     pub fn post(url: &Url, data: &str) -> Result<Self> {
-        let mut request = Self::create();
-
-        init_curl(&mut request.handle, url)?;
+        let mut request = Self::create(url)?;
         request.handle.post(true)?;
         request.handle.post_fields_copy(data.as_bytes())?;
+
         Ok(request)
     }
 
@@ -122,16 +85,21 @@ impl TextRequest {
     }
 
     pub fn text(&mut self) -> Result<String> {
+        perform(&self.handle)?;
+
+        let text = str::from_utf8(self.handle.get_ref().writer.as_slice())?.to_owned();
         self.handle.get_mut().writer.clear();
 
-        perform(&self.handle)?;
-        Ok(str::from_utf8(self.handle.get_ref().writer.as_slice())?.to_owned())
+        Ok(text)
     }
 
-    fn create() -> Self {
-        Self {
+    fn create(url: &Url) -> Result<Self> {
+        let mut request = Self {
             handle: Easy2::new(RequestHandler::new(Vec::new())),
-        }
+        };
+
+        init_curl(&mut request.handle, url)?;
+        Ok(request)
     }
 }
 
@@ -179,4 +147,39 @@ impl<T: Write> RequestHandler<T> {
             .as_ref()
             .map_or_else(|| Ok(()), |e| Err(io::Error::from(e.kind())))
     }
+}
+
+fn init_curl<T: Write>(handle: &mut Easy2<RequestHandler<T>>, url: &Url) -> Result<()> {
+    let args = ARGS.get().unwrap();
+
+    handle.verbose(args.debug)?;
+    handle.connect_timeout(Duration::from_secs(args.http_connect_timeout))?;
+    handle.tcp_nodelay(true)?;
+    handle.accept_encoding("")?;
+    handle.useragent(constants::USER_AGENT)?;
+    handle.url(url.as_ref())?;
+
+    Ok(())
+}
+
+fn perform<T: Write>(handle: &Easy2<RequestHandler<T>>) -> Result<()> {
+    let args = ARGS.get().unwrap();
+
+    let mut retries = 0;
+    loop {
+        match handle.perform() {
+            Ok(()) => break,
+            Err(_) if retries < args.http_retries => retries += 1,
+            Err(e) => return Err(e.into()),
+        }
+    }
+
+    handle.get_ref().check_error()?;
+
+    let code = handle.response_code()?;
+    if code != 200 {
+        return Err(Error::Status(code, handle.effective_url()?.unwrap().to_owned()).into());
+    }
+
+    Ok(())
 }
