@@ -13,12 +13,15 @@ use std::time::Instant;
 
 use anyhow::Result;
 use log::{debug, info};
+use once_cell::sync::OnceCell;
 use simplelog::{format_description, ColorChoice, ConfigBuilder, LevelFilter, TermLogger, TerminalMode};
 
 use args::Args;
 use hls::{Error as HlsErr, MediaPlaylist, PrefetchUrlKind};
 use player::Player;
 use worker::{Error as WorkerErr, Worker};
+
+static ARGS: OnceCell<Args> = OnceCell::new();
 
 fn run(worker: &Worker, mut playlist: MediaPlaylist, max_retries: u32) -> Result<()> {
     worker.send(playlist.urls.take(PrefetchUrlKind::Newest)?)?;
@@ -50,7 +53,7 @@ fn run(worker: &Worker, mut playlist: MediaPlaylist, max_retries: u32) -> Result
 }
 
 fn main() -> Result<()> {
-    let args = Args::parse()?;
+    let args = ARGS.get_or_try_init(Args::parse)?;
     if args.debug {
         TermLogger::init(
             LevelFilter::Debug,
@@ -74,10 +77,10 @@ fn main() -> Result<()> {
     }
     debug!("{:?}", args);
 
-    let playlist_url = match args.servers {
-        Some(servers) => hls::fetch_proxy_playlist(&servers, &args.channel, &args.quality),
-        None => hls::fetch_twitch_playlist(&args.client_id, &args.auth_token, &args.channel, &args.quality),
-    };
+    let playlist_url = args.servers.as_ref().map_or_else(
+        || hls::fetch_twitch_playlist(&args.client_id, &args.auth_token, &args.channel, &args.quality),
+        |servers| hls::fetch_proxy_playlist(servers, &args.channel, &args.quality),
+    );
 
     let playlist_url = match playlist_url {
         Ok(playlist_url) => playlist_url,
