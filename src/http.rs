@@ -2,6 +2,7 @@ use std::{
     fmt,
     io::{self, Write},
     str,
+    time::Duration,
 };
 
 use anyhow::Result;
@@ -28,6 +29,7 @@ impl fmt::Display for Error {
 
 fn init_curl<T: Write>(handle: &mut Easy2<RequestHandler<T>>, url: &Url) -> Result<()> {
     handle.verbose(log::max_level() == log::LevelFilter::Debug)?;
+    handle.connect_timeout(Duration::from_secs(constants::HTTP_CONNECT_TIMEOUT_SECS))?;
     handle.tcp_nodelay(true)?;
     handle.accept_encoding("")?;
     handle.useragent(constants::USER_AGENT)?;

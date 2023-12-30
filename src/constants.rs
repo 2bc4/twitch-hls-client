@@ -9,3 +9,4 @@ pub const DEFAULT_CLIENT_ID: &str = "kimne78kx3ncx6brgo4mv6wki5h1ko";
 pub const DEFAULT_CONFIG_PATH: &str = "twitch-hls-client/config";
 
 pub const HTTP_RETRIES: u8 = 3;
+pub const HTTP_CONNECT_TIMEOUT_SECS: u64 = 5;
