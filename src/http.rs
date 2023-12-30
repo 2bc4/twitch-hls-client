@@ -27,18 +27,16 @@ impl fmt::Display for Error {
 }
 
 fn init_curl<T: Write>(handle: &mut Easy2<RequestHandler<T>>, url: &Url) -> Result<()> {
-    if log::max_level() == log::LevelFilter::Debug {
-        handle.verbose(true)?;
-    }
-
+    handle.verbose(log::max_level() == log::LevelFilter::Debug)?;
     handle.tcp_nodelay(true)?;
+    handle.accept_encoding("")?;
     handle.useragent(constants::USER_AGENT)?;
     handle.url(url.as_ref())?;
 
     Ok(())
 }
 
-fn perform<T: Write>(handle: &mut Easy2<RequestHandler<T>>) -> Result<()> {
+fn perform<T: Write>(handle: &Easy2<RequestHandler<T>>) -> Result<()> {
     let mut retries = 0;
     loop {
         match handle.perform() {
@@ -85,7 +83,7 @@ impl<T: Write> RawRequest<T> {
     }
 
     pub fn call(&mut self) -> Result<()> {
-        perform(&mut self.handle)?;
+        perform(&self.handle)?;
         Ok(())
     }
 }
@@ -123,7 +121,7 @@ impl TextRequest {
     pub fn text(&mut self) -> Result<String> {
         self.handle.get_mut().writer.clear();
 
-        perform(&mut self.handle)?;
+        perform(&self.handle)?;
         Ok(str::from_utf8(self.handle.get_ref().writer.as_slice())?.to_owned())
     }
 
