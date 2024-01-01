@@ -87,8 +87,9 @@ impl TextRequest {
     pub fn text(&mut self) -> Result<String> {
         perform(&self.handle)?;
 
-        let text = str::from_utf8(self.handle.get_ref().writer.as_slice())?.to_owned();
-        self.handle.get_mut().writer.clear();
+        let buf = &mut self.handle.get_mut().writer;
+        let text = String::from_utf8_lossy(buf).to_string();
+        buf.clear();
 
         Ok(text)
     }
