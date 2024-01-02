@@ -74,9 +74,11 @@ jobs:
         with:
           targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release --target=${{ matrix.target }} --features http2
+        if: ${{ contains(matrix.target, 'linux') }}
       - run: cargo build --release --target=${{ matrix.target }}
+        if: ${{ !contains(matrix.target, 'linux') }}
       - name: Smoke Test
-        if: ${{ !contains(matrix.target, 'aarch64') }}
         run: cargo run --release --target=${{ matrix.target }} -- -V
       - name: Move Binary
         id: mv
