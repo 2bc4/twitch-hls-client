@@ -81,6 +81,7 @@ jobs:
       - name: Smoke Test
         run: cargo run --release --target=${{ matrix.target }} --features http2 -- -V
         if: ${{ contains(matrix.target, 'linux') }}
+      - name: Smoke Test
         run: cargo run --release --target=${{ matrix.target }} -- -V
         if: ${{ !contains(matrix.target, 'linux') }}
       - name: Move Binary
