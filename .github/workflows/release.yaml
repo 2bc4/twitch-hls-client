@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version: [ 'ubuntu-latest', 'windows-latest', 'macos-latest' ]
+        version: [ 'ubuntu-latest', 'windows-latest' ]
     runs-on: ${{ matrix.version }}
     steps:
       - uses: actions/checkout@v3
@@ -33,7 +33,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version: [ 'ubuntu-latest', 'windows-latest', 'macos-latest' ]
+        version: [ 'ubuntu-latest', 'windows-latest' ]
         cargo-cmd:
           - fmt --all -- --check
           - clippy --all
@@ -66,12 +66,6 @@ jobs:
             binName: twitch-hls-client.exe
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
-            binName: twitch-hls-client
-          - target: x86_64-apple-darwin
-            os: macos-latest
-            binName: twitch-hls-client
-          - target: aarch64-apple-darwin
-            os: macos-latest
             binName: twitch-hls-client
     steps:
       - uses: actions/checkout@v3
