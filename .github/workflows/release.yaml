@@ -79,7 +79,10 @@ jobs:
       - run: cargo build --release --target=${{ matrix.target }}
         if: ${{ !contains(matrix.target, 'linux') }}
       - name: Smoke Test
+        run: cargo run --release --target=${{ matrix.target }} --features http2 -- -V
+        if: ${{ contains(matrix.target, 'linux') }}
         run: cargo run --release --target=${{ matrix.target }} -- -V
+        if: ${{ !contains(matrix.target, 'linux') }}
       - name: Move Binary
         id: mv
         run: mv "target/${{ matrix.target }}/release/${{ matrix.binName }}" .
