@@ -36,7 +36,7 @@ Options:
           Prevent specified channels from using a playlist proxy.
           Can be multiple comma separated channels.
       --http-retries <COUNT>
-          Attempt HTTP requests <COUNT> times before giving up [default: 3]
+          Retry HTTP requests <COUNT> times before giving up [default: 3]
       --http-connect-timeout <SECONDS>
           HTTP connect timeout in seconds [default: 5]
   -h, --help
