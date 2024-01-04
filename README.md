@@ -62,6 +62,8 @@ AV: 03:57:23 / 03:57:23 (100%) A-V:  0.000 Cache: 0.7s/482KB
 ```
 
 ### Building
-First, install [Rust](https://rustup.rs).
+Install [Rust](https://rustup.rs) then run `cargo install --locked --git https://github.com/2bc4/twitch-hls-client.git` or clone the repo and run `cargo build --release`.
 
-Then run `cargo install --locked --git https://github.com/2bc4/twitch-hls-client.git` or clone the repo and run `cargo build --release`.
+#### Cargo features
+- `http2` - Enable HTTP/2 support (known to cause issues on Windows 10)
+- `static-curl` - Build and statically link to libcurl instead of dynamically linking to the system libcurl
