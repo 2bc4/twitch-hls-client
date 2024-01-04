@@ -6,7 +6,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use log::{debug, error, info};
 use rand::{
     distributions::{Alphanumeric, DistString},
@@ -15,7 +15,10 @@ use rand::{
 use serde_json::{json, Value};
 use url::Url;
 
-use crate::{constants, http::TextRequest};
+use crate::{
+    constants,
+    http::{self, TextRequest},
+};
 
 #[derive(Debug)]
 pub enum Error {
@@ -212,6 +215,11 @@ pub fn fetch_proxy_playlist(servers: &[String], channel: &str, quality: &str) ->
             match request.text() {
                 Ok(playlist_url) => Some(playlist_url),
                 Err(e) => {
+                    if http::Error::is_not_found(&e) {
+                        error!("Playlist not found. Stream offline?");
+                        return None;
+                    }
+
                     error!("{e}");
                     None
                 }
@@ -293,7 +301,18 @@ pub fn fetch_twitch_playlist(
         ],
     )?;
 
-    parse_variant_playlist(&TextRequest::get(&url)?.text()?, quality)
+    let master_playlist = match TextRequest::get(&url)?.text() {
+        Ok(master_playlist) => master_playlist,
+        Err(e) => {
+            if http::Error::is_not_found(&e) {
+                bail!("Stream offline");
+            }
+
+            return Err(e);
+        }
+    };
+
+    parse_variant_playlist(&master_playlist, quality)
 }
 
 fn parse_variant_playlist(master_playlist: &str, quality: &str) -> Result<Url> {

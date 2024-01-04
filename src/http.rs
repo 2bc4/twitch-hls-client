@@ -15,6 +15,7 @@ use crate::{constants, ARGS};
 #[derive(Debug)]
 pub enum Error {
     Status(u32, String),
+    NotFound(String),
 }
 
 impl std::error::Error for Error {}
@@ -22,8 +23,15 @@ impl std::error::Error for Error {}
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Status(code, url) => write!(f, "Status code {code} on {url}"),
+            Self::Status(code, url) => write!(f, "{code} on {url}"),
+            Self::NotFound(url) => write!(f, "{url} not found"),
         }
+    }
+}
+
+impl Error {
+    pub fn is_not_found(error: &anyhow::Error) -> bool {
+        matches!(error.downcast_ref::<Self>(), Some(Self::NotFound(_)))
     }
 }
 
@@ -178,9 +186,9 @@ fn perform<T: Write>(handle: &Easy2<RequestHandler<T>>) -> Result<()> {
     handle.get_ref().check_error()?;
 
     let code = handle.response_code()?;
-    if code != 200 {
-        return Err(Error::Status(code, handle.effective_url()?.unwrap().to_owned()).into());
+    match code {
+        200 => Ok(()),
+        404 => Err(Error::NotFound(handle.effective_url()?.unwrap().to_owned()).into()),
+        _ => Err(Error::Status(code, handle.effective_url()?.unwrap().to_owned()).into()),
     }
-
-    Ok(())
 }

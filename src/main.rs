@@ -17,9 +17,9 @@ use once_cell::sync::OnceCell;
 use simplelog::{format_description, ColorChoice, ConfigBuilder, LevelFilter, TermLogger, TerminalMode};
 
 use args::Args;
-use hls::{Error as HlsErr, MediaPlaylist, PrefetchUrlKind};
+use hls::{MediaPlaylist, PrefetchUrlKind};
 use player::Player;
-use worker::{Error as WorkerErr, Worker};
+use worker::Worker;
 
 static ARGS: OnceCell<Args> = OnceCell::new();
 
@@ -30,8 +30,8 @@ fn run(worker: &Worker, mut playlist: MediaPlaylist) -> Result<()> {
     loop {
         let time = Instant::now();
         if let Err(e) = playlist.reload() {
-            match e.downcast_ref::<HlsErr>() {
-                Some(HlsErr::Unchanged) => {
+            match e.downcast_ref::<hls::Error>() {
+                Some(hls::Error::Unchanged) => {
                     debug!("{e}, retrying in half segment duration...");
                     playlist.sleep_half_segment_duration(time.elapsed());
                     continue;
@@ -77,8 +77,8 @@ fn main() -> Result<()> {
 
     let playlist_url = match playlist_url {
         Ok(playlist_url) => playlist_url,
-        Err(e) => match e.downcast_ref::<HlsErr>() {
-            Some(HlsErr::NotLowLatency(url)) => {
+        Err(e) => match e.downcast_ref::<hls::Error>() {
+            Some(hls::Error::NotLowLatency(url)) => {
                 info!("{e}, opening player with playlist URL");
                 Player::spawn_and_wait(&args.player, &args.player_args, url, args.quiet)?;
                 return Ok(());
@@ -97,12 +97,21 @@ fn main() -> Result<()> {
     let worker = Worker::new(player.stdin()?)?;
     match run(&worker, playlist) {
         Ok(()) => Ok(()),
-        Err(e) => match e.downcast_ref::<WorkerErr>() {
-            Some(WorkerErr::SendFailed | WorkerErr::SyncFailed) => {
-                info!("Player closed, exiting...");
-                Ok(())
+        Err(e) => {
+            if http::Error::is_not_found(&e) {
+                info!("Stream ended, exiting...");
+                return Ok(());
             }
-            _ => Err(e),
-        },
+
+            if matches!(
+                e.downcast_ref::<worker::Error>(),
+                Some(worker::Error::SendFailed | worker::Error::SyncFailed)
+            ) {
+                info!("Player closed, exiting...");
+                return Ok(());
+            }
+
+            Err(e)
+        }
     }
 }
