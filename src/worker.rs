@@ -7,6 +7,7 @@ use std::{
 };
 
 use anyhow::{Context, Result};
+use log::debug;
 use url::Url;
 
 use crate::http::RawRequest;
@@ -61,6 +62,7 @@ impl Worker {
     }
 
     fn thread_main(url_rx: &Receiver<Url>, sync_tx: &SyncSender<()>, pipe: ChildStdin) -> Result<()> {
+        debug!("Starting...");
         let Ok(url) = url_rx.recv() else {
             return Ok(());
         };
@@ -75,6 +77,7 @@ impl Worker {
             let Ok(url) = url_rx.recv() else {
                 return Ok(());
             };
+            debug!("Beginning new segment request");
 
             request.url(&url)?;
             if should_exit(request.call())? {
@@ -85,6 +88,7 @@ impl Worker {
 }
 
 fn should_exit(result: Result<()>) -> Result<bool> {
+    debug!("Finished writing segment");
     match result {
         Ok(()) => Ok(false),
         Err(e) => match e.downcast_ref::<io::Error>() {

@@ -130,16 +130,12 @@ impl MediaPlaylist {
     }
 
     pub fn sleep_segment_duration(&self, elapsed: Duration) {
-        if let Some(sleep_time) = self.duration.checked_sub(elapsed) {
-            thread::sleep(sleep_time);
-        }
+        Self::sleep_thread(self.duration, elapsed);
     }
 
     pub fn sleep_half_segment_duration(&self, elapsed: Duration) {
         if let Some(half) = self.duration.checked_div(2) {
-            if let Some(sleep_time) = half.checked_sub(elapsed) {
-                thread::sleep(sleep_time);
-            }
+            Self::sleep_thread(half, elapsed);
         }
     }
 
@@ -179,6 +175,13 @@ impl MediaPlaylist {
                 .or(Err(Error::InvalidDuration))?,
         )
         .or(Err(Error::InvalidDuration))
+    }
+
+    fn sleep_thread(duration: Duration, elapsed: Duration) {
+        if let Some(sleep_time) = duration.checked_sub(elapsed) {
+            debug!("Sleeping thread for {:?}", sleep_time);
+            thread::sleep(sleep_time);
+        }
     }
 }
 
