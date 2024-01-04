@@ -16,6 +16,7 @@ panic = "abort"
 [features]
 default = []
 http2 = ["curl/http2"]
+static-curl = ["curl/static-curl"]
 
 [dependencies]
 anyhow = { version = "1.0.78", features = ["backtrace"] }
