@@ -30,14 +30,13 @@ fn run(worker: &Worker, mut playlist: MediaPlaylist) -> Result<()> {
     loop {
         let time = Instant::now();
         if let Err(e) = playlist.reload() {
-            match e.downcast_ref::<hls::Error>() {
-                Some(hls::Error::Unchanged) => {
-                    debug!("{e}, retrying in half segment duration...");
-                    playlist.sleep_half_segment_duration(time.elapsed());
-                    continue;
-                }
-                _ => return Err(e),
-            };
+            if matches!(e.downcast_ref::<hls::Error>(), Some(hls::Error::Unchanged)) {
+                debug!("{e}, retrying in half segment duration...");
+                playlist.sleep_half_segment_duration(time.elapsed());
+                continue;
+            }
+
+            return Err(e);
         }
 
         worker.send(playlist.urls.take(PrefetchUrlKind::Next)?)?;
