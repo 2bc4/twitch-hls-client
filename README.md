@@ -26,8 +26,6 @@ Options:
           Enable debug logging
   -q, --quiet
           Silences the player's output
-      --max-retries <COUNT>
-          Attempt to fetch the media playlist <COUNT> times before exiting [default: 50]
       --passthrough
           Print the playlist URL to stdout and exit
       --client-id <ID>

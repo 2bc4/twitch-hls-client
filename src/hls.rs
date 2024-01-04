@@ -132,6 +132,14 @@ impl MediaPlaylist {
         }
     }
 
+    pub fn sleep_half_segment_duration(&self, elapsed: Duration) {
+        if let Some(subtracted) = self.duration.checked_sub(elapsed) {
+            if let Some(sleep_time) = subtracted.checked_div(2) {
+                thread::sleep(sleep_time);
+            }
+        }
+    }
+
     fn fetch(&mut self) -> Result<String> {
         let playlist = self.request.text()?;
         debug!("Playlist:\n{playlist}");

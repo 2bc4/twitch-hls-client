@@ -23,28 +23,21 @@ use worker::{Error as WorkerErr, Worker};
 
 static ARGS: OnceCell<Args> = OnceCell::new();
 
-fn run(worker: &Worker, mut playlist: MediaPlaylist, max_retries: u32) -> Result<()> {
+fn run(worker: &Worker, mut playlist: MediaPlaylist) -> Result<()> {
     worker.send(playlist.urls.take(PrefetchUrlKind::Newest)?)?;
     worker.sync()?;
 
-    let mut retries: u32 = 0;
     loop {
         let time = Instant::now();
-        match playlist.reload() {
-            Ok(()) => retries = 0,
-            Err(e) => match e.downcast_ref::<HlsErr>() {
-                Some(HlsErr::Unchanged | HlsErr::InvalidPrefetchUrl | HlsErr::InvalidDuration) => {
-                    retries += 1;
-                    if retries == max_retries {
-                        info!("Maximum retries on media playlist reached, exiting...");
-                        return Ok(());
-                    }
-
-                    debug!("{e}, retrying...");
+        if let Err(e) = playlist.reload() {
+            match e.downcast_ref::<HlsErr>() {
+                Some(HlsErr::Unchanged) => {
+                    debug!("{e}, retrying in half segment duration...");
+                    playlist.sleep_half_segment_duration(time.elapsed());
                     continue;
                 }
                 _ => return Err(e),
-            },
+            };
         }
 
         worker.send(playlist.urls.take(PrefetchUrlKind::Next)?)?;
@@ -102,7 +95,7 @@ fn main() -> Result<()> {
     let playlist = MediaPlaylist::new(&playlist_url)?;
     let mut player = Player::spawn(&args.player, &args.player_args, args.quiet)?;
     let worker = Worker::new(player.stdin()?)?;
-    match run(&worker, playlist, args.max_retries) {
+    match run(&worker, playlist) {
         Ok(()) => Ok(()),
         Err(e) => match e.downcast_ref::<WorkerErr>() {
             Some(WorkerErr::SendFailed | WorkerErr::SyncFailed) => {

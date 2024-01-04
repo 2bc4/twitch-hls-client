@@ -13,7 +13,6 @@ pub struct Args {
     pub player_args: String,
     pub debug: bool,
     pub quiet: bool,
-    pub max_retries: u32,
     pub passthrough: bool,
     pub client_id: Option<String>,
     pub auth_token: Option<String>,
@@ -32,7 +31,6 @@ impl Default for Args {
             player_args: String::from("-"),
             debug: bool::default(),
             quiet: bool::default(),
-            max_retries: 50,
             passthrough: bool::default(),
             client_id: Option::default(),
             auth_token: Option::default(),
@@ -97,7 +95,6 @@ impl Args {
                     "player-args" => self.player_args = split.1.into(),
                     "debug" => self.debug = split.1.parse()?,
                     "quiet" => self.quiet = split.1.parse()?,
-                    "max-retries" => self.max_retries = split.1.parse()?,
                     "passthrough" => self.passthrough = split.1.parse()?,
                     "client-id" => self.client_id = Some(split.1.into()),
                     "auth-token" => self.auth_token = Some(split.1.into()),
@@ -118,7 +115,6 @@ impl Args {
     fn merge_args(&mut self, parser: &mut Arguments) -> Result<()> {
         merge_opt::<String>(&mut self.player, parser.opt_value_from_str("-p")?);
         merge_opt::<String>(&mut self.player_args, parser.opt_value_from_str("-a")?);
-        merge_opt::<u32>(&mut self.max_retries, parser.opt_value_from_str("--max-retries")?);
         merge_opt::<u32>(
             &mut self.http_retries,
             parser.opt_value_from_str("--http-retries")?,
