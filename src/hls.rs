@@ -215,7 +215,7 @@ pub fn fetch_proxy_playlist(servers: &[String], channel: &str, quality: &str) ->
             match request.text() {
                 Ok(playlist_url) => Some(playlist_url),
                 Err(e) => {
-                    if http::Error::is_not_found(&e) {
+                    if http::Error::downcast_is_not_found(&e) {
                         error!("Playlist not found. Stream offline?");
                         return None;
                     }
@@ -304,7 +304,7 @@ pub fn fetch_twitch_playlist(
     let master_playlist = match TextRequest::get(&url)?.text() {
         Ok(master_playlist) => master_playlist,
         Err(e) => {
-            if http::Error::is_not_found(&e) {
+            if http::Error::downcast_is_not_found(&e) {
                 bail!("Stream offline");
             }
 

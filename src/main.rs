@@ -97,7 +97,7 @@ fn main() -> Result<()> {
     match run(&worker, playlist) {
         Ok(()) => Ok(()),
         Err(e) => {
-            if http::Error::is_not_found(&e) {
+            if http::Error::downcast_is_not_found(&e) {
                 info!("Stream ended, exiting...");
                 return Ok(());
             }

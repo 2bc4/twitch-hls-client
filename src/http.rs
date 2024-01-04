@@ -30,7 +30,7 @@ impl fmt::Display for Error {
 }
 
 impl Error {
-    pub fn is_not_found(error: &anyhow::Error) -> bool {
+    pub fn downcast_is_not_found(error: &anyhow::Error) -> bool {
         matches!(error.downcast_ref::<Self>(), Some(Self::NotFound(_)))
     }
 }
