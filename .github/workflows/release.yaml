@@ -51,48 +51,61 @@ jobs:
     name: Release
     needs: lint
     runs-on: ${{ matrix.os }}
-    env:
-      CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS: "-Ctarget-cpu=x86-64-v2"
-      CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: "-Ctarget-cpu=x86-64-v2"
     strategy:
       fail-fast: false
       matrix:
         include:
           - target: x86_64-pc-windows-msvc
+            target-cpu: x86-64
             os: windows-latest
-            binName: twitch-hls-client.exe
+            features: default
+            bin-name: twitch-hls-client.exe
+            zip-name: x86_64-pc-windows-msvc
+          - target: x86_64-pc-windows-msvc
+            target-cpu: x86-64-v3
+            os: windows-latest
+            features: default
+            bin-name: twitch-hls-client.exe
+            zip-name: x86_64-v3-pc-windows-msvc
           - target: i686-pc-windows-msvc
+            target-cpu: i686
             os: windows-latest
-            binName: twitch-hls-client.exe
+            features: default
+            bin-name: twitch-hls-client.exe
+            zip-name: i686-pc-windows-msvc
           - target: x86_64-unknown-linux-gnu
+            target-cpu: x86-64
             os: ubuntu-latest
-            binName: twitch-hls-client
+            features: http2
+            bin-name: twitch-hls-client
+            zip-name: x86_64-unknown-linux-gnu
+          - target: x86_64-unknown-linux-gnu
+            target-cpu: x86-64-v3
+            os: ubuntu-latest
+            features: http2
+            bin-name: twitch-hls-client
+            zip-name: x86_64-v3-unknown-linux-gnu
     steps:
       - uses: actions/checkout@v3
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo build --release --target=${{ matrix.target }} --features http2
-        if: ${{ contains(matrix.target, 'linux') }}
-      - run: cargo build --release --target=${{ matrix.target }}
-        if: ${{ !contains(matrix.target, 'linux') }}
+      - name: Build
+        shell: bash
+        run: cargo build --release --target=${{ matrix.target }} --features ${{ matrix.features }} --config 'build.rustflags="-Ctarget-cpu=${{ matrix.target-cpu }}"'
       - name: Smoke Test
-        run: cargo run --release --target=${{ matrix.target }} --features http2 -- -V
-        if: ${{ contains(matrix.target, 'linux') }}
-      - name: Smoke Test
-        run: cargo run --release --target=${{ matrix.target }} -- -V
-        if: ${{ !contains(matrix.target, 'linux') }}
+        shell: bash
+        run: cargo run --release --target=${{ matrix.target }} --features ${{ matrix.features }} --config 'build.rustflags="-Ctarget-cpu=${{ matrix.target-cpu }}"' -- -V
       - name: Move Binary
         id: mv
-        run: mv "target/${{ matrix.target }}/release/${{ matrix.binName }}" .
+        run: mv "target/${{ matrix.target }}/release/${{ matrix.bin-name }}" .
       - name: Zip Files
         uses: vimtor/action-zip@v1.1
         id: archive
         with:
-          files: README.md LICENSE ${{ matrix.binName }}
-          dest: twitch-hls-client-${{ matrix.target }}.zip
+          files: README.md LICENSE ${{ matrix.bin-name }}
+          dest: twitch-hls-client-${{ matrix.zip-name }}.zip
       - name: Upload Archive
         uses: ncipollo/release-action@v1
         with:
@@ -100,7 +113,7 @@ jobs:
           allowUpdates: true
           updateOnlyUnreleased: true
           artifactErrorsFailBuild: true
-          artifacts: twitch-hls-client-${{ matrix.target }}.zip
+          artifacts: twitch-hls-client-${{ matrix.zip-name }}.zip
           artifactContentType: application/zip
           omitBodyDuringUpdate: true
           omitNameDuringUpdate: true
