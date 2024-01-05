@@ -61,32 +61,53 @@ jobs:
             features: default
             bin-name: twitch-hls-client.exe
             zip-name: x86_64-pc-windows-msvc
+
           - target: x86_64-pc-windows-msvc
             target-cpu: x86-64-v3
             os: windows-latest
             features: default
             bin-name: twitch-hls-client.exe
             zip-name: x86_64-v3-pc-windows-msvc
+
           - target: i686-pc-windows-msvc
             target-cpu: i686
             os: windows-latest
             features: default
             bin-name: twitch-hls-client.exe
             zip-name: i686-pc-windows-msvc
+
           - target: x86_64-unknown-linux-gnu
             target-cpu: x86-64
             os: ubuntu-latest
             features: http2
             bin-name: twitch-hls-client
             zip-name: x86_64-unknown-linux-gnu
+
           - target: x86_64-unknown-linux-gnu
             target-cpu: x86-64-v3
             os: ubuntu-latest
             features: http2
             bin-name: twitch-hls-client
             zip-name: x86_64-v3-unknown-linux-gnu
+
+          - target: x86_64-unknown-linux-gnu
+            target-cpu: x86-64
+            os: ubuntu-latest
+            features: http2,static-curl
+            bin-name: twitch-hls-client
+            zip-name: static-curl-x86_64-unknown-linux-gnu
+
+          - target: x86_64-unknown-linux-gnu
+            target-cpu: x86-64-v3
+            os: ubuntu-latest
+            features: http2,static-curl
+            bin-name: twitch-hls-client
+            zip-name: static-curl-x86_64-v3-unknown-linux-gnu
     steps:
       - uses: actions/checkout@v3
+      - name: Install libcurl
+        if: ${{ contains(matrix.os, 'ubuntu') }}
+        run: sudo apt-get install -y libcurl4-openssl-dev
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
