@@ -1,6 +1,6 @@
 [package]
 name = "twitch-hls-client"
-version = "0.7.2"
+version = "0.7.3"
 authors = ["2bc4 <119853089+2bc4@users.noreply.github.com>"]
 description = "Minimal CLI client for watching low latency Twitch streams"
 license = "GPL-3.0-or-later"
@@ -19,13 +19,13 @@ http2 = ["curl/http2"]
 static-curl = ["curl/static-curl"]
 
 [dependencies]
-anyhow = { version = "1.0.78", features = ["backtrace"] }
+anyhow = { version = "1.0.79", features = ["backtrace"] }
 curl = { git = "https://github.com/alexcrichton/curl-rust.git", rev = "0c1dddf" }
 log = "0.4.20"
 once_cell = "1.19.0"
 pico-args = { version = "0.5.0", features = ["eq-separator"] }
 rand = "0.8.5"
-serde_json = "1.0.108"
+serde_json = "1.0.111"
 simplelog = "0.12.1"
 time = "0.3.31"
 url = "2.5.0"
