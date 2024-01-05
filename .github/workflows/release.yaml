@@ -76,6 +76,27 @@ jobs:
             bin-name: twitch-hls-client.exe
             zip-name: i686-pc-windows-msvc
 
+          - target: x86_64-pc-windows-msvc
+            target-cpu: x86-64
+            os: windows-latest
+            features: http2
+            bin-name: twitch-hls-client.exe
+            zip-name: http2-x86_64-pc-windows-msvc
+
+          - target: x86_64-pc-windows-msvc
+            target-cpu: x86-64-v3
+            os: windows-latest
+            features: http2
+            bin-name: twitch-hls-client.exe
+            zip-name: http2-x86_64-v3-pc-windows-msvc
+
+          - target: i686-pc-windows-msvc
+            target-cpu: i686
+            os: windows-latest
+            features: http2
+            bin-name: twitch-hls-client.exe
+            zip-name: http2-i686-pc-windows-msvc
+
           - target: x86_64-unknown-linux-gnu
             target-cpu: x86-64
             os: ubuntu-latest
