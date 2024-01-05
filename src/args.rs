@@ -55,11 +55,10 @@ impl Args {
         if parser.contains("-V") || parser.contains("--version") {
             let curl_version = curl::Version::get();
             eprintln!(
-                "{} {} (curl {} [dynamically linked: {}])",
+                "{} {} (curl {})",
                 env!("CARGO_PKG_NAME"),
                 env!("CARGO_PKG_VERSION"),
                 curl_version.version(),
-                !curl_version.vendored()
             );
             process::exit(0);
         }
