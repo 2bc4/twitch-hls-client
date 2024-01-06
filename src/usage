@@ -23,7 +23,7 @@ Options:
   -q, --quiet
           Silences the player's output
       --passthrough
-          Print the playlist URL to stdout and exit
+          Passthrough playlist URL to player and do nothing else
       --client-id <ID>
           Value to be used in the Client-Id header.
           If not specified will use the default client ID.

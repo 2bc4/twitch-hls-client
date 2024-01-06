@@ -30,14 +30,15 @@ impl Player {
         })
     }
 
-    pub fn spawn_and_wait(path: &str, args: &str, url: &str, quiet: bool) -> Result<()> {
-        let new_args = args
+    pub fn passthrough(path: &str, args: &str, quiet: bool, url: &str) -> Result<()> {
+        info!("Passing through playlist URL to player");
+        let args = args
             .split_whitespace()
             .map(|s| if s == "-" { url.to_owned() } else { s.to_owned() })
             .collect::<Vec<String>>()
             .join(" ");
 
-        let mut player = Self::spawn(path, &new_args, quiet)?;
+        let mut player = Self::spawn(path, &args, quiet)?;
         player
             .process
             .wait()

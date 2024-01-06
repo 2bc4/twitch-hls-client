@@ -26,7 +26,7 @@ pub enum Error {
     InvalidPrefetchUrl,
     InvalidDuration,
     Offline,
-    NotLowLatency(String),
+    NotLowLatency(Url),
 }
 
 impl std::error::Error for Error {}
@@ -309,7 +309,7 @@ fn parse_variant_playlist(master_playlist: &str, quality: &str) -> Result<Url> {
         .parse::<Url>()?;
 
     if !master_playlist.contains("FUTURE=\"true\"") {
-        return Err(Error::NotLowLatency(playlist_url.to_string()).into());
+        return Err(Error::NotLowLatency(playlist_url).into());
     }
 
     Ok(playlist_url)

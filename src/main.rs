@@ -79,18 +79,21 @@ fn main() -> Result<()> {
                 info!("{e}, exiting...");
                 return Ok(());
             }
-            Some(hls::Error::NotLowLatency(url)) => {
-                info!("{e}, opening player with playlist URL");
-                Player::spawn_and_wait(&args.player, &args.player_args, url, args.quiet)?;
-                return Ok(());
+            Some(hls::Error::NotLowLatency(playlist_url)) => {
+                info!("{e}");
+                return Player::passthrough(
+                    &args.player,
+                    &args.player_args,
+                    args.quiet,
+                    playlist_url.as_ref(),
+                );
             }
             _ => return Err(e),
         },
     };
 
     if args.passthrough {
-        println!("{playlist_url}");
-        return Ok(());
+        return Player::passthrough(&args.player, &args.player_args, args.quiet, playlist_url.as_ref());
     }
 
     let playlist = MediaPlaylist::new(&playlist_url)?;
