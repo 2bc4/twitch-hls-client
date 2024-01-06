@@ -54,6 +54,7 @@ impl Worker {
     }
 
     pub fn send(&self, url: Url) -> Result<(), Error> {
+        debug!("Sending URL to worker: {url}");
         self.url_tx.send(url).or(Err(Error::SendFailed))
     }
 
