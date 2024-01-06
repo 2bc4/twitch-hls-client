@@ -6,7 +6,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use log::{debug, error, info};
 use rand::{
     distributions::{Alphanumeric, DistString},
@@ -212,7 +212,7 @@ pub fn fetch_proxy_playlist(servers: &[String], channel: &str, quality: &str) ->
             match request.text() {
                 Ok(playlist_url) => Some(playlist_url),
                 Err(e) => {
-                    if http::Error::downcast_is_not_found(&e) {
+                    if matches!(e.downcast_ref::<http::Error>(), Some(http::Error::NotFound(_))) {
                         error!("Playlist not found. Stream offline?");
                         return None;
                     }
@@ -222,7 +222,7 @@ pub fn fetch_proxy_playlist(servers: &[String], channel: &str, quality: &str) ->
                 }
             }
         })
-        .ok_or_else(|| anyhow!("No servers available"))?;
+        .ok_or(Error::Offline)?;
 
     parse_variant_playlist(&playlist, quality)
 }
@@ -344,7 +344,10 @@ fn gen_id() -> String {
 }
 
 fn map_if_offline(error: anyhow::Error) -> anyhow::Error {
-    if http::Error::downcast_is_not_found(&error) {
+    if matches!(
+        error.downcast_ref::<http::Error>(),
+        Some(http::Error::NotFound(_))
+    ) {
         return Error::Offline.into();
     }
 

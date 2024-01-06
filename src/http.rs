@@ -29,12 +29,6 @@ impl fmt::Display for Error {
     }
 }
 
-impl Error {
-    pub fn downcast_is_not_found(error: &anyhow::Error) -> bool {
-        matches!(error.downcast_ref::<Self>(), Some(Self::NotFound(_)))
-    }
-}
-
 pub struct RawRequest<T>
 where
     T: Write,

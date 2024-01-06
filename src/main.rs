@@ -76,7 +76,7 @@ fn main() -> Result<()> {
         Ok(playlist_url) => playlist_url,
         Err(e) => match e.downcast_ref::<hls::Error>() {
             Some(hls::Error::Offline) => {
-                info!("Stream is offline, exiting...");
+                info!("{e}, exiting...");
                 return Ok(());
             }
             Some(hls::Error::NotLowLatency(url)) => {
