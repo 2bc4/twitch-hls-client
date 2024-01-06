@@ -75,6 +75,10 @@ fn main() -> Result<()> {
     ) {
         Ok(playlist_url) => playlist_url,
         Err(e) => match e.downcast_ref::<hls::Error>() {
+            Some(hls::Error::Offline) => {
+                info!("Stream is offline, exiting...");
+                return Ok(());
+            }
             Some(hls::Error::NotLowLatency(url)) => {
                 info!("{e}, opening player with playlist URL");
                 Player::spawn_and_wait(&args.player, &args.player_args, url, args.quiet)?;
@@ -95,7 +99,7 @@ fn main() -> Result<()> {
     match run(playlist, &worker) {
         Ok(()) => Ok(()),
         Err(e) => {
-            if http::Error::downcast_is_not_found(&e) {
+            if matches!(e.downcast_ref::<hls::Error>(), Some(hls::Error::Offline)) {
                 info!("Stream ended, exiting...");
                 return Ok(());
             }
