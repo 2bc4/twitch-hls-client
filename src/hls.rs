@@ -110,15 +110,7 @@ impl MediaPlaylist {
     pub fn reload(&mut self) -> Result<()> {
         let mut playlist = self.fetch()?;
 
-        let urls = if let Ok(urls) = PrefetchUrls::new(&playlist) {
-            urls
-        } else {
-            let (urls, new_playlist) = self.filter_ads()?;
-            playlist = new_playlist;
-
-            urls
-        };
-
+        let urls = PrefetchUrls::new(&playlist).or_else(|_| self.filter_ads(&mut playlist))?;
         if urls == self.urls {
             return Err(Error::Unchanged.into());
         }
@@ -146,17 +138,17 @@ impl MediaPlaylist {
         Ok(playlist)
     }
 
-    fn filter_ads(&mut self) -> Result<(PrefetchUrls, String)> {
+    fn filter_ads(&mut self, playlist: &mut String) -> Result<PrefetchUrls> {
         info!("Filtering ads...");
         loop {
             //Ads don't have prefetch URLs, wait until they come back to filter ads
             let time = Instant::now();
-            let playlist = self.fetch()?;
-            if let Ok(urls) = PrefetchUrls::new(&playlist) {
-                break Ok((urls, playlist));
+            *playlist = self.fetch()?;
+            if let Ok(urls) = PrefetchUrls::new(playlist) {
+                break Ok(urls);
             }
 
-            self.duration = Self::parse_duration(&playlist)?;
+            self.duration = Self::parse_duration(playlist)?;
             self.sleep_segment_duration(time.elapsed());
         }
     }
@@ -239,8 +231,6 @@ pub fn fetch_twitch_playlist(
     channel: &str,
     quality: &str,
 ) -> Result<Url> {
-    let channel = channel.replace("[channel]", channel);
-
     info!("Fetching playlist for channel {channel} (Twitch)");
     let gql = json!({
         "operationName": "PlaybackAccessToken",

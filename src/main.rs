@@ -23,7 +23,7 @@ use worker::Worker;
 
 static ARGS: OnceCell<Args> = OnceCell::new();
 
-fn run(worker: &Worker, mut playlist: MediaPlaylist) -> Result<()> {
+fn run(mut playlist: MediaPlaylist, worker: &Worker) -> Result<()> {
     worker.send(playlist.urls.take(PrefetchUrlKind::Newest)?)?;
     worker.sync()?;
 
@@ -69,12 +69,10 @@ fn main() -> Result<()> {
     }
     debug!("{:?}", args);
 
-    let playlist_url = args.servers.as_ref().map_or_else(
+    let playlist_url = match args.servers.as_ref().map_or_else(
         || hls::fetch_twitch_playlist(&args.client_id, &args.auth_token, &args.channel, &args.quality),
         |servers| hls::fetch_proxy_playlist(servers, &args.channel, &args.quality),
-    );
-
-    let playlist_url = match playlist_url {
+    ) {
         Ok(playlist_url) => playlist_url,
         Err(e) => match e.downcast_ref::<hls::Error>() {
             Some(hls::Error::NotLowLatency(url)) => {
@@ -94,7 +92,7 @@ fn main() -> Result<()> {
     let playlist = MediaPlaylist::new(&playlist_url)?;
     let mut player = Player::spawn(&args.player, &args.player_args, args.quiet)?;
     let worker = Worker::new(player.stdin()?)?;
-    match run(&worker, playlist) {
+    match run(playlist, &worker) {
         Ok(()) => Ok(()),
         Err(e) => {
             if http::Error::downcast_is_not_found(&e) {

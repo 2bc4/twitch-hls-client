@@ -53,20 +53,19 @@ impl Args {
         }
 
         if parser.contains("-V") || parser.contains("--version") {
-            let curl_version = curl::Version::get();
             eprintln!(
                 "{} {} (curl {})",
                 env!("CARGO_PKG_NAME"),
                 env!("CARGO_PKG_VERSION"),
-                curl_version.version(),
+                curl::Version::get().version(),
             );
+
             process::exit(0);
         }
 
-        let config_path = if let Some(path) = parser.opt_value_from_str("-c")? {
-            path
-        } else {
-            default_config_path()?
+        let config_path = match parser.opt_value_from_str("-c")? {
+            Some(path) => path,
+            None => default_config_path()?,
         };
         args.parse_config(&config_path)?;
 
