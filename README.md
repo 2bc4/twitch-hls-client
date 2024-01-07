@@ -67,3 +67,4 @@ Install [Rust](https://rustup.rs) then run `cargo install --locked --git https:/
 #### Cargo features
 - `http2` - Enable HTTP/2 support (known to cause issues on Windows 10)
 - `static-curl` - Build and statically link to libcurl
+- `static-openssl` - Build and statically link to OpenSSL (Only applies on platforms that use OpenSSL)
