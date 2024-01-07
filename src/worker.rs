@@ -14,8 +14,7 @@ use crate::http::RawRequest;
 
 #[derive(Debug)]
 pub enum Error {
-    SendFailed,
-    SyncFailed,
+    Failed,
 }
 
 impl std::error::Error for Error {}
@@ -23,8 +22,7 @@ impl std::error::Error for Error {}
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::SendFailed => write!(f, "Failed to send URL to segment worker"),
-            Self::SyncFailed => write!(f, "Failed to sync to segment worker"),
+            Self::Failed => write!(f, "Failed to communicate with segment worker"),
         }
     }
 }
@@ -55,11 +53,11 @@ impl Worker {
 
     pub fn send(&self, url: Url) -> Result<(), Error> {
         debug!("Sending URL to worker: {url}");
-        self.url_tx.send(url).or(Err(Error::SendFailed))
+        self.url_tx.send(url).or(Err(Error::Failed))
     }
 
     pub fn sync(&self) -> Result<(), Error> {
-        self.sync_rx.recv().or(Err(Error::SyncFailed))
+        self.sync_rx.recv().or(Err(Error::Failed))
     }
 
     fn thread_main(url_rx: &Receiver<Url>, sync_tx: &SyncSender<()>, pipe: ChildStdin) -> Result<()> {

@@ -107,10 +107,7 @@ fn main() -> Result<()> {
                 return Ok(());
             }
 
-            if matches!(
-                e.downcast_ref::<worker::Error>(),
-                Some(worker::Error::SendFailed | worker::Error::SyncFailed)
-            ) {
+            if matches!(e.downcast_ref::<worker::Error>(), Some(worker::Error::Failed)) {
                 info!("Player closed, exiting...");
                 return Ok(());
             }
