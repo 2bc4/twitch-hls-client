@@ -66,11 +66,14 @@ impl Args {
             process::exit(0);
         }
 
-        let config_path = match parser.opt_value_from_str("-c")? {
-            Some(path) => path,
-            None => default_config_path()?,
-        };
-        args.parse_config(&config_path)?;
+        if !parser.contains("--no-config") {
+            let config_path = match parser.opt_value_from_str("-c")? {
+                Some(path) => path,
+                None => default_config_path()?,
+            };
+
+            args.parse_config(&config_path)?;
+        }
 
         args.merge_args(&mut parser)?;
         if args.passthrough {

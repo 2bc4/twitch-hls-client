@@ -24,6 +24,8 @@ Options:
           Silence player output
       --passthrough
           Passthrough playlist URL to player and do nothing else
+      --no-config
+          Ignore config file
       --no-kill
           Don't kill the player on exit
       --client-id <ID>
