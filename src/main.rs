@@ -85,7 +85,8 @@ fn main() -> Result<()> {
                     &args.player,
                     &args.player_args,
                     args.quiet,
-                    playlist_url.as_ref(),
+                    args.no_kill,
+                    playlist_url,
                 );
             }
             _ => return Err(e),
@@ -93,11 +94,17 @@ fn main() -> Result<()> {
     };
 
     if args.passthrough {
-        return Player::passthrough(&args.player, &args.player_args, args.quiet, playlist_url.as_ref());
+        return Player::passthrough(
+            &args.player,
+            &args.player_args,
+            args.quiet,
+            args.no_kill,
+            &playlist_url,
+        );
     }
 
     let playlist = MediaPlaylist::new(&playlist_url)?;
-    let mut player = Player::spawn(&args.player, &args.player_args, args.quiet)?;
+    let mut player = Player::spawn(&args.player, &args.player_args, args.quiet, args.no_kill)?;
     let worker = Worker::new(player.stdin()?)?;
     match run(playlist, &worker) {
         Ok(()) => Ok(()),

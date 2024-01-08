@@ -28,6 +28,8 @@ Options:
           Silence player output
       --passthrough
           Passthrough playlist URL to player and do nothing else
+      --no-kill
+          Don't kill the player on exit
       --client-id <ID>
           Value to be used in the Client-Id header.
           If not specified will use the default client ID.

@@ -7,6 +7,7 @@ use crate::constants;
 
 #[derive(Debug)]
 #[allow(clippy::struct_field_names)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct Args {
     pub servers: Option<Vec<String>>,
     pub player: String,
@@ -14,6 +15,7 @@ pub struct Args {
     pub debug: bool,
     pub quiet: bool,
     pub passthrough: bool,
+    pub no_kill: bool,
     pub client_id: Option<String>,
     pub auth_token: Option<String>,
     pub never_proxy: Option<Vec<String>>,
@@ -32,6 +34,7 @@ impl Default for Args {
             debug: bool::default(),
             quiet: bool::default(),
             passthrough: bool::default(),
+            no_kill: bool::default(),
             client_id: Option::default(),
             auth_token: Option::default(),
             never_proxy: Option::default(),
@@ -101,6 +104,7 @@ impl Args {
                     "debug" => self.debug = split.1.parse()?,
                     "quiet" => self.quiet = split.1.parse()?,
                     "passthrough" => self.passthrough = split.1.parse()?,
+                    "no-kill" => self.no_kill = split.1.parse()?,
                     "client-id" => self.client_id = Some(split.1.into()),
                     "auth-token" => self.auth_token = Some(split.1.into()),
                     "never-proxy" => self.never_proxy = Some(split_comma(split.1)?),
@@ -138,6 +142,7 @@ impl Args {
         merge_opt_opt::<Vec<String>>(&mut self.servers, parser.opt_value_from_fn("-s", split_comma)?);
 
         merge_switch(&mut self.passthrough, parser.contains("--passthrough"));
+        merge_switch(&mut self.no_kill, parser.contains("--no-kill"));
         merge_switch(
             &mut self.debug,
             parser.contains("-d") || parser.contains("--debug"),
