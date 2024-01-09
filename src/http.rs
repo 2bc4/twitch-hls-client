@@ -4,7 +4,7 @@ use std::{
     str,
 };
 
-use anyhow::{bail, Result};
+use anyhow::{ensure, Result};
 use curl::easy::{Easy2, Handler, InfoType, IpResolve, List, WriteError};
 use log::debug;
 use url::Url;
@@ -47,7 +47,7 @@ impl<T: Write> RawRequest<T> {
     }
 
     pub fn url(&mut self, url: &Url) -> Result<()> {
-        self.handle.url(url.as_ref())?;
+        set_url(&mut self.handle, url)?;
         Ok(())
     }
 
@@ -158,10 +158,6 @@ impl<T: Write> RequestHandler<T> {
 
 fn init_curl<T: Write>(handle: &mut Easy2<RequestHandler<T>>, url: &Url) -> Result<()> {
     let args = ARGS.get().unwrap();
-    if args.force_https && url.scheme() != "https" {
-        bail!("URL protocol is not HTTPS and --force-https is enabled: {url}");
-    }
-
     if args.force_ipv4 {
         handle.ip_resolve(IpResolve::V4)?;
     }
@@ -171,7 +167,7 @@ fn init_curl<T: Write>(handle: &mut Easy2<RequestHandler<T>>, url: &Url) -> Resu
     handle.tcp_nodelay(true)?;
     handle.accept_encoding("")?;
     handle.useragent(constants::USER_AGENT)?;
-    handle.url(url.as_ref())?;
+    set_url(handle, url)?;
 
     Ok(())
 }
@@ -196,4 +192,16 @@ fn perform<T: Write>(handle: &Easy2<RequestHandler<T>>) -> Result<()> {
         404 => Err(Error::NotFound(handle.effective_url()?.unwrap().to_owned()).into()),
         _ => Err(Error::Status(code, handle.effective_url()?.unwrap().to_owned()).into()),
     }
+}
+
+fn set_url<T: Write>(handle: &mut Easy2<RequestHandler<T>>, url: &Url) -> Result<()> {
+    if ARGS.get().unwrap().force_https {
+        ensure!(
+            url.scheme() == "https",
+            "URL protocol is not HTTPS and --force-https is enabled: {url}"
+        );
+    }
+
+    handle.url(url.as_ref())?;
+    Ok(())
 }
