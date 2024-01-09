@@ -34,6 +34,8 @@ Options:
           Don't kill the player on exit
       --force-https
           Throw an error if a request is attempted without HTTPS
+      --force-ipv4
+          Only use IPv4 addresses when resolving host names
       --client-id <ID>
           Value to be used in the Client-Id header.
           If not specified will use the default client ID.

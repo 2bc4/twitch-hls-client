@@ -5,7 +5,7 @@ use std::{
 };
 
 use anyhow::{bail, Result};
-use curl::easy::{Easy2, Handler, InfoType, List, WriteError};
+use curl::easy::{Easy2, Handler, InfoType, IpResolve, List, WriteError};
 use log::debug;
 use url::Url;
 
@@ -160,6 +160,10 @@ fn init_curl<T: Write>(handle: &mut Easy2<RequestHandler<T>>, url: &Url) -> Resu
     let args = ARGS.get().unwrap();
     if args.force_https && url.scheme() != "https" {
         bail!("URL protocol is not HTTPS and --force-https is enabled: {url}");
+    }
+
+    if args.force_ipv4 {
+        handle.ip_resolve(IpResolve::V4)?;
     }
 
     handle.verbose(args.debug)?;

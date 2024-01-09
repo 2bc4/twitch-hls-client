@@ -17,6 +17,7 @@ pub struct Args {
     pub passthrough: bool,
     pub no_kill: bool,
     pub force_https: bool,
+    pub force_ipv4: bool,
     pub client_id: Option<String>,
     pub auth_token: Option<String>,
     pub never_proxy: Option<Vec<String>>,
@@ -37,6 +38,7 @@ impl Default for Args {
             passthrough: bool::default(),
             no_kill: bool::default(),
             force_https: bool::default(),
+            force_ipv4: bool::default(),
             client_id: Option::default(),
             auth_token: Option::default(),
             never_proxy: Option::default(),
@@ -111,6 +113,7 @@ impl Args {
                     "passthrough" => self.passthrough = split.1.parse()?,
                     "no-kill" => self.no_kill = split.1.parse()?,
                     "force-https" => self.force_https = split.1.parse()?,
+                    "force-ipv4" => self.force_ipv4 = split.1.parse()?,
                     "client-id" => self.client_id = Some(split.1.into()),
                     "auth-token" => self.auth_token = Some(split.1.into()),
                     "never-proxy" => self.never_proxy = Some(split_comma(split.1)?),
@@ -150,6 +153,7 @@ impl Args {
         merge_switch(&mut self.passthrough, parser.contains("--passthrough"));
         merge_switch(&mut self.no_kill, parser.contains("--no-kill"));
         merge_switch(&mut self.force_https, parser.contains("--force-https"));
+        merge_switch(&mut self.force_ipv4, parser.contains("--force-ipv4"));
         merge_switch(
             &mut self.debug,
             parser.contains("-d") || parser.contains("--debug"),
