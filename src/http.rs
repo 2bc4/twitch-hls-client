@@ -4,7 +4,7 @@ use std::{
     str,
 };
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use curl::easy::{Easy2, Handler, InfoType, List, WriteError};
 use log::debug;
 use url::Url;
@@ -158,6 +158,9 @@ impl<T: Write> RequestHandler<T> {
 
 fn init_curl<T: Write>(handle: &mut Easy2<RequestHandler<T>>, url: &Url) -> Result<()> {
     let args = ARGS.get().unwrap();
+    if args.force_https && url.scheme() != "https" {
+        bail!("URL protocol is not HTTPS and --force-https is enabled: {url}");
+    }
 
     handle.verbose(args.debug)?;
     handle.timeout(args.http_timeout)?;

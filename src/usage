@@ -28,6 +28,8 @@ Options:
           Ignore config file
       --no-kill
           Don't kill the player on exit
+      --force-https
+          Throw an error if a request is attempted without HTTPS
       --client-id <ID>
           Value to be used in the Client-Id header.
           If not specified will use the default client ID.
