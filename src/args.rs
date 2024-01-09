@@ -1,4 +1,4 @@
-use std::{env, fs, path::Path, process};
+use std::{env, fs, path::Path, process, time::Duration};
 
 use anyhow::{bail, Result};
 use pico_args::Arguments;
@@ -19,8 +19,8 @@ pub struct Args {
     pub client_id: Option<String>,
     pub auth_token: Option<String>,
     pub never_proxy: Option<Vec<String>>,
-    pub http_retries: u32,
-    pub http_connect_timeout: u64,
+    pub http_retries: u64,
+    pub http_timeout: Duration,
     pub channel: String,
     pub quality: String,
 }
@@ -39,7 +39,7 @@ impl Default for Args {
             auth_token: Option::default(),
             never_proxy: Option::default(),
             http_retries: 3,
-            http_connect_timeout: 5,
+            http_timeout: Duration::from_secs(10),
             channel: String::default(),
             quality: String::default(),
         }
@@ -112,7 +112,7 @@ impl Args {
                     "auth-token" => self.auth_token = Some(split.1.into()),
                     "never-proxy" => self.never_proxy = Some(split_comma(split.1)?),
                     "http-retries" => self.http_retries = split.1.parse()?,
-                    "http-connect-timeout" => self.http_connect_timeout = split.1.parse()?,
+                    "http-timeout" => self.http_timeout = parse_duration(split.1)?,
                     "quality" => self.quality = split.1.into(),
                     _ => bail!("Unknown key in config: {}", split.0),
                 }
@@ -127,22 +127,22 @@ impl Args {
     fn merge_args(&mut self, parser: &mut Arguments) -> Result<()> {
         merge_opt::<String>(&mut self.player, parser.opt_value_from_str("-p")?);
         merge_opt::<String>(&mut self.player_args, parser.opt_value_from_str("-a")?);
-        merge_opt::<u32>(
+        merge_opt::<u64>(
             &mut self.http_retries,
             parser.opt_value_from_str("--http-retries")?,
         );
-        merge_opt::<u64>(
-            &mut self.http_connect_timeout,
-            parser.opt_value_from_str("--http-connect-timeout")?,
+        merge_opt::<Duration>(
+            &mut self.http_timeout,
+            parser.opt_value_from_fn("--http-timeout", parse_duration)?,
         );
 
         merge_opt_opt::<String>(&mut self.client_id, parser.opt_value_from_str("--client-id")?);
         merge_opt_opt::<String>(&mut self.auth_token, parser.opt_value_from_str("--auth-token")?);
+        merge_opt_opt::<Vec<String>>(&mut self.servers, parser.opt_value_from_fn("-s", split_comma)?);
         merge_opt_opt::<Vec<String>>(
             &mut self.never_proxy,
             parser.opt_value_from_fn("--never-proxy", split_comma)?,
         );
-        merge_opt_opt::<Vec<String>>(&mut self.servers, parser.opt_value_from_fn("-s", split_comma)?);
 
         merge_switch(&mut self.passthrough, parser.contains("--passthrough"));
         merge_switch(&mut self.no_kill, parser.contains("--no-kill"));
@@ -196,6 +196,10 @@ fn merge_switch(dst: &mut bool, val: bool) {
 #[allow(clippy::unnecessary_wraps)] //function pointer
 fn split_comma(arg: &str) -> Result<Vec<String>> {
     Ok(arg.split(',').map(String::from).collect())
+}
+
+fn parse_duration(arg: &str) -> Result<Duration> {
+    Ok(Duration::try_from_secs_f64(arg.parse()?)?)
 }
 
 #[cfg(target_os = "linux")]

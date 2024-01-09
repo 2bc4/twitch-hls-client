@@ -39,8 +39,8 @@ Options:
           Can be multiple comma separated channels.
       --http-retries <COUNT>
           Retry HTTP requests <COUNT> times before giving up [default: 3]
-      --http-connect-timeout <SECONDS>
-          HTTP connect timeout in seconds [default: 5]
+      --http-timeout <SECONDS>
+          HTTP request timeout in seconds [default: 10]
   -h, --help
           Print help
   -V, --version

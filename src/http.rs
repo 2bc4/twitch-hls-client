@@ -2,7 +2,6 @@ use std::{
     fmt,
     io::{self, Write},
     str,
-    time::Duration,
 };
 
 use anyhow::Result;
@@ -161,7 +160,7 @@ fn init_curl<T: Write>(handle: &mut Easy2<RequestHandler<T>>, url: &Url) -> Resu
     let args = ARGS.get().unwrap();
 
     handle.verbose(args.debug)?;
-    handle.connect_timeout(Duration::from_secs(args.http_connect_timeout))?;
+    handle.timeout(args.http_timeout)?;
     handle.tcp_nodelay(true)?;
     handle.accept_encoding("")?;
     handle.useragent(constants::USER_AGENT)?;
