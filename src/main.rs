@@ -70,8 +70,16 @@ fn main() -> Result<()> {
     debug!("{:?}", args);
 
     let playlist_url = match args.servers.as_ref().map_or_else(
-        || hls::fetch_twitch_playlist(&args.client_id, &args.auth_token, &args.channel, &args.quality),
-        |servers| hls::fetch_proxy_playlist(servers, &args.channel, &args.quality),
+        || {
+            hls::fetch_twitch_playlist(
+                &args.client_id,
+                &args.auth_token,
+                &args.channel,
+                &args.quality,
+                &args.codecs,
+            )
+        },
+        |servers| hls::fetch_proxy_playlist(servers, &args.channel, &args.quality, &args.codecs),
     ) {
         Ok(playlist_url) => playlist_url,
         Err(e) => match e.downcast_ref::<hls::Error>() {

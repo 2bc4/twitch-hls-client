@@ -25,6 +25,7 @@ pub struct Args {
     pub http_timeout: Duration,
     pub channel: String,
     pub quality: String,
+    pub codecs: String,
 }
 
 impl Default for Args {
@@ -46,6 +47,7 @@ impl Default for Args {
             http_timeout: Duration::from_secs(10),
             channel: String::default(),
             quality: String::default(),
+            codecs: "av1,h265,h264".into(),
         }
     }
 }
@@ -120,6 +122,7 @@ impl Args {
                     "http-retries" => self.http_retries = split.1.parse()?,
                     "http-timeout" => self.http_timeout = parse_duration(split.1)?,
                     "quality" => self.quality = split.1.into(),
+                    "codecs" => self.codecs = split.1.into(),
                     _ => bail!("Unknown key in config: {}", split.0),
                 }
             } else {
@@ -133,6 +136,7 @@ impl Args {
     fn merge_args(&mut self, parser: &mut Arguments) -> Result<()> {
         merge_opt::<String>(&mut self.player, parser.opt_value_from_str("-p")?);
         merge_opt::<String>(&mut self.player_args, parser.opt_value_from_str("-a")?);
+        merge_opt::<String>(&mut self.codecs, parser.opt_value_from_str("--codecs")?);
         merge_opt::<u64>(
             &mut self.http_retries,
             parser.opt_value_from_str("--http-retries")?,

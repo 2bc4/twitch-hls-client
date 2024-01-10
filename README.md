@@ -49,6 +49,8 @@ Options:
           Retry HTTP requests <COUNT> times before giving up [default: 3]
       --http-timeout <SECONDS>
           HTTP request timeout in seconds [default: 10]
+      --codecs <CODEC1,CODEC2>
+          Comma seperated list of supported codecs [default: av1,h265,h264]
   -h, --help
           Print help
   -V, --version

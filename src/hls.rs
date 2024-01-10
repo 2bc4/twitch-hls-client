@@ -179,7 +179,7 @@ impl MediaPlaylist {
     }
 }
 
-pub fn fetch_proxy_playlist(servers: &[String], channel: &str, quality: &str) -> Result<Url> {
+pub fn fetch_proxy_playlist(servers: &[String], channel: &str, quality: &str, codecs: &str) -> Result<Url> {
     info!("Fetching playlist for channel {} (proxy)", channel);
     let servers = servers
         .iter()
@@ -191,6 +191,7 @@ pub fn fetch_proxy_playlist(servers: &[String], channel: &str, quality: &str) ->
                     ("allow_audio_only", "true"),
                     ("fast_bread", "true"),
                     ("warp", "true"),
+                    ("supported_codecs", codecs),
                 ],
             )
         })
@@ -232,6 +233,7 @@ pub fn fetch_twitch_playlist(
     auth_token: &Option<String>,
     channel: &str,
     quality: &str,
+    codecs: &str,
 ) -> Result<Url> {
     info!("Fetching playlist for channel {channel} (Twitch)");
     let gql = json!({
@@ -275,7 +277,7 @@ pub fn fetch_twitch_playlist(
             ("playlist_include_framerate", "true"),
             ("player_backend", "mediaplayer"),
             ("reassignments_supported", "true"),
-            ("supported_codecs", "avc1"),
+            ("supported_codecs", codecs),
             ("transcode_mode", "cbr_v1"),
             ("p", &rand::thread_rng().gen_range(0..=9_999_999).to_string()),
             ("play_session_id", &gen_id()),
