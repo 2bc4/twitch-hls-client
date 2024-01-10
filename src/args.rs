@@ -57,12 +57,12 @@ impl Args {
         let mut args = Self::default();
         let mut parser = Arguments::from_env();
         if parser.contains("-h") || parser.contains("--help") {
-            eprintln!(include_str!("usage"));
+            println!(include_str!("usage"));
             process::exit(0);
         }
 
         if parser.contains("-V") || parser.contains("--version") {
-            eprintln!(
+            println!(
                 "{} {} (curl {})",
                 env!("CARGO_PKG_NAME"),
                 env!("CARGO_PKG_VERSION"),

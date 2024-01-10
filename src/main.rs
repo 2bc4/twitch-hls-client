@@ -56,14 +56,14 @@ fn main() -> Result<()> {
                 .set_time_offset_to_local()
                 .unwrap() //isn't an error
                 .build(),
-            TerminalMode::Stderr,
+            TerminalMode::Mixed,
             ColorChoice::Auto,
         )?;
     } else {
         TermLogger::init(
             LevelFilter::Info,
             ConfigBuilder::new().set_time_level(LevelFilter::Off).build(),
-            TerminalMode::Stderr,
+            TerminalMode::Mixed,
             ColorChoice::Auto,
         )?;
     }
