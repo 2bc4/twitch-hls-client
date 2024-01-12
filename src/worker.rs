@@ -1,101 +1,82 @@
 use std::{
-    fmt,
-    io::{self, ErrorKind::BrokenPipe},
-    process::{self, ChildStdin},
-    sync::mpsc::{channel, sync_channel, Receiver, Sender, SyncSender},
-    thread::Builder,
+    sync::{
+        mpsc::{self, Receiver, Sender},
+        Arc, Barrier,
+    },
+    thread::{self, JoinHandle},
 };
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use log::debug;
 use url::Url;
 
-use crate::http::RawRequest;
-
-#[derive(Debug)]
-pub enum Error {
-    Failed,
-}
-
-impl std::error::Error for Error {}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::Failed => write!(f, "Failed to communicate with segment worker"),
-        }
-    }
-}
+use crate::{http::WriterRequest, player::Player};
 
 pub struct Worker {
+    //Option to call take() because handle.join() consumes self.
+    //Will always be Some unless this throws an error.
+    handle: Option<JoinHandle<Result<()>>>,
+
     url_tx: Sender<Url>,
-    sync_rx: Receiver<()>,
+    init: Arc<Barrier>,
 }
 
 impl Worker {
-    pub fn new(pipe: ChildStdin) -> Result<Self> {
-        let (url_tx, url_rx): (Sender<Url>, Receiver<Url>) = channel();
-        let (sync_tx, sync_rx): (SyncSender<()>, Receiver<()>) = sync_channel(1);
+    pub fn spawn(player: Player, initial_url: Url) -> Result<Self> {
+        let (url_tx, url_rx): (Sender<Url>, Receiver<Url>) = mpsc::channel();
+        let init = Arc::new(Barrier::new(2));
 
-        Builder::new()
-            .name(String::from("Segment Worker"))
-            .spawn(move || {
-                if let Err(e) = Self::thread_main(&url_rx, &sync_tx, pipe) {
-                    eprintln!("Worker error: {e}");
-                    eprintln!("{}", e.backtrace());
-                    process::exit(1);
+        let worker_init = init.clone();
+        let handle = thread::Builder::new()
+            .name("Segment Worker".to_owned())
+            .spawn(move || -> Result<()> {
+                debug!("Starting with URL: {initial_url}");
+                let mut request = WriterRequest::get(player, &initial_url)?;
+                request.call()?;
+
+                worker_init.wait();
+                loop {
+                    let Ok(url) = url_rx.recv() else {
+                        debug!("Exiting");
+                        return Ok(());
+                    };
+
+                    request.url(&url)?;
+                    request.call()?;
                 }
             })
             .context("Failed to spawn segment worker")?;
 
-        Ok(Self { url_tx, sync_rx })
+        Ok(Self {
+            handle: Some(handle),
+            url_tx,
+            init,
+        })
     }
 
-    pub fn send(&self, url: Url) -> Result<(), Error> {
+    pub fn sync(&mut self) -> Result<()> {
+        self.init.wait();
+        self.join_if_dead()
+    }
+
+    pub fn url(&mut self, url: Url) -> Result<()> {
+        self.join_if_dead()?;
+
         debug!("Sending URL to worker: {url}");
-        self.url_tx.send(url).or(Err(Error::Failed))
+        self.url_tx.send(url)?;
+        Ok(())
     }
 
-    pub fn sync(&self) -> Result<(), Error> {
-        self.sync_rx.recv().or(Err(Error::Failed))
-    }
+    fn join_if_dead(&mut self) -> Result<()> {
+        if self.handle.as_ref().unwrap().is_finished() {
+            let result = self.handle.take().unwrap().join().expect("Worker panicked");
+            if result.is_ok() {
+                bail!("Worker died");
+            }
 
-    fn thread_main(url_rx: &Receiver<Url>, sync_tx: &SyncSender<()>, pipe: ChildStdin) -> Result<()> {
-        debug!("Starting...");
-        let Ok(url) = url_rx.recv() else {
-            return Ok(());
-        };
-
-        let mut request = RawRequest::get(&url, pipe)?;
-        if should_exit(request.call())? {
-            return Ok(());
-        };
-
-        sync_tx.send(()).context("Failed to sync from segment worker")?;
-        loop {
-            let Ok(url) = url_rx.recv() else {
-                return Ok(());
-            };
-            debug!("Beginning new segment request");
-
-            request.url(&url)?;
-            if should_exit(request.call())? {
-                return Ok(());
-            };
+            return result;
         }
-    }
-}
 
-fn should_exit(result: Result<()>) -> Result<bool> {
-    debug!("Finished writing segment");
-    match result {
-        Ok(()) => Ok(false),
-        Err(e) => match e.downcast_ref::<io::Error>() {
-            Some(r) => match r.kind() {
-                BrokenPipe => Ok(true),
-                _ => Err(e),
-            },
-            _ => Err(e),
-        },
+        Ok(())
     }
 }

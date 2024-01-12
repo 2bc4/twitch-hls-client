@@ -22,86 +22,147 @@ impl std::error::Error for Error {}
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Status(code, url) => write!(f, "{code} on {url}"),
-            Self::NotFound(url) => write!(f, "{url} not found"),
+            Self::Status(code, url) => write!(f, "Status code {code} on {url}"),
+            Self::NotFound(url) => write!(f, "Not found: {url}"),
         }
     }
 }
 
-pub struct RawRequest<T>
+pub struct TextRequest {
+    request: Request<Vec<u8>>,
+}
+
+impl TextRequest {
+    pub fn get(url: &Url) -> Result<Self> {
+        let mut request = Request::new(Vec::new(), url)?;
+        request.handle.get(true)?;
+
+        Ok(Self { request })
+    }
+
+    pub fn post(url: &Url, data: &str) -> Result<Self> {
+        let mut request = Request::new(Vec::new(), url)?;
+        request.handle.post(true)?;
+        request.handle.post_fields_copy(data.as_bytes())?;
+
+        Ok(Self { request })
+    }
+
+    pub fn header(&mut self, header: &str) -> Result<()> {
+        let mut list = List::new();
+        list.append(header)?;
+
+        self.request.handle.http_headers(list)?;
+        Ok(())
+    }
+
+    pub fn text(&mut self) -> Result<String> {
+        self.request.perform()?;
+
+        let text = String::from_utf8_lossy(self.request.get_ref()).to_string();
+        self.request.get_mut().clear();
+
+        Ok(text)
+    }
+}
+
+pub struct WriterRequest<T>
+where
+    T: Write,
+{
+    request: Request<T>,
+}
+
+impl<T: Write> WriterRequest<T> {
+    pub fn get(writer: T, url: &Url) -> Result<Self> {
+        let mut request = Request::new(writer, url)?;
+        request.handle.get(true)?;
+
+        Ok(Self { request })
+    }
+
+    pub fn url(&mut self, url: &Url) -> Result<()> {
+        self.request.url(url)
+    }
+
+    pub fn call(&mut self) -> Result<()> {
+        self.request.perform()
+    }
+}
+
+struct Request<T>
 where
     T: Write,
 {
     handle: Easy2<RequestHandler<T>>,
 }
 
-impl<T: Write> RawRequest<T> {
-    pub fn get(url: &Url, writer: T) -> Result<Self> {
+impl<T: Write> Request<T> {
+    pub fn new(writer: T, url: &Url) -> Result<Self> {
         let mut request = Self {
-            handle: Easy2::new(RequestHandler::new(writer)),
+            handle: Easy2::new(RequestHandler {
+                writer,
+                error: Option::default(),
+            }),
         };
 
-        init_curl(&mut request.handle, url)?;
-        request.handle.get(true)?;
+        let args = ARGS.get().unwrap();
+        if args.force_ipv4 {
+            request.handle.ip_resolve(IpResolve::V4)?;
+        }
+
+        request.handle.verbose(args.debug)?;
+        request.handle.timeout(args.http_timeout)?;
+        request.handle.tcp_nodelay(true)?;
+        request.handle.accept_encoding("")?;
+        request.handle.useragent(constants::USER_AGENT)?;
+        request.url(url)?;
         Ok(request)
+    }
+
+    pub fn perform(&mut self) -> Result<()> {
+        let args = ARGS.get().unwrap();
+        let mut retries = 0;
+        loop {
+            match self.handle.perform() {
+                Ok(()) => break,
+                Err(_) if retries < args.http_retries => retries += 1,
+                Err(e) => return Err(e.into()),
+            }
+        }
+
+        self.handle
+            .get_ref()
+            .error
+            .as_ref()
+            .map_or_else(|| Ok(()), |e| Err(io::Error::from(e.kind())))?;
+
+        let code = self.handle.response_code()?;
+        match code {
+            200 => Ok(()),
+            404 => Err(Error::NotFound(self.handle.effective_url()?.unwrap().to_owned()).into()),
+            _ => Err(Error::Status(code, self.handle.effective_url()?.unwrap().to_owned()).into()),
+        }
     }
 
     pub fn url(&mut self, url: &Url) -> Result<()> {
-        set_url(&mut self.handle, url)?;
+        if ARGS.get().unwrap().force_https {
+            ensure!(
+                url.scheme() == "https",
+                "URL protocol is not HTTPS and --force-https is enabled: {url}"
+            );
+        }
+
+        self.handle.url(url.as_ref())?;
         Ok(())
     }
 
-    pub fn call(&mut self) -> Result<()> {
-        perform(&self.handle)?;
-        Ok(())
-    }
-}
-
-pub struct TextRequest {
-    handle: Easy2<RequestHandler<Vec<u8>>>,
-}
-
-impl TextRequest {
-    pub fn get(url: &Url) -> Result<Self> {
-        let mut request = Self::create(url)?;
-        request.handle.get(true)?;
-
-        Ok(request)
+    pub fn get_ref(&self) -> &T {
+        &self.handle.get_ref().writer
     }
 
-    pub fn post(url: &Url, data: &str) -> Result<Self> {
-        let mut request = Self::create(url)?;
-        request.handle.post(true)?;
-        request.handle.post_fields_copy(data.as_bytes())?;
-
-        Ok(request)
-    }
-
-    pub fn header(&mut self, header: &str) -> Result<()> {
-        let mut list = List::new();
-        list.append(header)?;
-        self.handle.http_headers(list)?;
-
-        Ok(())
-    }
-
-    pub fn text(&mut self) -> Result<String> {
-        perform(&self.handle)?;
-
-        let buf = &mut self.handle.get_mut().writer;
-        let text = String::from_utf8_lossy(buf).to_string();
-        buf.clear();
-
-        Ok(text)
-    }
-
-    fn create(url: &Url) -> Result<Self> {
-        let mut request = Self {
-            handle: Easy2::new(RequestHandler::new(Vec::new())),
-        };
-
-        init_curl(&mut request.handle, url)?;
-        Ok(request)
+    pub fn get_mut(&mut self) -> &mut T {
+        &mut self.handle.get_mut().writer
     }
 }
 
@@ -109,8 +170,8 @@ struct RequestHandler<T>
 where
     T: Write,
 {
-    pub writer: T,
-    pub error: Option<io::Error>,
+    writer: T,
+    error: Option<io::Error>,
 }
 
 impl<T: Write> Handler for RequestHandler<T> {
@@ -139,69 +200,4 @@ impl<T: Write> Handler for RequestHandler<T> {
 
         debug!("{}", text.strip_suffix('\n').unwrap_or(&text));
     }
-}
-
-impl<T: Write> RequestHandler<T> {
-    pub fn new(writer: T) -> Self {
-        Self {
-            writer,
-            error: Option::default(),
-        }
-    }
-
-    pub fn check_error(&self) -> Result<(), io::Error> {
-        self.error
-            .as_ref()
-            .map_or_else(|| Ok(()), |e| Err(io::Error::from(e.kind())))
-    }
-}
-
-fn init_curl<T: Write>(handle: &mut Easy2<RequestHandler<T>>, url: &Url) -> Result<()> {
-    let args = ARGS.get().unwrap();
-    if args.force_ipv4 {
-        handle.ip_resolve(IpResolve::V4)?;
-    }
-
-    handle.verbose(args.debug)?;
-    handle.timeout(args.http_timeout)?;
-    handle.tcp_nodelay(true)?;
-    handle.accept_encoding("")?;
-    handle.useragent(constants::USER_AGENT)?;
-    set_url(handle, url)?;
-
-    Ok(())
-}
-
-fn perform<T: Write>(handle: &Easy2<RequestHandler<T>>) -> Result<()> {
-    let args = ARGS.get().unwrap();
-
-    let mut retries = 0;
-    loop {
-        match handle.perform() {
-            Ok(()) => break,
-            Err(_) if retries < args.http_retries => retries += 1,
-            Err(e) => return Err(e.into()),
-        }
-    }
-
-    handle.get_ref().check_error()?;
-
-    let code = handle.response_code()?;
-    match code {
-        200 => Ok(()),
-        404 => Err(Error::NotFound(handle.effective_url()?.unwrap().to_owned()).into()),
-        _ => Err(Error::Status(code, handle.effective_url()?.unwrap().to_owned()).into()),
-    }
-}
-
-fn set_url<T: Write>(handle: &mut Easy2<RequestHandler<T>>, url: &Url) -> Result<()> {
-    if ARGS.get().unwrap().force_https {
-        ensure!(
-            url.scheme() == "https",
-            "URL protocol is not HTTPS and --force-https is enabled: {url}"
-        );
-    }
-
-    handle.url(url.as_ref())?;
-    Ok(())
 }

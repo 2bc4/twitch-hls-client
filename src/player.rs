@@ -1,10 +1,14 @@
-use std::process::{Child, ChildStdin, Command, Stdio};
+use std::{
+    io::{self, Write},
+    process::{Child, ChildStdin, Command, Stdio},
+};
 
 use anyhow::{Context, Result};
 use log::{error, info};
 use url::Url;
 
 pub struct Player {
+    stdin: ChildStdin,
     process: Child,
     no_kill: bool,
 }
@@ -19,6 +23,20 @@ impl Drop for Player {
     }
 }
 
+impl Write for Player {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.stdin.write(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.stdin.flush()
+    }
+
+    fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
+        self.stdin.write_all(buf)
+    }
+}
+
 impl Player {
     pub fn spawn(path: &str, args: &str, quiet: bool, no_kill: bool) -> Result<Self> {
         info!("Opening player: {path} {args}");
@@ -29,8 +47,11 @@ impl Player {
             command.stdout(Stdio::null()).stderr(Stdio::null());
         }
 
+        let mut process = command.spawn().context("Failed to open player")?;
+        let stdin = process.stdin.take().context("Failed to open player stdin")?;
         Ok(Self {
-            process: command.spawn().context("Failed to open player")?,
+            stdin,
+            process,
             no_kill,
         })
     }
@@ -50,9 +71,5 @@ impl Player {
             .context("Failed to wait for player process")?;
 
         Ok(())
-    }
-
-    pub fn stdin(&mut self) -> Result<ChildStdin> {
-        self.process.stdin.take().context("Failed to open player stdin")
     }
 }

@@ -9,7 +9,10 @@ mod http;
 mod player;
 mod worker;
 
-use std::time::Instant;
+use std::{
+    io::{self, ErrorKind::BrokenPipe},
+    time::Instant,
+};
 
 use anyhow::Result;
 use log::{debug, info};
@@ -23,8 +26,8 @@ use worker::Worker;
 
 static ARGS: OnceCell<Args> = OnceCell::new();
 
-fn run(mut playlist: MediaPlaylist, worker: &Worker) -> Result<()> {
-    worker.send(playlist.urls.take(PrefetchUrlKind::Newest)?)?;
+fn run(mut playlist: MediaPlaylist, player: Player) -> Result<()> {
+    let mut worker = Worker::spawn(player, playlist.urls.take(PrefetchUrlKind::Newest)?)?;
     worker.sync()?;
 
     loop {
@@ -39,7 +42,7 @@ fn run(mut playlist: MediaPlaylist, worker: &Worker) -> Result<()> {
             return Err(e);
         }
 
-        worker.send(playlist.urls.take(PrefetchUrlKind::Next)?)?;
+        worker.url(playlist.urls.take(PrefetchUrlKind::Next)?)?;
         playlist.sleep_segment_duration(time.elapsed());
     }
 }
@@ -112,9 +115,8 @@ fn main() -> Result<()> {
     }
 
     let playlist = MediaPlaylist::new(&playlist_url)?;
-    let mut player = Player::spawn(&args.player, &args.player_args, args.quiet, args.no_kill)?;
-    let worker = Worker::new(player.stdin()?)?;
-    match run(playlist, &worker) {
+    let player = Player::spawn(&args.player, &args.player_args, args.quiet, args.no_kill)?;
+    match run(playlist, player) {
         Ok(()) => Ok(()),
         Err(e) => {
             if matches!(e.downcast_ref::<hls::Error>(), Some(hls::Error::Offline)) {
@@ -122,9 +124,11 @@ fn main() -> Result<()> {
                 return Ok(());
             }
 
-            if matches!(e.downcast_ref::<worker::Error>(), Some(worker::Error::Failed)) {
-                info!("Player closed, exiting...");
-                return Ok(());
+            if let Some(e) = e.downcast_ref::<io::Error>() {
+                if matches!(e.kind(), BrokenPipe) {
+                    info!("Player closed, exiting...");
+                    return Ok(());
+                }
             }
 
             Err(e)
