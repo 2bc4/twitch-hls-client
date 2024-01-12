@@ -78,14 +78,12 @@ impl<T: Write> WriterRequest<T> {
         let mut request = Request::new(writer, url)?;
         request.handle.get(true)?;
 
+        request.perform()?;
         Ok(Self { request })
     }
 
-    pub fn url(&mut self, url: &Url) -> Result<()> {
-        self.request.url(url)
-    }
-
-    pub fn call(&mut self) -> Result<()> {
+    pub fn call(&mut self, url: &Url) -> Result<()> {
+        self.request.url(url)?;
         self.request.perform()
     }
 }
@@ -120,13 +118,21 @@ impl<T: Write> Request<T> {
         Ok(request)
     }
 
+    pub fn get_ref(&self) -> &T {
+        &self.handle.get_ref().writer
+    }
+
+    pub fn get_mut(&mut self) -> &mut T {
+        &mut self.handle.get_mut().writer
+    }
+
     pub fn perform(&mut self) -> Result<()> {
-        let args = ARGS.get().unwrap();
+        let retries_arg = ARGS.get().unwrap().http_retries;
         let mut retries = 0;
         loop {
             match self.handle.perform() {
                 Ok(()) => break,
-                Err(_) if retries < args.http_retries => retries += 1,
+                Err(_) if retries < retries_arg => retries += 1,
                 Err(e) => return Err(e.into()),
             }
         }
@@ -155,14 +161,6 @@ impl<T: Write> Request<T> {
 
         self.handle.url(url.as_ref())?;
         Ok(())
-    }
-
-    pub fn get_ref(&self) -> &T {
-        &self.handle.get_ref().writer
-    }
-
-    pub fn get_mut(&mut self) -> &mut T {
-        &mut self.handle.get_mut().writer
     }
 }
 

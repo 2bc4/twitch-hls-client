@@ -119,7 +119,6 @@ impl MediaPlaylist {
 
         self.urls = urls;
         self.duration = Self::parse_duration(&playlist)?;
-
         Ok(())
     }
 
@@ -142,10 +141,11 @@ impl MediaPlaylist {
 
     fn filter_ads(&mut self, playlist: &mut String) -> Result<PrefetchUrls> {
         info!("Filtering ads...");
+        //Ads don't have prefetch URLs, wait until they come back to filter ads
         loop {
-            //Ads don't have prefetch URLs, wait until they come back to filter ads
             let time = Instant::now();
             *playlist = self.fetch()?;
+
             if let Ok(urls) = PrefetchUrls::new(playlist) {
                 break Ok(urls);
             }
@@ -179,7 +179,12 @@ impl MediaPlaylist {
     }
 }
 
-pub fn fetch_proxy_playlist(servers: &[String], channel: &str, quality: &str, codecs: &str) -> Result<Url> {
+pub fn fetch_proxy_playlist(
+    servers: &[String],
+    codecs: &str,
+    channel: &str,
+    quality: &str,
+) -> Result<Url> {
     info!("Fetching playlist for channel {} (proxy)", channel);
     let servers = servers
         .iter()
@@ -213,7 +218,10 @@ pub fn fetch_proxy_playlist(servers: &[String], channel: &str, quality: &str, co
             match request.text() {
                 Ok(playlist_url) => Some(playlist_url),
                 Err(e) => {
-                    if matches!(e.downcast_ref::<http::Error>(), Some(http::Error::NotFound(_))) {
+                    if matches!(
+                        e.downcast_ref::<http::Error>(),
+                        Some(http::Error::NotFound(_))
+                    ) {
                         error!("Playlist not found. Stream offline?");
                         return None;
                     }
@@ -231,9 +239,9 @@ pub fn fetch_proxy_playlist(servers: &[String], channel: &str, quality: &str, co
 pub fn fetch_twitch_playlist(
     client_id: &Option<String>,
     auth_token: &Option<String>,
+    codecs: &str,
     channel: &str,
     quality: &str,
-    codecs: &str,
 ) -> Result<Url> {
     info!("Fetching playlist for channel {channel} (Twitch)");
     let gql = json!({
@@ -253,7 +261,9 @@ pub fn fetch_twitch_playlist(
         },
     });
 
-    let mut request = TextRequest::post(&constants::TWITCH_GQL_ENDPOINT.parse()?, &gql.to_string())?;
+    let mut request =
+        TextRequest::post(&constants::TWITCH_GQL_ENDPOINT.parse()?, &gql.to_string())?;
+
     request.header("Content-Type: text/plain;charset=UTF-8")?;
     request.header(&format!("X-Device-ID: {}", &gen_id()))?;
     request.header(&format!(
@@ -265,7 +275,7 @@ pub fn fetch_twitch_playlist(
         request.header(&format!("Authorization: OAuth {auth_token}"))?;
     }
 
-    let response: Value = serde_json::from_str(&request.text()?)?;
+    let response = serde_json::from_str::<Value>(&request.text()?)?;
     let url = Url::parse_with_params(
         &format!("{}{channel}.m3u8", constants::TWITCH_HLS_BASE),
         &[
@@ -279,7 +289,10 @@ pub fn fetch_twitch_playlist(
             ("reassignments_supported", "true"),
             ("supported_codecs", codecs),
             ("transcode_mode", "cbr_v1"),
-            ("p", &rand::thread_rng().gen_range(0..=9_999_999).to_string()),
+            (
+                "p",
+                &rand::thread_rng().gen_range(0..=9_999_999).to_string(),
+            ),
             ("play_session_id", &gen_id()),
             (
                 "sig",
@@ -298,7 +311,10 @@ pub fn fetch_twitch_playlist(
         ],
     )?;
 
-    parse_variant_playlist(&TextRequest::get(&url)?.text().map_err(map_if_offline)?, quality)
+    parse_variant_playlist(
+        &TextRequest::get(&url)?.text().map_err(map_if_offline)?,
+        quality,
+    )
 }
 
 fn parse_variant_playlist(master_playlist: &str, quality: &str) -> Result<Url> {
@@ -325,9 +341,7 @@ fn choose_client_id(client_id: &Option<String>, auth_token: &Option<String>) -> 
         let mut request = TextRequest::get(&constants::TWITCH_OAUTH_ENDPOINT.parse()?)?;
         request.header(&format!("Authorization: OAuth {auth_token}"))?;
 
-        let response: Value = serde_json::from_str(&request.text()?)?;
-
-        //.to_string() adds quotes while .as_str() doesn't for some reason
+        let response = serde_json::from_str::<Value>(&request.text()?)?;
         response["client_id"]
             .as_str()
             .context("Invalid client id in response")?

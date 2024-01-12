@@ -1,12 +1,12 @@
 use std::{env, fs, path::Path, process, time::Duration};
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use pico_args::Arguments;
 
 use crate::constants;
 
 #[derive(Debug)]
-#[allow(clippy::struct_field_names)]
+#[allow(clippy::struct_field_names)] //.player_args
 #[allow(clippy::struct_excessive_bools)]
 pub struct Args {
     pub servers: Option<Vec<String>>,
@@ -33,7 +33,7 @@ impl Default for Args {
         Self {
             servers: Option::default(),
             player: String::default(),
-            player_args: String::from("-"),
+            player_args: "-".to_owned(),
             debug: bool::default(),
             quiet: bool::default(),
             passthrough: bool::default(),
@@ -43,11 +43,11 @@ impl Default for Args {
             client_id: Option::default(),
             auth_token: Option::default(),
             never_proxy: Option::default(),
+            codecs: "av1,h265,h264".to_owned(),
             http_retries: 3,
             http_timeout: Duration::from_secs(10),
             channel: String::default(),
             quality: String::default(),
-            codecs: "av1,h265,h264".into(),
         }
     }
 }
@@ -81,13 +81,19 @@ impl Args {
             args.parse_config(&config_path)?;
         }
 
-        args.merge_args(&mut parser)?;
-        if args.passthrough {
-            return Ok(args);
+        args.merge_cli(&mut parser)?;
+        if let Some(never_proxy) = &args.never_proxy {
+            if never_proxy.iter().any(|a| a.eq(&args.channel)) {
+                args.servers = None;
+            }
         }
 
         if args.player.is_empty() {
             bail!("player must be set");
+        }
+
+        if args.quality.is_empty() {
+            bail!("quality must be set");
         }
 
         Ok(args)
@@ -98,7 +104,7 @@ impl Args {
             return Ok(());
         }
 
-        let config = fs::read_to_string(path)?;
+        let config = fs::read_to_string(path).context("Failed to read config file")?;
         for line in config.lines() {
             if line.starts_with('#') {
                 continue;
@@ -119,10 +125,10 @@ impl Args {
                     "client-id" => self.client_id = Some(split.1.into()),
                     "auth-token" => self.auth_token = Some(split.1.into()),
                     "never-proxy" => self.never_proxy = Some(split_comma(split.1)?),
+                    "codecs" => self.codecs = split.1.into(),
                     "http-retries" => self.http_retries = split.1.parse()?,
                     "http-timeout" => self.http_timeout = parse_duration(split.1)?,
                     "quality" => self.quality = split.1.into(),
-                    "codecs" => self.codecs = split.1.into(),
                     _ => bail!("Unknown key in config: {}", split.0),
                 }
             } else {
@@ -133,55 +139,39 @@ impl Args {
         Ok(())
     }
 
-    fn merge_args(&mut self, parser: &mut Arguments) -> Result<()> {
-        merge_opt::<String>(&mut self.player, parser.opt_value_from_str("-p")?);
-        merge_opt::<String>(&mut self.player_args, parser.opt_value_from_str("-a")?);
-        merge_opt::<String>(&mut self.codecs, parser.opt_value_from_str("--codecs")?);
-        merge_opt::<u64>(
-            &mut self.http_retries,
-            parser.opt_value_from_str("--http-retries")?,
-        );
-        merge_opt::<Duration>(
-            &mut self.http_timeout,
-            parser.opt_value_from_fn("--http-timeout", parse_duration)?,
-        );
-
-        merge_opt_opt::<String>(&mut self.client_id, parser.opt_value_from_str("--client-id")?);
-        merge_opt_opt::<String>(&mut self.auth_token, parser.opt_value_from_str("--auth-token")?);
-        merge_opt_opt::<Vec<String>>(&mut self.servers, parser.opt_value_from_fn("-s", split_comma)?);
-        merge_opt_opt::<Vec<String>>(
+    fn merge_cli(&mut self, p: &mut Arguments) -> Result<()> {
+        merge_opt_opt(&mut self.servers, p.opt_value_from_fn("-s", split_comma)?);
+        merge_opt(&mut self.player, p.opt_value_from_str("-p")?);
+        merge_opt(&mut self.player_args, p.opt_value_from_str("-a")?);
+        merge_switch(&mut self.debug, p.contains("-d") || p.contains("--debug"));
+        merge_switch(&mut self.quiet, p.contains("-q") || p.contains("--quiet"));
+        merge_switch(&mut self.passthrough, p.contains("--passthrough"));
+        merge_switch(&mut self.no_kill, p.contains("--no-kill"));
+        merge_switch(&mut self.force_https, p.contains("--force-https"));
+        merge_switch(&mut self.force_ipv4, p.contains("--force-ipv4"));
+        merge_opt_opt(&mut self.client_id, p.opt_value_from_str("--client-id")?);
+        merge_opt_opt(&mut self.auth_token, p.opt_value_from_str("--auth-token")?);
+        merge_opt_opt(
             &mut self.never_proxy,
-            parser.opt_value_from_fn("--never-proxy", split_comma)?,
+            p.opt_value_from_fn("--never-proxy", split_comma)?,
+        );
+        merge_opt(&mut self.codecs, p.opt_value_from_str("--codecs")?);
+        merge_opt(
+            &mut self.http_retries,
+            p.opt_value_from_str("--http-retries")?,
+        );
+        merge_opt(
+            &mut self.http_timeout,
+            p.opt_value_from_fn("--http-timeout", parse_duration)?,
         );
 
-        merge_switch(&mut self.passthrough, parser.contains("--passthrough"));
-        merge_switch(&mut self.no_kill, parser.contains("--no-kill"));
-        merge_switch(&mut self.force_https, parser.contains("--force-https"));
-        merge_switch(&mut self.force_ipv4, parser.contains("--force-ipv4"));
-        merge_switch(
-            &mut self.debug,
-            parser.contains("-d") || parser.contains("--debug"),
-        );
-        merge_switch(
-            &mut self.quiet,
-            parser.contains("-q") || parser.contains("--quiet"),
-        );
-
-        self.channel = parser
-            .free_from_str::<String>()?
+        self.channel = p
+            .free_from_str::<String>()
+            .context("missing channel argument")?
             .to_lowercase()
             .replace("twitch.tv/", "");
 
-        merge_opt::<String>(&mut self.quality, parser.opt_free_from_str()?);
-        if self.quality.is_empty() {
-            bail!("quality must be set");
-        }
-
-        if let Some(never_proxy) = &self.never_proxy {
-            if never_proxy.iter().any(|a| a.eq(&self.channel)) {
-                self.servers = None;
-            }
-        }
+        merge_opt(&mut self.quality, p.opt_free_from_str()?);
 
         Ok(())
     }

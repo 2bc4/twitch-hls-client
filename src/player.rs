@@ -48,7 +48,11 @@ impl Player {
         }
 
         let mut process = command.spawn().context("Failed to open player")?;
-        let stdin = process.stdin.take().context("Failed to open player stdin")?;
+        let stdin = process
+            .stdin
+            .take()
+            .context("Failed to open player stdin")?;
+
         Ok(Self {
             stdin,
             process,
@@ -56,11 +60,23 @@ impl Player {
         })
     }
 
-    pub fn passthrough(path: &str, args: &str, quiet: bool, no_kill: bool, url: &Url) -> Result<()> {
+    pub fn passthrough(
+        path: &str,
+        args: &str,
+        quiet: bool,
+        no_kill: bool,
+        url: &Url,
+    ) -> Result<()> {
         info!("Passing through playlist URL to player");
         let args = args
             .split_whitespace()
-            .map(|s| if s == "-" { url.to_string() } else { s.to_owned() })
+            .map(|s| {
+                if s == "-" {
+                    url.to_string()
+                } else {
+                    s.to_owned()
+                }
+            })
             .collect::<Vec<String>>()
             .join(" ");
 

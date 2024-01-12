@@ -8,6 +8,13 @@ repository = "https://github.com/2bc4/twitch-hls-client"
 edition = "2021"
 rust-version = "1.75"
 
+[lints.rust]
+unsafe_code = "forbid"
+warnings = "deny"
+
+[lints.clippy]
+pedantic = "deny"
+
 [profile.release]
 codegen-units = 1
 lto = true

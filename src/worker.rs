@@ -16,9 +16,7 @@ pub struct Worker {
     //Option to call take() because handle.join() consumes self.
     //Will always be Some unless this throws an error.
     handle: Option<JoinHandle<Result<()>>>,
-
     url_tx: Sender<Url>,
-    init: Arc<Barrier>,
 }
 
 impl Worker {
@@ -32,7 +30,6 @@ impl Worker {
             .spawn(move || -> Result<()> {
                 debug!("Starting with URL: {initial_url}");
                 let mut request = WriterRequest::get(player, &initial_url)?;
-                request.call()?;
 
                 worker_init.wait();
                 loop {
@@ -41,22 +38,19 @@ impl Worker {
                         return Ok(());
                     };
 
-                    request.url(&url)?;
-                    request.call()?;
+                    request.call(&url)?;
                 }
             })
             .context("Failed to spawn segment worker")?;
 
-        Ok(Self {
+        init.wait();
+        let mut worker = Self {
             handle: Some(handle),
             url_tx,
-            init,
-        })
-    }
+        };
 
-    pub fn sync(&mut self) -> Result<()> {
-        self.init.wait();
-        self.join_if_dead()
+        worker.join_if_dead()?;
+        Ok(worker)
     }
 
     pub fn url(&mut self, url: Url) -> Result<()> {
@@ -64,6 +58,7 @@ impl Worker {
 
         debug!("Sending URL to worker: {url}");
         self.url_tx.send(url)?;
+
         Ok(())
     }
 
