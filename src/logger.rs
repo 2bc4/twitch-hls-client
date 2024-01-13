@@ -1,14 +1,19 @@
-use std::thread;
+use std::{
+    env,
+    io::{self, IsTerminal},
+    thread,
+};
 
 use anyhow::Result;
 use log::{self, Level, LevelFilter, Log, Metadata, Record};
 use time::{format_description::FormatItem, macros::format_description, OffsetDateTime, UtcOffset};
 
-static TIME_FORMAT_DESCRIPTION: &[FormatItem<'static>] =
+const TIME_FORMAT_DESCRIPTION: &[FormatItem<'static>] =
     format_description!("[hour]:[minute]:[second].[subsecond digits:5]");
 
 pub struct Logger {
     enable_debug: bool,
+    enable_colors: bool,
     offset: UtcOffset,
 }
 
@@ -28,13 +33,13 @@ impl Log for Logger {
                         .to_offset(self.offset)
                         .format(&TIME_FORMAT_DESCRIPTION)
                         .unwrap(), //will never error
-                    level_tag(level),
+                    level_tag(level, self.enable_colors),
                     thread.name().unwrap_or_default(),
                     record.module_path().unwrap_or_default(),
                     record.args()
                 );
             }
-            Level::Error => eprintln!("{} {}", level_tag(level), record.args()),
+            Level::Error => eprintln!("{} {}", level_tag(level, self.enable_colors), record.args()),
             Level::Info => println!("{}", record.args()),
             _ => (),
         }
@@ -47,14 +52,15 @@ impl Logger {
     pub fn init(enable_debug: bool) -> Result<()> {
         log::set_boxed_logger(Box::new(Self {
             enable_debug,
+            enable_colors: env::var_os("NO_COLOR").is_none() && io::stdout().is_terminal(),
             offset: UtcOffset::current_local_offset()?,
         }))?;
 
-        if enable_debug {
-            log::set_max_level(LevelFilter::Debug);
-        } else {
-            log::set_max_level(LevelFilter::Info);
-        }
+        log::set_max_level(
+            enable_debug
+                .then_some(LevelFilter::Debug)
+                .unwrap_or(LevelFilter::Info),
+        );
 
         Ok(())
     }
@@ -65,19 +71,18 @@ fn level_tag_no_color(level: Level) -> &'static str {
         Level::Error => "[ERROR]",
         Level::Info => "[INFO]",
         Level::Debug => "[DEBUG]",
-        _ => unimplemented!(),
+        _ => unreachable!(),
     }
 }
 
 #[cfg(feature = "colors")]
-fn level_tag(level: Level) -> &'static str {
-    use std::io::IsTerminal;
-    if std::env::var_os("NO_COLOR").is_none() && std::io::stdout().is_terminal() {
+fn level_tag(level: Level, enable_colors: bool) -> &'static str {
+    if enable_colors {
         match level {
             Level::Error => "\x1b[31m[ERROR]\x1b[0m", //red
             Level::Info => "\x1b[34m[INFO]\x1b[0m",   //blue
             Level::Debug => "\x1b[36m[DEBUG]\x1b[0m", //cyan
-            _ => unimplemented!(),
+            _ => unreachable!(),
         }
     } else {
         level_tag_no_color(level)
@@ -85,6 +90,6 @@ fn level_tag(level: Level) -> &'static str {
 }
 
 #[cfg(not(feature = "colors"))]
-fn level_tag(level: Level) -> &'static str {
+fn level_tag(level: Level, _enable_colors: bool) -> &'static str {
     level_tag_no_color(level)
 }
