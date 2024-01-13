@@ -57,7 +57,7 @@ Options:
           Print version
 ```
 
-### Example
+### Example usage
 ```
 $ twitch-hls-client twitch.tv/twitchchannel best -s https://eu.luminous.dev/live/[channel],https://lb-eu.cdn-perfprod.com/live/[channel] -p mpv -a '- --profile=low-latency'
 Fetching playlist for channel twitchchannel (proxy)
@@ -71,6 +71,37 @@ AO: [pipewire] 48000Hz stereo 2ch floatp
 AV: 03:57:23 / 03:57:23 (100%) A-V:  0.000 Cache: 0.7s/482KB
 ```
 
+### Config file
+Almost every argument can be set via config file. Example config file with all possible values set:
+```
+# This is a comment
+servers=https://eu.luminous.dev/live/[channel],https://lb-eu.cdn-perfprod.com/live/[channel]
+player=../mpv/mpv
+player-args=- --profile=low-latency
+debug=true
+quiet=true
+passthrough=false
+no-kill=false
+force-https=true
+force-ipv4=false
+client-id=0123456789abcdef
+auth-token=0123456789abcdef
+never-proxy=channel1,channel2,channel3
+codecs=av1,h265,h264
+http-retries=3
+http-timeout=10
+quality=720p
+```
+
+Depending on your platform this will look for the config file at the following locations (can be overridden with the `-c` switch):
+
+|Platform|Default location                                                      |
+|--------|----------------------------------------------------------------------|
+|Windows |`%APPDATA%\twitch-hls-client\config`                                  |
+|Linux   |`${XDG_CONFIG_HOME:-${HOME}/.config}/twitch-hls-client/config`        |
+|MacOS   |`${HOME}/Library/Application Support/twitch-hls-client/config`        |
+|Other   |`./twitch-hls-client/config`                                          |
+
 ### Building
 Install [Rust](https://rustup.rs) then run `cargo install --locked --git https://github.com/2bc4/twitch-hls-client.git` or clone the repo and run `cargo build --release`.
 
@@ -78,4 +109,4 @@ Install [Rust](https://rustup.rs) then run `cargo install --locked --git https:/
 - `colors` - Enable colors while debug logging
 - `http2` - Enable HTTP/2 support (known to cause issues on Windows 10)
 - `static-curl` - Build and statically link to libcurl
-- `static-openssl` - Build and statically link to OpenSSL (Only applies on platforms that use OpenSSL)
+- `static-openssl` - Build and statically link to openssl (only applies on platforms that use openssl)
