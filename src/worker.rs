@@ -26,7 +26,7 @@ impl Worker {
 
         let worker_init = init.clone();
         let handle = thread::Builder::new()
-            .name("Segment Worker".to_owned())
+            .name("worker".to_owned())
             .spawn(move || -> Result<()> {
                 debug!("Starting with URL: {initial_url}");
                 let mut request = WriterRequest::get(player, &initial_url)?;

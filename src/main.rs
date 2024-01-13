@@ -2,6 +2,7 @@ mod args;
 mod constants;
 mod hls;
 mod http;
+mod logger;
 mod player;
 mod worker;
 
@@ -13,45 +14,15 @@ use std::{
 use anyhow::Result;
 use log::{debug, info};
 use once_cell::sync::OnceCell;
-use simplelog::{
-    format_description, ColorChoice, ConfigBuilder, LevelFilter, TermLogger, TerminalMode,
-};
 use url::Url;
 
 use args::Args;
 use hls::{MediaPlaylist, PrefetchUrlKind};
+use logger::Logger;
 use player::Player;
 use worker::Worker;
 
 static ARGS: OnceCell<Args> = OnceCell::new();
-
-fn init_logger(enable_debug: bool) -> Result<()> {
-    if enable_debug {
-        TermLogger::init(
-            LevelFilter::Debug,
-            ConfigBuilder::new()
-                .set_time_format_custom(format_description!(
-                    "[hour]:[minute]:[second].[subsecond digits:5]"
-                ))
-                .set_time_offset_to_local()
-                .unwrap() //isn't an error
-                .build(),
-            TerminalMode::Mixed,
-            ColorChoice::Auto,
-        )?;
-    } else {
-        TermLogger::init(
-            LevelFilter::Info,
-            ConfigBuilder::new()
-                .set_time_level(LevelFilter::Off)
-                .build(),
-            TerminalMode::Mixed,
-            ColorChoice::Auto,
-        )?;
-    }
-
-    Ok(())
-}
 
 fn passthrough(args: &Args, playlist_url: &Url) -> Result<()> {
     Player::passthrough(
@@ -84,7 +55,8 @@ fn main_loop(mut playlist: MediaPlaylist, player: Player) -> Result<()> {
 
 fn main() -> Result<()> {
     let args = ARGS.get_or_try_init(Args::parse)?;
-    init_logger(args.debug)?;
+
+    Logger::init(args.debug)?;
     debug!("{:?}", args);
 
     let playlist_url = match args.servers.as_ref().map_or_else(

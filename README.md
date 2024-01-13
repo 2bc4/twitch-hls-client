@@ -60,9 +60,9 @@ Options:
 ### Example
 ```
 $ twitch-hls-client twitch.tv/twitchchannel best -s https://eu.luminous.dev/live/[channel],https://lb-eu.cdn-perfprod.com/live/[channel] -p mpv -a '- --profile=low-latency'
-[INFO] Fetching playlist for channel twitchchannel (proxy)
-[INFO] Using server https://eu.luminous.dev
-[INFO] Opening player: mpv - --profile=low-latency
+Fetching playlist for channel twitchchannel (proxy)
+Using server https://eu.luminous.dev
+Opening player: mpv - --profile=low-latency
  (+) Video --vid=1 (h264)
  (+) Audio --aid=1 (aac)
 Using hardware decoding (vaapi).
@@ -75,6 +75,7 @@ AV: 03:57:23 / 03:57:23 (100%) A-V:  0.000 Cache: 0.7s/482KB
 Install [Rust](https://rustup.rs) then run `cargo install --locked --git https://github.com/2bc4/twitch-hls-client.git` or clone the repo and run `cargo build --release`.
 
 #### Cargo features
+- `colors` - Enable colors while debug logging
 - `http2` - Enable HTTP/2 support (known to cause issues on Windows 10)
 - `static-curl` - Build and statically link to libcurl
 - `static-openssl` - Build and statically link to OpenSSL (Only applies on platforms that use OpenSSL)
