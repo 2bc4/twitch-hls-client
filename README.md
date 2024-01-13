@@ -106,7 +106,7 @@ Depending on your platform this will look for the config file at the following l
 Install [Rust](https://rustup.rs) then run `cargo install --locked --git https://github.com/2bc4/twitch-hls-client.git` or clone the repo and run `cargo build --release`.
 
 #### Cargo features
-- `colors` - Enable colors while debug logging
+- `colors` - Enable terminal colors
 - `http2` - Enable HTTP/2 support (known to cause issues on Windows 10)
 - `static-curl` - Build and statically link to libcurl
 - `static-openssl` - Build and statically link to openssl (only applies on platforms that use openssl)
