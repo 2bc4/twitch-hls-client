@@ -56,11 +56,12 @@ impl Logger {
             offset: UtcOffset::current_local_offset()?,
         }))?;
 
-        log::set_max_level(
-            enable_debug
-                .then_some(LevelFilter::Debug)
-                .unwrap_or(LevelFilter::Info),
-        );
+        let level_filter = if enable_debug {
+            LevelFilter::Debug
+        } else {
+            LevelFilter::Info
+        };
+        log::set_max_level(level_filter);
 
         Ok(())
     }
