@@ -21,11 +21,11 @@ pub struct Args {
     pub client_id: Option<String>,
     pub auth_token: Option<String>,
     pub never_proxy: Option<Vec<String>>,
+    pub codecs: String,
     pub http_retries: u64,
     pub http_timeout: Duration,
     pub channel: String,
     pub quality: String,
-    pub codecs: String,
 }
 
 impl Default for Args {
