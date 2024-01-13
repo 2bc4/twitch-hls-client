@@ -6,7 +6,7 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-use anyhow::{bail, Context, Result};
+use anyhow::{ensure, Context, Result};
 use log::debug;
 use url::Url;
 
@@ -65,9 +65,7 @@ impl Worker {
     fn join_if_dead(&mut self) -> Result<()> {
         if self.handle.as_ref().unwrap().is_finished() {
             let result = self.handle.take().unwrap().join().expect("Worker panicked");
-            if result.is_ok() {
-                bail!("Worker died");
-            }
+            ensure!(result.is_ok(), "Worker died");
 
             return result;
         }

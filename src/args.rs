@@ -1,6 +1,6 @@
 use std::{env, fs, path::Path, process, time::Duration};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, ensure, Context, Result};
 use pico_args::Arguments;
 
 use crate::constants;
@@ -88,14 +88,8 @@ impl Args {
             }
         }
 
-        if args.player.is_empty() {
-            bail!("player must be set");
-        }
-
-        if args.quality.is_empty() {
-            bail!("quality must be set");
-        }
-
+        ensure!(!args.player.is_empty(), "Player must be set");
+        ensure!(!args.quality.is_empty(), "Quality must be set");
         Ok(args)
     }
 
