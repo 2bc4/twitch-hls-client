@@ -42,7 +42,7 @@ Options:
           Prevent specified channels from using a playlist proxy.
           Can be multiple comma separated channels.
       --codecs <CODEC1,CODEC2>
-          Comma seperated list of supported codecs [default: av1,h265,h264]
+          Comma separated list of supported codecs [default: av1,h265,h264]
       --http-retries <COUNT>
           Retry HTTP requests <COUNT> times before giving up [default: 3]
       --http-timeout <SECONDS>

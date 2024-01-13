@@ -46,7 +46,7 @@ Options:
           Prevent specified channels from using a playlist proxy.
           Can be multiple comma separated channels.
       --codecs <CODEC1,CODEC2>
-          Comma seperated list of supported codecs [default: av1,h265,h264]
+          Comma separated list of supported codecs [default: av1,h265,h264]
       --http-retries <COUNT>
           Retry HTTP requests <COUNT> times before giving up [default: 3]
       --http-timeout <SECONDS>
@@ -93,7 +93,7 @@ http-timeout=10
 quality=720p
 ```
 
-Depending on your platform this will look for the config file at the following locations (can be overridden with the `-c` switch):
+Depending on your platform this will look for the config file at the following locations (can be overridden with `-c`):
 
 |Platform|Default location                                                      |
 |--------|----------------------------------------------------------------------|
