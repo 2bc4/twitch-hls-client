@@ -259,11 +259,10 @@ pub fn fetch_twitch_playlist(
             "vodID": "",
             "playerType": "site",
         },
-    });
+    })
+    .to_string();
 
-    let mut request =
-        TextRequest::post(&constants::TWITCH_GQL_ENDPOINT.parse()?, &gql.to_string())?;
-
+    let mut request = TextRequest::post(&constants::TWITCH_GQL_ENDPOINT.parse()?, &gql)?;
     request.header("Content-Type: text/plain;charset=UTF-8")?;
     request.header(&format!("X-Device-ID: {}", &gen_id()))?;
     request.header(&format!(
@@ -275,7 +274,10 @@ pub fn fetch_twitch_playlist(
         request.header(&format!("Authorization: OAuth {auth_token}"))?;
     }
 
-    let response = serde_json::from_str::<Value>(&request.text()?)?;
+    let response = request.text()?;
+    debug!("GQL response: {response}");
+
+    let response = serde_json::from_str::<Value>(&response).context("Invalid GQL response")?;
     let url = Url::parse_with_params(
         &format!("{}{channel}.m3u8", constants::TWITCH_HLS_BASE),
         &[
