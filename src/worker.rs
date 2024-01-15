@@ -58,10 +58,20 @@ impl Worker {
     }
 
     fn join_if_dead(&mut self) -> Result<()> {
-        if self.handle.as_ref().unwrap().is_finished() {
-            let result = self.handle.take().unwrap().join().expect("Worker panicked");
-            ensure!(result.is_err(), "Worker died");
+        if self
+            .handle
+            .as_ref()
+            .context("Worker handle None")?
+            .is_finished()
+        {
+            let result = self
+                .handle
+                .take()
+                .context("Handle None while joining worker")?
+                .join()
+                .expect("Worker panicked");
 
+            ensure!(result.is_err(), "Worker died");
             return result;
         }
 

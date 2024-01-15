@@ -144,10 +144,20 @@ impl<T: Write> Request<T> {
             .map_or_else(|| Ok(()), |e| Err(io::Error::from(e.kind())))?;
 
         let code = self.handle.response_code()?;
-        match code {
-            200 => Ok(()),
-            404 => Err(Error::NotFound(self.handle.effective_url()?.unwrap().to_owned()).into()),
-            _ => Err(Error::Status(code, self.handle.effective_url()?.unwrap().to_owned()).into()),
+        if code == 200 {
+            Ok(())
+        } else {
+            let url = self
+                .handle
+                .effective_url()?
+                .unwrap_or("<unknown>")
+                .to_owned();
+
+            if code == 404 {
+                return Err(Error::NotFound(url).into());
+            }
+
+            Err(Error::Status(code, url).into())
         }
     }
 

@@ -206,7 +206,12 @@ pub fn fetch_proxy_playlist(
     let playlist = servers
         .iter()
         .find_map(|s| {
-            info!("Using server {}://{}", s.scheme(), s.host_str().unwrap());
+            info!(
+                "Using server {}://{}",
+                s.scheme(),
+                s.host_str().unwrap_or("<unknown>")
+            );
+
             let mut request = match TextRequest::get(s) {
                 Ok(request) => request,
                 Err(e) => {

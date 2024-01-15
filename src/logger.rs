@@ -34,8 +34,8 @@ impl Log for Logger {
                         .format(&TIME_FORMAT_DESCRIPTION)
                         .unwrap(), //will never error
                     level_tag(level, self.enable_colors),
-                    thread.name().unwrap_or_default(),
-                    record.module_path().unwrap_or_default(),
+                    thread.name().unwrap_or("<unknown>"),
+                    record.module_path().unwrap_or("<unknown>"),
                     record.args()
                 );
             }
