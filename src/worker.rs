@@ -1,8 +1,5 @@
 use std::{
-    sync::{
-        mpsc::{self, Receiver, Sender},
-        Arc, Barrier,
-    },
+    sync::mpsc::{self, Receiver, Sender, SyncSender},
     thread::{self, JoinHandle},
 };
 
@@ -22,16 +19,15 @@ pub struct Worker {
 impl Worker {
     pub fn spawn(player: Player, initial_url: Url) -> Result<Self> {
         let (url_tx, url_rx): (Sender<Url>, Receiver<Url>) = mpsc::channel();
-        let init = Arc::new(Barrier::new(2));
+        let (init_tx, init_rx): (SyncSender<()>, Receiver<()>) = mpsc::sync_channel(1);
 
-        let worker_init = init.clone();
         let handle = thread::Builder::new()
             .name("worker".to_owned())
             .spawn(move || -> Result<()> {
                 debug!("Starting with URL: {initial_url}");
                 let mut request = WriterRequest::get(player, &initial_url)?;
 
-                worker_init.wait();
+                init_tx.send(())?;
                 loop {
                     let Ok(url) = url_rx.recv() else {
                         debug!("Exiting");
@@ -43,13 +39,12 @@ impl Worker {
             })
             .context("Failed to spawn segment worker")?;
 
-        init.wait();
         let mut worker = Self {
             handle: Some(handle),
             url_tx,
         };
 
-        worker.join_if_dead()?;
+        init_rx.recv().or_else(|_| worker.join_if_dead())?;
         Ok(worker)
     }
 
