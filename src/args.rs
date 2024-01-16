@@ -5,17 +5,34 @@ use pico_args::Arguments;
 
 use crate::constants;
 
+#[derive(Clone, Debug)]
+#[allow(clippy::module_name_repetitions)] //nothing else to name it
+pub struct PlayerArgs {
+    pub path: String,
+    pub args: String,
+    pub quiet: bool,
+    pub no_kill: bool,
+}
+
+impl Default for PlayerArgs {
+    fn default() -> Self {
+        Self {
+            path: String::default(),
+            args: "-".to_owned(),
+            quiet: bool::default(),
+            no_kill: bool::default(),
+        }
+    }
+}
+
 #[derive(Debug)]
 #[allow(clippy::struct_field_names)] //.player_args
 #[allow(clippy::struct_excessive_bools)]
 pub struct Args {
+    pub player: PlayerArgs,
     pub servers: Option<Vec<String>>,
-    pub player: String,
-    pub player_args: String,
     pub debug: bool,
-    pub quiet: bool,
     pub passthrough: bool,
-    pub no_kill: bool,
     pub force_https: bool,
     pub force_ipv4: bool,
     pub client_id: Option<String>,
@@ -31,13 +48,10 @@ pub struct Args {
 impl Default for Args {
     fn default() -> Self {
         Self {
+            player: PlayerArgs::default(),
             servers: Option::default(),
-            player: String::default(),
-            player_args: "-".to_owned(),
             debug: bool::default(),
-            quiet: bool::default(),
             passthrough: bool::default(),
-            no_kill: bool::default(),
             force_https: bool::default(),
             force_ipv4: bool::default(),
             client_id: Option::default(),
@@ -88,7 +102,7 @@ impl Args {
             }
         }
 
-        ensure!(!args.player.is_empty(), "Player must be set");
+        ensure!(!args.player.path.is_empty(), "Player must be set");
         ensure!(!args.quality.is_empty(), "Quality must be set");
         Ok(args)
     }
@@ -108,12 +122,12 @@ impl Args {
             if let Some(split) = split {
                 match split.0 {
                     "servers" => self.servers = Some(split_comma(split.1)?),
-                    "player" => self.player = split.1.into(),
-                    "player-args" => self.player_args = split.1.into(),
+                    "player" => self.player.path = split.1.into(),
+                    "player-args" => self.player.args = split.1.into(),
                     "debug" => self.debug = split.1.parse()?,
-                    "quiet" => self.quiet = split.1.parse()?,
+                    "quiet" => self.player.quiet = split.1.parse()?,
                     "passthrough" => self.passthrough = split.1.parse()?,
-                    "no-kill" => self.no_kill = split.1.parse()?,
+                    "no-kill" => self.player.no_kill = split.1.parse()?,
                     "force-https" => self.force_https = split.1.parse()?,
                     "force-ipv4" => self.force_ipv4 = split.1.parse()?,
                     "client-id" => self.client_id = Some(split.1.into()),
@@ -135,12 +149,15 @@ impl Args {
 
     fn merge_cli(&mut self, p: &mut Arguments) -> Result<()> {
         merge_opt_opt(&mut self.servers, p.opt_value_from_fn("-s", split_comma)?);
-        merge_opt(&mut self.player, p.opt_value_from_str("-p")?);
-        merge_opt(&mut self.player_args, p.opt_value_from_str("-a")?);
+        merge_opt(&mut self.player.path, p.opt_value_from_str("-p")?);
+        merge_opt(&mut self.player.args, p.opt_value_from_str("-a")?);
         merge_switch(&mut self.debug, p.contains("-d") || p.contains("--debug"));
-        merge_switch(&mut self.quiet, p.contains("-q") || p.contains("--quiet"));
+        merge_switch(
+            &mut self.player.quiet,
+            p.contains("-q") || p.contains("--quiet"),
+        );
         merge_switch(&mut self.passthrough, p.contains("--passthrough"));
-        merge_switch(&mut self.no_kill, p.contains("--no-kill"));
+        merge_switch(&mut self.player.no_kill, p.contains("--no-kill"));
         merge_switch(&mut self.force_https, p.contains("--force-https"));
         merge_switch(&mut self.force_ipv4, p.contains("--force-ipv4"));
         merge_opt_opt(&mut self.client_id, p.opt_value_from_str("--client-id")?);

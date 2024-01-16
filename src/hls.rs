@@ -2,6 +2,7 @@ use std::{
     collections::hash_map::DefaultHasher,
     fmt,
     hash::Hasher,
+    str::FromStr,
     thread,
     time::{Duration, Instant},
 };
@@ -43,6 +44,29 @@ impl fmt::Display for Error {
     }
 }
 
+//Used for av1/hevc streams
+#[derive(Default)]
+pub struct SegmentHeaderUrl(pub Option<Url>);
+
+impl FromStr for SegmentHeaderUrl {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let header_url = s.lines().find_map(|s| {
+            s.starts_with("#EXT-X-MAP")
+                .then_some(s)
+                .and_then(|s| s.split_once('='))
+                .map(|s| s.1.replace('"', ""))
+        });
+
+        if let Some(header_url) = header_url {
+            return Ok(Self(Some(header_url.parse()?)));
+        }
+
+        Ok(Self(None))
+    }
+}
+
 #[derive(Copy, Clone)]
 pub enum PrefetchUrlKind {
     Newest,
@@ -57,16 +81,12 @@ pub struct PrefetchUrls {
     hash: u64,
 }
 
-impl PartialEq for PrefetchUrls {
-    fn eq(&self, other: &Self) -> bool {
-        self.hash == other.hash
-    }
-}
+impl FromStr for PrefetchUrls {
+    type Err = Error;
 
-impl PrefetchUrls {
-    pub fn new(playlist: &str) -> Result<Self, Error> {
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut hasher = DefaultHasher::new();
-        let mut iter = playlist.lines().rev().filter_map(|s| {
+        let mut iter = s.lines().rev().filter_map(|s| {
             s.starts_with("#EXT-X-TWITCH-PREFETCH")
                 .then_some(s)
                 .and_then(|s| s.split_once(':'))
@@ -82,7 +102,15 @@ impl PrefetchUrls {
             hash: hasher.finish(),
         })
     }
+}
 
+impl PartialEq for PrefetchUrls {
+    fn eq(&self, other: &Self) -> bool {
+        self.hash == other.hash
+    }
+}
+
+impl PrefetchUrls {
     pub fn take(&mut self, kind: PrefetchUrlKind) -> Result<Url, Error> {
         match kind {
             PrefetchUrlKind::Newest => self.newest.take().ok_or(Error::InvalidPrefetchUrl),
@@ -91,45 +119,90 @@ impl PrefetchUrls {
     }
 }
 
+#[derive(Copy, Clone)]
+pub enum SleepLength {
+    Full,
+    Half,
+}
+
+#[derive(Default)]
+pub struct SegmentDuration(Duration);
+
+impl FromStr for SegmentDuration {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self(
+            Duration::try_from_secs_f32(
+                s.lines()
+                    .rev()
+                    .find(|s| s.starts_with("#EXTINF"))
+                    .and_then(|s| s.split_once(':'))
+                    .and_then(|s| s.1.split_once(','))
+                    .map(|s| s.0)
+                    .ok_or(Error::InvalidDuration)?
+                    .parse()
+                    .or(Err(Error::InvalidDuration))?,
+            )
+            .or(Err(Error::InvalidDuration))?,
+        ))
+    }
+}
+
+impl SegmentDuration {
+    pub fn sleep(&self, length: SleepLength, elapsed: Duration) {
+        match length {
+            SleepLength::Full => Self::sleep_thread(self.0, elapsed),
+            SleepLength::Half => {
+                if let Some(half) = self.0.checked_div(2) {
+                    Self::sleep_thread(half, elapsed);
+                }
+            }
+        }
+    }
+
+    fn sleep_thread(duration: Duration, elapsed: Duration) {
+        if let Some(sleep_time) = duration.checked_sub(elapsed) {
+            debug!("Sleeping thread for {:?}", sleep_time);
+            thread::sleep(sleep_time);
+        }
+    }
+}
+
 pub struct MediaPlaylist {
+    pub header_url: SegmentHeaderUrl,
     pub urls: PrefetchUrls,
-    duration: Duration,
+    pub duration: SegmentDuration,
     request: TextRequest,
 }
 
 impl MediaPlaylist {
     pub fn new(url: &Url) -> Result<Self> {
         let mut playlist = Self {
+            header_url: SegmentHeaderUrl::default(),
             urls: PrefetchUrls::default(),
-            duration: Duration::default(),
+            duration: SegmentDuration::default(),
             request: TextRequest::get(url)?,
         };
 
-        playlist.reload()?;
+        playlist.header_url = playlist.reload()?.parse()?;
         Ok(playlist)
     }
 
-    pub fn reload(&mut self) -> Result<()> {
+    pub fn reload(&mut self) -> Result<String> {
         let mut playlist = self.fetch()?;
 
-        let urls = PrefetchUrls::new(&playlist).or_else(|_| self.filter_ads(&mut playlist))?;
+        let urls = playlist
+            .parse()
+            .or_else(|_| self.filter_ads(&mut playlist))?;
+
         if urls == self.urls {
             return Err(Error::Unchanged.into());
         }
 
         self.urls = urls;
-        self.duration = Self::parse_duration(&playlist)?;
-        Ok(())
-    }
-
-    pub fn sleep_segment_duration(&self, elapsed: Duration) {
-        Self::sleep_thread(self.duration, elapsed);
-    }
-
-    pub fn sleep_half_segment_duration(&self, elapsed: Duration) {
-        if let Some(half) = self.duration.checked_div(2) {
-            Self::sleep_thread(half, elapsed);
-        }
+        self.duration = playlist.parse()?;
+        Ok(playlist)
     }
 
     fn fetch(&mut self) -> Result<String> {
@@ -146,35 +219,12 @@ impl MediaPlaylist {
             let time = Instant::now();
             *playlist = self.fetch()?;
 
-            if let Ok(urls) = PrefetchUrls::new(playlist) {
+            if let Ok(urls) = playlist.parse() {
                 break Ok(urls);
             }
 
-            self.duration = Self::parse_duration(playlist)?;
-            self.sleep_segment_duration(time.elapsed());
-        }
-    }
-
-    fn parse_duration(playlist: &str) -> Result<Duration, Error> {
-        Duration::try_from_secs_f32(
-            playlist
-                .lines()
-                .rev()
-                .find(|s| s.starts_with("#EXTINF"))
-                .and_then(|s| s.split_once(':'))
-                .and_then(|s| s.1.split_once(','))
-                .map(|s| s.0)
-                .ok_or(Error::InvalidDuration)?
-                .parse()
-                .or(Err(Error::InvalidDuration))?,
-        )
-        .or(Err(Error::InvalidDuration))
-    }
-
-    fn sleep_thread(duration: Duration, elapsed: Duration) {
-        if let Some(sleep_time) = duration.checked_sub(elapsed) {
-            debug!("Sleeping thread for {:?}", sleep_time);
-            thread::sleep(sleep_time);
+            self.duration = playlist.parse()?;
+            self.duration.sleep(SleepLength::Full, time.elapsed());
         }
     }
 }

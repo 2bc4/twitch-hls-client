@@ -143,6 +143,8 @@ impl<T: Write> Request<T> {
             .as_ref()
             .map_or_else(|| Ok(()), |e| Err(io::Error::from(e.kind())))?;
 
+        self.get_mut().flush()?; //signal that the request is done
+
         let code = self.handle.response_code()?;
         if code == 200 {
             Ok(())

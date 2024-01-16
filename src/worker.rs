@@ -17,7 +17,7 @@ pub struct Worker {
 }
 
 impl Worker {
-    pub fn spawn(player: Player, initial_url: Url) -> Result<Self> {
+    pub fn spawn(player: Player, initial_url: Url, header_url: Option<Url>) -> Result<Self> {
         let (url_tx, url_rx): (Sender<Url>, Receiver<Url>) = mpsc::channel();
         let (init_tx, init_rx): (SyncSender<()>, Receiver<()>) = mpsc::sync_channel(1);
 
@@ -25,7 +25,14 @@ impl Worker {
             .name("worker".to_owned())
             .spawn(move || -> Result<()> {
                 debug!("Starting with URL: {initial_url}");
-                let mut request = WriterRequest::get(player, &initial_url)?;
+                let mut request = if let Some(header_url) = header_url {
+                    let mut request = WriterRequest::get(player, &header_url)?;
+                    request.call(&initial_url)?;
+
+                    request
+                } else {
+                    WriterRequest::get(player, &initial_url)?
+                };
 
                 init_tx.send(())?;
                 loop {

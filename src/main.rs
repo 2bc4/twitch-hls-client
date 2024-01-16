@@ -14,34 +14,28 @@ use std::{
 use anyhow::Result;
 use log::{debug, info};
 use once_cell::sync::OnceCell;
-use url::Url;
 
 use args::Args;
-use hls::{MediaPlaylist, PrefetchUrlKind};
+use hls::{MediaPlaylist, PrefetchUrlKind, SleepLength};
 use logger::Logger;
 use player::Player;
 use worker::Worker;
 
 static ARGS: OnceCell<Args> = OnceCell::new();
 
-fn passthrough(args: &Args, playlist_url: &Url) -> Result<()> {
-    Player::passthrough(
-        &args.player,
-        &args.player_args,
-        args.quiet,
-        args.no_kill,
-        playlist_url,
-    )
-}
-
 fn main_loop(mut playlist: MediaPlaylist, player: Player) -> Result<()> {
-    let mut worker = Worker::spawn(player, playlist.urls.take(PrefetchUrlKind::Newest)?)?;
+    let mut worker = Worker::spawn(
+        player,
+        playlist.urls.take(PrefetchUrlKind::Newest)?,
+        playlist.header_url.0.take(),
+    )?;
+
     loop {
         let time = Instant::now();
         if let Err(e) = playlist.reload() {
             if matches!(e.downcast_ref::<hls::Error>(), Some(hls::Error::Unchanged)) {
                 debug!("{e}, retrying in half segment duration...");
-                playlist.sleep_half_segment_duration(time.elapsed());
+                playlist.duration.sleep(SleepLength::Half, time.elapsed());
                 continue;
             }
 
@@ -49,7 +43,7 @@ fn main_loop(mut playlist: MediaPlaylist, player: Player) -> Result<()> {
         }
 
         worker.url(playlist.urls.take(PrefetchUrlKind::Next)?)?;
-        playlist.sleep_segment_duration(time.elapsed());
+        playlist.duration.sleep(SleepLength::Full, time.elapsed());
     }
 }
 
@@ -79,18 +73,18 @@ fn main() -> Result<()> {
             }
             Some(hls::Error::NotLowLatency(playlist_url)) => {
                 info!("{e}");
-                return passthrough(args, playlist_url);
+                return Player::passthrough(&args.player, playlist_url);
             }
             _ => return Err(e),
         },
     };
 
     if args.passthrough {
-        return passthrough(args, &playlist_url);
+        return Player::passthrough(&args.player, &playlist_url);
     }
 
     let playlist = MediaPlaylist::new(&playlist_url)?;
-    let player = Player::spawn(&args.player, &args.player_args, args.quiet, args.no_kill)?;
+    let player = Player::spawn(&args.player)?;
     match main_loop(playlist, player) {
         Ok(()) => Ok(()),
         Err(e) => {

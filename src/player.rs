@@ -4,8 +4,10 @@ use std::{
 };
 
 use anyhow::{Context, Result};
-use log::{error, info};
+use log::{debug, error, info};
 use url::Url;
+
+use crate::args::PlayerArgs;
 
 pub struct Player {
     stdin: ChildStdin,
@@ -24,12 +26,13 @@ impl Drop for Player {
 }
 
 impl Write for Player {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.stdin.write(buf)
+    fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+        unimplemented!();
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        self.stdin.flush()
+        debug!("Finished writing segment");
+        Ok(())
     }
 
     fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
@@ -38,12 +41,14 @@ impl Write for Player {
 }
 
 impl Player {
-    pub fn spawn(path: &str, args: &str, quiet: bool, no_kill: bool) -> Result<Self> {
-        info!("Opening player: {path} {args}");
-        let mut command = Command::new(path);
-        command.args(args.split_whitespace()).stdin(Stdio::piped());
+    pub fn spawn(args: &PlayerArgs) -> Result<Self> {
+        info!("Opening player: {} {}", args.path, args.args);
+        let mut command = Command::new(&args.path);
+        command
+            .args(args.args.split_whitespace())
+            .stdin(Stdio::piped());
 
-        if quiet {
+        if args.quiet {
             command.stdout(Stdio::null()).stderr(Stdio::null());
         }
 
@@ -56,19 +61,15 @@ impl Player {
         Ok(Self {
             stdin,
             process,
-            no_kill,
+            no_kill: args.no_kill,
         })
     }
 
-    pub fn passthrough(
-        path: &str,
-        args: &str,
-        quiet: bool,
-        no_kill: bool,
-        url: &Url,
-    ) -> Result<()> {
+    pub fn passthrough(args: &PlayerArgs, url: &Url) -> Result<()> {
         info!("Passing through playlist URL to player");
-        let args = args
+        let mut args = args.to_owned();
+        args.args = args
+            .args
             .split_whitespace()
             .map(|s| {
                 if s == "-" {
@@ -80,7 +81,7 @@ impl Player {
             .collect::<Vec<String>>()
             .join(" ");
 
-        let mut player = Self::spawn(path, &args, quiet, no_kill)?;
+        let mut player = Self::spawn(&args)?;
         player
             .process
             .wait()
