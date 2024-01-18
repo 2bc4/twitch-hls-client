@@ -16,7 +16,7 @@ use log::{debug, info};
 use once_cell::sync::OnceCell;
 
 use args::Args;
-use hls::{MediaPlaylist, PrefetchUrlKind, SleepLength};
+use hls::MediaPlaylist;
 use logger::Logger;
 use player::Player;
 use worker::Worker;
@@ -26,7 +26,7 @@ static ARGS: OnceCell<Args> = OnceCell::new();
 fn main_loop(mut playlist: MediaPlaylist, player: Player) -> Result<()> {
     let mut worker = Worker::spawn(
         player,
-        playlist.urls.take(PrefetchUrlKind::Newest)?,
+        playlist.urls.take_newest()?,
         playlist.header_url.0.take(),
     )?;
 
@@ -35,15 +35,15 @@ fn main_loop(mut playlist: MediaPlaylist, player: Player) -> Result<()> {
         if let Err(e) = playlist.reload() {
             if matches!(e.downcast_ref::<hls::Error>(), Some(hls::Error::Unchanged)) {
                 debug!("{e}, retrying in half segment duration...");
-                playlist.duration.sleep(SleepLength::Half, time.elapsed());
+                playlist.duration.sleep_half(time.elapsed());
                 continue;
             }
 
             return Err(e);
         }
 
-        worker.url(playlist.urls.take(PrefetchUrlKind::Next)?)?;
-        playlist.duration.sleep(SleepLength::Full, time.elapsed());
+        worker.url(playlist.urls.take_next()?)?;
+        playlist.duration.sleep(time.elapsed());
     }
 }
 

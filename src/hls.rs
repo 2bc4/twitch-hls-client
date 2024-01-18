@@ -67,12 +67,6 @@ impl FromStr for SegmentHeaderUrl {
     }
 }
 
-#[derive(Copy, Clone)]
-pub enum PrefetchUrlKind {
-    Newest,
-    Next,
-}
-
 //Option wrapper around Url because it doesn't implement Default
 #[derive(Default)]
 pub struct PrefetchUrls {
@@ -111,18 +105,13 @@ impl PartialEq for PrefetchUrls {
 }
 
 impl PrefetchUrls {
-    pub fn take(&mut self, kind: PrefetchUrlKind) -> Result<Url, Error> {
-        match kind {
-            PrefetchUrlKind::Newest => self.newest.take().ok_or(Error::InvalidPrefetchUrl),
-            PrefetchUrlKind::Next => self.next.take().ok_or(Error::InvalidPrefetchUrl),
-        }
+    pub fn take_newest(&mut self) -> Result<Url, Error> {
+        self.newest.take().ok_or(Error::InvalidPrefetchUrl)
     }
-}
 
-#[derive(Copy, Clone)]
-pub enum SleepLength {
-    Full,
-    Half,
+    pub fn take_next(&mut self) -> Result<Url, Error> {
+        self.next.take().ok_or(Error::InvalidPrefetchUrl)
+    }
 }
 
 #[derive(Default)]
@@ -150,14 +139,13 @@ impl FromStr for SegmentDuration {
 }
 
 impl SegmentDuration {
-    pub fn sleep(&self, length: SleepLength, elapsed: Duration) {
-        match length {
-            SleepLength::Full => Self::sleep_thread(self.0, elapsed),
-            SleepLength::Half => {
-                if let Some(half) = self.0.checked_div(2) {
-                    Self::sleep_thread(half, elapsed);
-                }
-            }
+    pub fn sleep(&self, elapsed: Duration) {
+        Self::sleep_thread(self.0, elapsed);
+    }
+
+    pub fn sleep_half(&self, elapsed: Duration) {
+        if let Some(half) = self.0.checked_div(2) {
+            Self::sleep_thread(half, elapsed);
         }
     }
 
@@ -224,7 +212,7 @@ impl MediaPlaylist {
             }
 
             self.duration = playlist.parse()?;
-            self.duration.sleep(SleepLength::Full, time.elapsed());
+            self.duration.sleep(time.elapsed());
         }
     }
 }
