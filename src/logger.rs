@@ -2,19 +2,15 @@ use std::{
     env,
     io::{self, IsTerminal},
     thread,
+    time::{Duration, SystemTime},
 };
 
 use anyhow::Result;
 use log::{self, Level, LevelFilter, Log, Metadata, Record};
-use time::{format_description::FormatItem, macros::format_description, OffsetDateTime, UtcOffset};
-
-const TIME_FORMAT_DESCRIPTION: &[FormatItem<'static>] =
-    format_description!("[hour]:[minute]:[second].[subsecond digits:5]");
 
 pub struct Logger {
     enable_debug: bool,
     enable_colors: bool,
-    offset: UtcOffset,
 }
 
 impl Log for Logger {
@@ -29,10 +25,10 @@ impl Log for Logger {
                 let thread = thread::current();
                 println!(
                     "{} {} ({}) {}: {}",
-                    OffsetDateTime::now_utc()
-                        .to_offset(self.offset)
-                        .format(&TIME_FORMAT_DESCRIPTION)
-                        .unwrap(), //will never error
+                    SystemTime::now()
+                        .duration_since(SystemTime::UNIX_EPOCH)
+                        .unwrap_or(Duration::ZERO)
+                        .as_millis(),
                     level_tag(level, self.enable_colors),
                     thread.name().unwrap_or("<unknown>"),
                     record.module_path().unwrap_or("<unknown>"),
@@ -53,15 +49,13 @@ impl Logger {
         log::set_boxed_logger(Box::new(Self {
             enable_debug,
             enable_colors: env::var_os("NO_COLOR").is_none() && io::stdout().is_terminal(),
-            offset: UtcOffset::current_local_offset()?,
         }))?;
 
-        let level_filter = if enable_debug {
+        log::set_max_level(if enable_debug {
             LevelFilter::Debug
         } else {
             LevelFilter::Info
-        };
-        log::set_max_level(level_filter);
+        });
 
         Ok(())
     }
