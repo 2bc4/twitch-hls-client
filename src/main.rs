@@ -13,23 +13,15 @@ use std::{
 
 use anyhow::Result;
 use log::{debug, info};
-use once_cell::sync::OnceCell;
 
 use args::Args;
 use hls::MediaPlaylist;
+use http::Agent;
 use logger::Logger;
 use player::Player;
 use worker::Worker;
 
-static ARGS: OnceCell<Args> = OnceCell::new();
-
-fn main_loop(mut playlist: MediaPlaylist, player: Player) -> Result<()> {
-    let mut worker = Worker::spawn(
-        player,
-        playlist.urls.take_newest()?,
-        playlist.header_url.0.take(),
-    )?;
-
+fn main_loop(mut playlist: MediaPlaylist, mut worker: Worker) -> Result<()> {
     loop {
         let time = Instant::now();
         if let Err(e) = playlist.reload() {
@@ -48,22 +40,15 @@ fn main_loop(mut playlist: MediaPlaylist, player: Player) -> Result<()> {
 }
 
 fn main() -> Result<()> {
-    let args = ARGS.get_or_try_init(Args::parse)?;
+    let (args, http_args) = Args::parse()?;
 
     Logger::init(args.debug)?;
-    debug!("{:?}", args);
+    debug!("{:?} {:?}", args, http_args);
 
+    let agent = Agent::new(http_args);
     let playlist_url = match args.servers.as_ref().map_or_else(
-        || {
-            hls::fetch_twitch_playlist(
-                &args.client_id,
-                &args.auth_token,
-                &args.codecs,
-                &args.channel,
-                &args.quality,
-            )
-        },
-        |servers| hls::fetch_proxy_playlist(servers, &args.codecs, &args.channel, &args.quality),
+        || hls::fetch_twitch_playlist(&args.client_id, &args.auth_token, &args.hls, &agent),
+        |servers| hls::fetch_proxy_playlist(servers, &args.hls, &agent),
     ) {
         Ok(playlist_url) => playlist_url,
         Err(e) => match e.downcast_ref::<hls::Error>() {
@@ -83,9 +68,15 @@ fn main() -> Result<()> {
         return Player::passthrough(&args.player, &playlist_url);
     }
 
-    let playlist = MediaPlaylist::new(&playlist_url)?;
-    let player = Player::spawn(&args.player)?;
-    match main_loop(playlist, player) {
+    let mut playlist = MediaPlaylist::new(&playlist_url, &agent)?;
+    let worker = Worker::spawn(
+        Player::spawn(&args.player)?,
+        playlist.urls.take_newest()?,
+        playlist.header_url.0.take(),
+        &agent,
+    )?;
+
+    match main_loop(playlist, worker) {
         Ok(()) => Ok(()),
         Err(e) => {
             if matches!(e.downcast_ref::<hls::Error>(), Some(hls::Error::Offline)) {

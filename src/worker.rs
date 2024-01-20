@@ -7,7 +7,7 @@ use anyhow::{ensure, Context, Result};
 use log::debug;
 use url::Url;
 
-use crate::{http::WriterRequest, player::Player};
+use crate::{http::Agent, player::Player};
 
 pub struct Worker {
     //Option to call take() because handle.join() consumes self.
@@ -17,21 +17,27 @@ pub struct Worker {
 }
 
 impl Worker {
-    pub fn spawn(player: Player, initial_url: Url, header_url: Option<Url>) -> Result<Self> {
+    pub fn spawn(
+        player: Player,
+        initial_url: Url,
+        header_url: Option<Url>,
+        agent: &Agent,
+    ) -> Result<Self> {
         let (url_tx, url_rx): (Sender<Url>, Receiver<Url>) = mpsc::channel();
         let (init_tx, init_rx): (SyncSender<()>, Receiver<()>) = mpsc::sync_channel(1);
 
+        let agent = agent.clone();
         let handle = thread::Builder::new()
             .name("worker".to_owned())
             .spawn(move || -> Result<()> {
                 debug!("Starting with URL: {initial_url}");
                 let mut request = if let Some(header_url) = header_url {
-                    let mut request = WriterRequest::get(player, &header_url)?;
+                    let mut request = agent.writer(player, &header_url)?;
                     request.call(&initial_url)?;
 
                     request
                 } else {
-                    WriterRequest::get(player, &initial_url)?
+                    agent.writer(player, &initial_url)?
                 };
 
                 init_tx.send(())?;

@@ -16,8 +16,9 @@ use rand::{
 use url::Url;
 
 use crate::{
+    args::HlsArgs,
     constants,
-    http::{self, TextRequest},
+    http::{self, Agent, TextRequest},
 };
 
 #[derive(Debug)]
@@ -164,12 +165,12 @@ pub struct MediaPlaylist {
 }
 
 impl MediaPlaylist {
-    pub fn new(url: &Url) -> Result<Self> {
+    pub fn new(url: &Url, agent: &Agent) -> Result<Self> {
         let mut playlist = Self {
             header_url: SegmentHeaderUrl::default(),
             urls: PrefetchUrls::default(),
             duration: SegmentDuration::default(),
-            request: TextRequest::get(url)?,
+            request: agent.get(url)?,
         };
 
         playlist.header_url = playlist.reload()?.parse()?;
@@ -223,7 +224,12 @@ struct PlaybackAccessToken {
 }
 
 impl PlaybackAccessToken {
-    fn new(client_id: &Option<String>, auth_token: &Option<String>, channel: &str) -> Result<Self> {
+    fn new(
+        client_id: &Option<String>,
+        auth_token: &Option<String>,
+        channel: &str,
+        agent: &Agent,
+    ) -> Result<Self> {
         #[rustfmt::skip]
         let gql = concat!(
         "{",
@@ -243,12 +249,12 @@ impl PlaybackAccessToken {
             "}",
         "}").replace("{channel}", channel);
 
-        let mut request = TextRequest::post(&constants::TWITCH_GQL_ENDPOINT.parse()?, &gql)?;
+        let mut request = agent.post(&constants::TWITCH_GQL_ENDPOINT.parse()?, &gql)?;
         request.header("Content-Type: text/plain;charset=UTF-8")?;
         request.header(&format!("X-Device-ID: {}", &Self::gen_id()))?;
         request.header(&format!(
             "Client-Id: {}",
-            Self::choose_client_id(client_id, auth_token)?
+            Self::choose_client_id(client_id, auth_token, agent)?
         ))?;
 
         if let Some(auth_token) = auth_token {
@@ -281,12 +287,16 @@ impl PlaybackAccessToken {
         })
     }
 
-    fn choose_client_id(client_id: &Option<String>, auth_token: &Option<String>) -> Result<String> {
+    fn choose_client_id(
+        client_id: &Option<String>,
+        auth_token: &Option<String>,
+        agent: &Agent,
+    ) -> Result<String> {
         //--client-id > (if auth token) client id from twitch > default
         let client_id = if let Some(client_id) = client_id {
             client_id.to_owned()
         } else if let Some(auth_token) = auth_token {
-            let mut request = TextRequest::get(&constants::TWITCH_OAUTH_ENDPOINT.parse()?)?;
+            let mut request = agent.get(&constants::TWITCH_OAUTH_ENDPOINT.parse()?)?;
             request.header(&format!("Authorization: OAuth {auth_token}"))?;
 
             request
@@ -314,14 +324,13 @@ impl PlaybackAccessToken {
 pub fn fetch_twitch_playlist(
     client_id: &Option<String>,
     auth_token: &Option<String>,
-    codecs: &str,
-    channel: &str,
-    quality: &str,
+    args: &HlsArgs,
+    agent: &Agent,
 ) -> Result<Url> {
-    info!("Fetching playlist for channel {channel} (Twitch)");
-    let access_token = PlaybackAccessToken::new(client_id, auth_token, channel)?;
+    info!("Fetching playlist for channel {} (Twitch)", args.channel);
+    let access_token = PlaybackAccessToken::new(client_id, auth_token, &args.channel, agent)?;
     let url = Url::parse_with_params(
-        &format!("{}{channel}.m3u8", constants::TWITCH_HLS_BASE),
+        &format!("{}{}.m3u8", constants::TWITCH_HLS_BASE, args.channel),
         &[
             ("acmb", "e30="),
             ("allow_source", "true"),
@@ -331,7 +340,7 @@ pub fn fetch_twitch_playlist(
             ("playlist_include_framerate", "true"),
             ("player_backend", "mediaplayer"),
             ("reassignments_supported", "true"),
-            ("supported_codecs", codecs),
+            ("supported_codecs", &args.codecs),
             ("transcode_mode", "cbr_v1"),
             (
                 "p",
@@ -346,29 +355,24 @@ pub fn fetch_twitch_playlist(
     )?;
 
     parse_variant_playlist(
-        &TextRequest::get(&url)?.text().map_err(map_if_offline)?,
-        quality,
+        &agent.get(&url)?.text().map_err(map_if_offline)?,
+        &args.quality,
     )
 }
 
-pub fn fetch_proxy_playlist(
-    servers: &[String],
-    codecs: &str,
-    channel: &str,
-    quality: &str,
-) -> Result<Url> {
-    info!("Fetching playlist for channel {} (proxy)", channel);
+pub fn fetch_proxy_playlist(servers: &[String], args: &HlsArgs, agent: &Agent) -> Result<Url> {
+    info!("Fetching playlist for channel {} (proxy)", args.channel);
     let servers = servers
         .iter()
         .map(|s| {
             Url::parse_with_params(
-                &s.replace("[channel]", channel),
+                &s.replace("[channel]", &args.channel),
                 &[
                     ("allow_source", "true"),
                     ("allow_audio_only", "true"),
                     ("fast_bread", "true"),
                     ("warp", "true"),
-                    ("supported_codecs", codecs),
+                    ("supported_codecs", &args.codecs),
                 ],
             )
         })
@@ -384,7 +388,7 @@ pub fn fetch_proxy_playlist(
                 s.host_str().unwrap_or("<unknown>")
             );
 
-            let mut request = match TextRequest::get(s) {
+            let mut request = match agent.get(s) {
                 Ok(request) => request,
                 Err(e) => {
                     error!("{e}");
@@ -410,7 +414,7 @@ pub fn fetch_proxy_playlist(
         })
         .ok_or(Error::Offline)?;
 
-    parse_variant_playlist(&playlist, quality)
+    parse_variant_playlist(&playlist, &args.quality)
 }
 
 fn parse_variant_playlist(master_playlist: &str, quality: &str) -> Result<Url> {

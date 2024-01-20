@@ -5,6 +5,44 @@ use pico_args::Arguments;
 
 use crate::constants;
 
+#[derive(Debug)]
+#[allow(clippy::module_name_repetitions)] //nothing else to name it
+pub struct HttpArgs {
+    pub force_https: bool,
+    pub force_ipv4: bool,
+    pub retries: u64,
+    pub timeout: Duration,
+}
+
+impl Default for HttpArgs {
+    fn default() -> Self {
+        Self {
+            retries: 3,
+            timeout: Duration::from_secs(10),
+            force_https: bool::default(),
+            force_ipv4: bool::default(),
+        }
+    }
+}
+
+#[derive(Debug)]
+#[allow(clippy::module_name_repetitions)] //nothing else to name it
+pub struct HlsArgs {
+    pub codecs: String,
+    pub channel: String,
+    pub quality: String,
+}
+
+impl Default for HlsArgs {
+    fn default() -> Self {
+        Self {
+            codecs: "av1,h265,h264".to_owned(),
+            channel: String::default(),
+            quality: String::default(),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 #[allow(clippy::module_name_repetitions)] //nothing else to name it
 pub struct PlayerArgs {
@@ -17,58 +55,30 @@ pub struct PlayerArgs {
 impl Default for PlayerArgs {
     fn default() -> Self {
         Self {
-            path: String::default(),
             args: "-".to_owned(),
+            path: String::default(),
             quiet: bool::default(),
             no_kill: bool::default(),
         }
     }
 }
 
-#[derive(Debug)]
-#[allow(clippy::struct_field_names)] //.player_args
-#[allow(clippy::struct_excessive_bools)]
+#[derive(Default, Debug)]
 pub struct Args {
+    pub hls: HlsArgs,
     pub player: PlayerArgs,
     pub servers: Option<Vec<String>>,
     pub debug: bool,
     pub passthrough: bool,
-    pub force_https: bool,
-    pub force_ipv4: bool,
     pub client_id: Option<String>,
     pub auth_token: Option<String>,
     pub never_proxy: Option<Vec<String>>,
-    pub codecs: String,
-    pub http_retries: u64,
-    pub http_timeout: Duration,
-    pub channel: String,
-    pub quality: String,
-}
-
-impl Default for Args {
-    fn default() -> Self {
-        Self {
-            player: PlayerArgs::default(),
-            servers: Option::default(),
-            debug: bool::default(),
-            passthrough: bool::default(),
-            force_https: bool::default(),
-            force_ipv4: bool::default(),
-            client_id: Option::default(),
-            auth_token: Option::default(),
-            never_proxy: Option::default(),
-            codecs: "av1,h265,h264".to_owned(),
-            http_retries: 3,
-            http_timeout: Duration::from_secs(10),
-            channel: String::default(),
-            quality: String::default(),
-        }
-    }
 }
 
 impl Args {
-    pub fn parse() -> Result<Self> {
+    pub fn parse() -> Result<(Self, HttpArgs)> {
         let mut args = Self::default();
+        let mut http_args = HttpArgs::default();
         let mut parser = Arguments::from_env();
         if parser.contains("-h") || parser.contains("--help") {
             println!(include_str!("usage"));
@@ -92,22 +102,22 @@ impl Args {
                 None => default_config_path()?,
             };
 
-            args.parse_config(&config_path)?;
+            args.parse_config(&mut http_args, &config_path)?;
         }
 
-        args.merge_cli(&mut parser)?;
+        args.merge_cli(&mut parser, &mut http_args)?;
         if let Some(never_proxy) = &args.never_proxy {
-            if never_proxy.iter().any(|a| a.eq(&args.channel)) {
+            if never_proxy.iter().any(|a| a.eq(&args.hls.channel)) {
                 args.servers = None;
             }
         }
 
         ensure!(!args.player.path.is_empty(), "Player must be set");
-        ensure!(!args.quality.is_empty(), "Quality must be set");
-        Ok(args)
+        ensure!(!args.hls.quality.is_empty(), "Quality must be set");
+        Ok((args, http_args))
     }
 
-    fn parse_config(&mut self, path: &str) -> Result<()> {
+    fn parse_config(&mut self, http: &mut HttpArgs, path: &str) -> Result<()> {
         if !Path::new(path).is_file() {
             return Ok(());
         }
@@ -128,15 +138,15 @@ impl Args {
                     "quiet" => self.player.quiet = split.1.parse()?,
                     "passthrough" => self.passthrough = split.1.parse()?,
                     "no-kill" => self.player.no_kill = split.1.parse()?,
-                    "force-https" => self.force_https = split.1.parse()?,
-                    "force-ipv4" => self.force_ipv4 = split.1.parse()?,
+                    "force-https" => http.force_https = split.1.parse()?,
+                    "force-ipv4" => http.force_ipv4 = split.1.parse()?,
                     "client-id" => self.client_id = Some(split.1.into()),
                     "auth-token" => self.auth_token = Some(split.1.into()),
                     "never-proxy" => self.never_proxy = Some(split_comma(split.1)?),
-                    "codecs" => self.codecs = split.1.into(),
-                    "http-retries" => self.http_retries = split.1.parse()?,
-                    "http-timeout" => self.http_timeout = parse_duration(split.1)?,
-                    "quality" => self.quality = split.1.into(),
+                    "codecs" => self.hls.codecs = split.1.into(),
+                    "http-retries" => http.retries = split.1.parse()?,
+                    "http-timeout" => http.timeout = parse_duration(split.1)?,
+                    "quality" => self.hls.quality = split.1.into(),
                     _ => bail!("Unknown key in config: {}", split.0),
                 }
             } else {
@@ -147,7 +157,7 @@ impl Args {
         Ok(())
     }
 
-    fn merge_cli(&mut self, p: &mut Arguments) -> Result<()> {
+    fn merge_cli(&mut self, p: &mut Arguments, http: &mut HttpArgs) -> Result<()> {
         merge_opt_opt(&mut self.servers, p.opt_value_from_fn("-s", split_comma)?);
         merge_opt(&mut self.player.path, p.opt_value_from_str("-p")?);
         merge_opt(&mut self.player.args, p.opt_value_from_str("-a")?);
@@ -158,31 +168,28 @@ impl Args {
         );
         merge_switch(&mut self.passthrough, p.contains("--passthrough"));
         merge_switch(&mut self.player.no_kill, p.contains("--no-kill"));
-        merge_switch(&mut self.force_https, p.contains("--force-https"));
-        merge_switch(&mut self.force_ipv4, p.contains("--force-ipv4"));
+        merge_switch(&mut http.force_https, p.contains("--force-https"));
+        merge_switch(&mut http.force_ipv4, p.contains("--force-ipv4"));
         merge_opt_opt(&mut self.client_id, p.opt_value_from_str("--client-id")?);
         merge_opt_opt(&mut self.auth_token, p.opt_value_from_str("--auth-token")?);
         merge_opt_opt(
             &mut self.never_proxy,
             p.opt_value_from_fn("--never-proxy", split_comma)?,
         );
-        merge_opt(&mut self.codecs, p.opt_value_from_str("--codecs")?);
+        merge_opt(&mut self.hls.codecs, p.opt_value_from_str("--codecs")?);
+        merge_opt(&mut http.retries, p.opt_value_from_str("--http-retries")?);
         merge_opt(
-            &mut self.http_retries,
-            p.opt_value_from_str("--http-retries")?,
-        );
-        merge_opt(
-            &mut self.http_timeout,
+            &mut http.timeout,
             p.opt_value_from_fn("--http-timeout", parse_duration)?,
         );
 
-        self.channel = p
+        self.hls.channel = p
             .free_from_str::<String>()
             .context("missing channel argument")?
             .to_lowercase()
             .replace("twitch.tv/", "");
 
-        merge_opt(&mut self.quality, p.opt_free_from_str()?);
+        merge_opt(&mut self.hls.quality, p.opt_free_from_str()?);
 
         Ok(())
     }
