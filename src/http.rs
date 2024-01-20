@@ -29,7 +29,6 @@ impl fmt::Display for Error {
     }
 }
 
-//Arc wrapper
 #[derive(Clone)]
 pub struct Agent {
     args: Arc<HttpArgs>,
@@ -43,15 +42,15 @@ impl Agent {
     }
 
     pub fn get(&self, url: &Url) -> Result<TextRequest> {
-        TextRequest::get(url, self.args.clone())
+        TextRequest::get(Request::new(Vec::new(), url, self.args.clone())?)
     }
 
     pub fn post(&self, url: &Url, data: &str) -> Result<TextRequest> {
-        TextRequest::post(url, data, self.args.clone())
+        TextRequest::post(Request::new(Vec::new(), url, self.args.clone())?, data)
     }
 
     pub fn writer<T: Write>(&self, writer: T, url: &Url) -> Result<WriterRequest<T>> {
-        WriterRequest::get(writer, url, self.args.clone())
+        WriterRequest::new(Request::new(writer, url, self.args.clone())?)
     }
 }
 
@@ -60,21 +59,6 @@ pub struct TextRequest {
 }
 
 impl TextRequest {
-    pub fn get(url: &Url, args: Arc<HttpArgs>) -> Result<Self> {
-        let mut request = Request::new(Vec::new(), url, args)?;
-        request.handle.get(true)?;
-
-        Ok(Self { request })
-    }
-
-    pub fn post(url: &Url, data: &str, args: Arc<HttpArgs>) -> Result<Self> {
-        let mut request = Request::new(Vec::new(), url, args)?;
-        request.handle.post(true)?;
-        request.handle.post_fields_copy(data.as_bytes())?;
-
-        Ok(Self { request })
-    }
-
     pub fn header(&mut self, header: &str) -> Result<()> {
         let mut list = List::new();
         list.append(header)?;
@@ -91,6 +75,18 @@ impl TextRequest {
 
         Ok(text)
     }
+
+    fn get(mut request: Request<Vec<u8>>) -> Result<Self> {
+        request.handle.get(true)?;
+        Ok(Self { request })
+    }
+
+    fn post(mut request: Request<Vec<u8>>, data: &str) -> Result<Self> {
+        request.handle.post(true)?;
+        request.handle.post_fields_copy(data.as_bytes())?;
+
+        Ok(Self { request })
+    }
 }
 
 pub struct WriterRequest<T>
@@ -101,17 +97,16 @@ where
 }
 
 impl<T: Write> WriterRequest<T> {
-    pub fn get(writer: T, url: &Url, args: Arc<HttpArgs>) -> Result<Self> {
-        let mut request = Request::new(writer, url, args)?;
-        request.handle.get(true)?;
-
-        request.perform()?;
-        Ok(Self { request })
-    }
-
     pub fn call(&mut self, url: &Url) -> Result<()> {
         self.request.url(url)?;
         self.request.perform()
+    }
+
+    fn new(mut request: Request<T>) -> Result<Self> {
+        request.handle.get(true)?;
+        request.perform()?;
+
+        Ok(Self { request })
     }
 }
 
