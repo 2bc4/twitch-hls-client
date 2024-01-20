@@ -2,6 +2,7 @@ use std::{
     collections::hash_map::DefaultHasher,
     fmt,
     hash::Hasher,
+    iter,
     str::FromStr,
     thread,
     time::{Duration, Instant},
@@ -9,10 +10,6 @@ use std::{
 
 use anyhow::{Context, Result};
 use log::{debug, error, info};
-use rand::{
-    distributions::{Alphanumeric, DistString},
-    Rng,
-};
 use url::Url;
 
 use crate::{
@@ -315,9 +312,7 @@ impl PlaybackAccessToken {
     }
 
     fn gen_id() -> String {
-        Alphanumeric
-            .sample_string(&mut rand::thread_rng(), 32)
-            .to_lowercase()
+        iter::repeat_with(fastrand::alphanumeric).take(32).collect()
     }
 }
 
@@ -342,10 +337,7 @@ pub fn fetch_twitch_playlist(
             ("reassignments_supported", "true"),
             ("supported_codecs", &args.codecs),
             ("transcode_mode", "cbr_v1"),
-            (
-                "p",
-                &rand::thread_rng().gen_range(0..=9_999_999).to_string(),
-            ),
+            ("p", &fastrand::u32(0..=9_999_999).to_string()),
             ("play_session_id", &access_token.play_session_id),
             ("sig", &access_token.signature),
             ("token", &access_token.token),
