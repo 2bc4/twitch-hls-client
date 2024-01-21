@@ -21,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: setup
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@nightly
         with:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
@@ -41,7 +41,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@nightly
         with:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
@@ -116,15 +116,16 @@ jobs:
         if: ${{ contains(matrix.os, 'ubuntu') }}
         run: sudo apt-get install -y musl-tools musl-dev
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@nightly
         with:
           targets: ${{ matrix.target }}
+          components: rust-src
       - name: Build
         shell: bash
-        run: cargo build --release --target=${{ matrix.target }} --features ${{ matrix.features }} --config 'build.rustflags="-Ctarget-cpu=${{ matrix.target-cpu }}"'
+        run: RUSTFLAGS='-Ctarget-cpu=${{ matrix.target-cpu }}' cargo +nightly build -Z build-std=std,panic_abort -Z build-std-features= --release --target=${{ matrix.target }} --features ${{ matrix.features }}
       - name: Smoke Test
         shell: bash
-        run: cargo run --release --target=${{ matrix.target }} --features ${{ matrix.features }} --config 'build.rustflags="-Ctarget-cpu=${{ matrix.target-cpu }}"' -- -V
+        run: RUSTFLAGS='-Ctarget-cpu=${{ matrix.target-cpu }}' cargo +nightly run -Z build-std=std,panic_abort -Z build-std-features= --release --target=${{ matrix.target }} --features ${{ matrix.features }} -- -V
       - name: Move Binary
         id: mv
         run: mv "target/${{ matrix.target }}/release/${{ matrix.bin-name }}" .
