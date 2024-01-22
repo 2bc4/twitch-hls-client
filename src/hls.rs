@@ -92,17 +92,19 @@ impl MediaPlaylist {
     }
 
     pub fn reload(&mut self) -> Result<()> {
-        let playlist = self.fetch()?;
-        if playlist
+        self.playlist = self.request.text().map_err(map_if_offline)?;
+        debug!("Playlist:\n{}", self.playlist);
+
+        if self
+            .playlist
             .lines()
             .next_back()
             .unwrap_or_default()
-            .eq("#EXT-X-ENDLIST")
+            .starts_with("#EXT-X-ENDLIST")
         {
             return Err(Error::Offline.into());
         }
 
-        self.playlist = playlist;
         Ok(())
     }
 
@@ -122,13 +124,6 @@ impl MediaPlaylist {
         self.playlist.parse()
     }
 
-    fn fetch(&mut self) -> Result<String> {
-        let playlist = self.request.text().map_err(map_if_offline)?;
-        debug!("Playlist:\n{playlist}");
-
-        Ok(playlist)
-    }
-
     fn parse_prefetch_url<T: PrefetchUrl>(&mut self) -> Result<Url> {
         let url = T::parse(&self.playlist).or_else(|_| self.filter_ads::<T>())?;
         let url_string = url.as_str().to_owned();
@@ -146,7 +141,7 @@ impl MediaPlaylist {
         //Ads don't have prefetch URLs, wait until they come back to filter ads
         loop {
             let time = Instant::now();
-            self.playlist = self.fetch()?;
+            self.reload()?;
 
             if let Ok(url) = T::parse(&self.playlist) {
                 break Ok(url);
