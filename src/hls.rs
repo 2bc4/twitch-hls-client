@@ -176,6 +176,9 @@ impl MediaPlaylist {
 
     pub fn reload(&mut self) -> Result<String> {
         let mut playlist = self.fetch()?;
+        if playlist.lines().rev().any(|s| s.starts_with("#EXT-X-ENDLIST")) {
+            return Err(Error::Offline.into());
+        }
 
         let urls = playlist
             .parse()
