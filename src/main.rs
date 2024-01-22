@@ -24,18 +24,22 @@ use worker::Worker;
 fn main_loop(mut playlist: MediaPlaylist, mut worker: Worker) -> Result<()> {
     loop {
         let time = Instant::now();
-        if let Err(e) = playlist.reload() {
-            if matches!(e.downcast_ref::<hls::Error>(), Some(hls::Error::Unchanged)) {
-                debug!("{e}, retrying in half segment duration...");
-                playlist.duration.sleep_half(time.elapsed());
-                continue;
+
+        playlist.reload()?;
+        match playlist.next() {
+            Ok(next) => worker.url(next)?,
+            Err(e) => {
+                if matches!(e.downcast_ref::<hls::Error>(), Some(hls::Error::Unchanged)) {
+                    debug!("{e}, retrying in half segment duration...");
+                    playlist.duration()?.sleep_half(time.elapsed());
+                    continue;
+                }
+
+                return Err(e);
             }
+        };
 
-            return Err(e);
-        }
-
-        worker.url(playlist.urls.take_next()?)?;
-        playlist.duration.sleep(time.elapsed());
+        playlist.duration()?.sleep(time.elapsed());
     }
 }
 
@@ -71,8 +75,8 @@ fn main() -> Result<()> {
     let mut playlist = MediaPlaylist::new(&playlist_url, &agent)?;
     let worker = Worker::spawn(
         Player::spawn(&args.player)?,
-        playlist.urls.take_newest()?,
-        playlist.header_url.0.take(),
+        playlist.newest()?,
+        playlist.header()?,
         &agent,
     )?;
 
