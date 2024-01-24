@@ -8,14 +8,14 @@ Arguments:
 
 Options:
   -s <URL1,URL2>
-          Playlist proxy server to fetch the master playlist from.
+          Ad blocking playlist proxy server to fetch the master playlist from.
           If not specified will fetch the master playlist directly from Twitch.
           Can be multiple comma separated servers, will try each in order until successful.
           If URL includes "[channel]" it will be replaced with the channel argument at runtime.
   -p <PATH>
           Path to player
   -a <ARGUMENTS>
-          Arguments to pass to the player
+          Arguments to pass to the player [default: -]
   -c <PATH>
           Path to config file
   -d, --debug
