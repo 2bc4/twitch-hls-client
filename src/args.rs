@@ -6,12 +6,13 @@ use pico_args::Arguments;
 use crate::constants;
 
 #[derive(Debug)]
-#[allow(clippy::module_name_repetitions)] //nothing else to name it
+#[allow(clippy::module_name_repetitions)]
 pub struct HttpArgs {
     pub force_https: bool,
     pub force_ipv4: bool,
     pub retries: u64,
     pub timeout: Duration,
+    pub user_agent: String,
 }
 
 impl Default for HttpArgs {
@@ -21,12 +22,13 @@ impl Default for HttpArgs {
             timeout: Duration::from_secs(10),
             force_https: bool::default(),
             force_ipv4: bool::default(),
+            user_agent: constants::USER_AGENT.to_owned(),
         }
     }
 }
 
 #[derive(Debug)]
-#[allow(clippy::module_name_repetitions)] //nothing else to name it
+#[allow(clippy::module_name_repetitions)]
 pub struct HlsArgs {
     pub codecs: String,
     pub channel: String,
@@ -44,7 +46,7 @@ impl Default for HlsArgs {
 }
 
 #[derive(Clone, Debug)]
-#[allow(clippy::module_name_repetitions)] //nothing else to name it
+#[allow(clippy::module_name_repetitions)]
 pub struct PlayerArgs {
     pub path: String,
     pub args: String,
@@ -144,6 +146,7 @@ impl Args {
                     "auth-token" => self.auth_token = Some(split.1.into()),
                     "never-proxy" => self.never_proxy = Some(split_comma(split.1)?),
                     "codecs" => self.hls.codecs = split.1.into(),
+                    "user-agent" => http.user_agent = split.1.into(),
                     "http-retries" => http.retries = split.1.parse()?,
                     "http-timeout" => http.timeout = parse_duration(split.1)?,
                     "quality" => self.hls.quality = split.1.into(),
@@ -176,6 +179,7 @@ impl Args {
             &mut self.never_proxy,
             p.opt_value_from_fn("--never-proxy", split_comma)?,
         );
+        merge_opt(&mut http.user_agent, p.opt_value_from_str("--user-agent")?);
         merge_opt(&mut self.hls.codecs, p.opt_value_from_str("--codecs")?);
         merge_opt(&mut http.retries, p.opt_value_from_str("--http-retries")?);
         merge_opt(

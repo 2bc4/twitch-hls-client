@@ -43,6 +43,8 @@ Options:
           Can be multiple comma separated channels.
       --codecs <CODEC1,CODEC2>
           Comma separated list of supported codecs [default: av1,h265,h264]
+      --user-agent <USERAGENT>
+          Set user agent used in HTTP requests [default: a recent version of Firefox]
       --http-retries <COUNT>
           Retry HTTP requests <COUNT> times before giving up [default: 3]
       --http-timeout <SECONDS>

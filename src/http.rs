@@ -10,7 +10,7 @@ use curl::easy::{Easy2, Handler, InfoType, IpResolve, List, WriteError};
 use log::{debug, LevelFilter};
 use url::Url;
 
-use crate::{args::HttpArgs, constants};
+use crate::args::HttpArgs;
 
 #[derive(Debug)]
 pub enum Error {
@@ -138,8 +138,8 @@ impl<T: Write> Request<T> {
 
         request.handle.timeout(request.args.timeout)?;
         request.handle.tcp_nodelay(true)?;
-        request.handle.accept_encoding("")?;
-        request.handle.useragent(constants::USER_AGENT)?;
+        request.handle.accept_encoding("")?; //empty string allows all available encodings
+        request.handle.useragent(&request.args.user_agent)?;
         request.url(url)?;
         Ok(request)
     }
