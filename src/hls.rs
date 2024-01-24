@@ -34,6 +34,122 @@ impl fmt::Display for Error {
     }
 }
 
+pub struct MediaPlaylist {
+    playlist: String,
+    prev_url: String,
+    request: TextRequest,
+}
+
+impl MediaPlaylist {
+    pub fn new(url: &Url, agent: &Agent) -> Result<Self> {
+        let mut playlist = Self {
+            playlist: String::default(),
+            prev_url: String::default(),
+            request: agent.get(url)?,
+        };
+
+        playlist.reload()?;
+        Ok(playlist)
+    }
+
+    pub fn reload(&mut self) -> Result<()> {
+        self.playlist = self.request.text().map_err(map_if_offline)?;
+        debug!("Playlist:\n{}", self.playlist);
+
+        if self
+            .playlist
+            .lines()
+            .next_back()
+            .unwrap_or_default()
+            .starts_with("#EXT-X-ENDLIST")
+        {
+            return Err(Error::Offline.into());
+        }
+
+        Ok(())
+    }
+
+    //Used for av1/hevc streams
+    pub fn header(&mut self) -> Result<Option<Url>> {
+        let header_url = self
+            .playlist
+            .lines()
+            .find(|s| s.starts_with("#EXT-X-MAP"))
+            .and_then(|s| s.split_once('='))
+            .map(|s| s.1.replace('"', ""));
+
+        if let Some(header_url) = header_url {
+            return Ok(Some(
+                header_url
+                    .parse()
+                    .context("Failed to parse segment header URL")?,
+            ));
+        }
+
+        Ok(None)
+    }
+
+    pub fn newest(&mut self) -> Result<Url> {
+        self.prefetch_url(|playlist| -> Result<Url> {
+            playlist
+                .lines()
+                .rev()
+                .find(|s| s.starts_with("#EXT-X-TWITCH-PREFETCH"))
+                .and_then(|s| s.split_once(':'))
+                .map(|s| s.1)
+                .context("Invalid newest prefetch segment URL")?
+                .parse()
+                .context("Failed to parse newest prefetch segment URL")
+        })
+    }
+
+    pub fn next(&mut self) -> Result<Url> {
+        self.prefetch_url(|playlist| -> Result<Url> {
+            playlist
+                .lines()
+                .rev()
+                .filter(|s| s.starts_with("#EXT-X-TWITCH-PREFETCH"))
+                .nth(1)
+                .and_then(|s| s.split_once(':'))
+                .map(|s| s.1)
+                .context("Invalid next prefetch segment URL")?
+                .parse()
+                .context("Failed to parse next prefetch segment URL")
+        })
+    }
+
+    pub fn duration(&self) -> Result<SegmentDuration> {
+        self.playlist.parse()
+    }
+
+    fn prefetch_url(&mut self, parse_fn: fn(playlist: &str) -> Result<Url>) -> Result<Url> {
+        let url = parse_fn(&self.playlist).or_else(|_| self.filter_ads(parse_fn))?;
+        let url_string = url.as_str().to_owned(); //cheaper than cloning entire Url struct
+        if self.prev_url == url_string {
+            return Err(Error::Unchanged.into());
+        }
+
+        self.prev_url = url_string;
+        Ok(url)
+    }
+
+    fn filter_ads(&mut self, parse_fn: fn(playlist: &str) -> Result<Url>) -> Result<Url> {
+        info!("Filtering ads...");
+
+        //Ads don't have prefetch URLs, wait until they come back to filter ads
+        loop {
+            let time = Instant::now();
+            self.reload()?;
+
+            if let Ok(url) = parse_fn(&self.playlist) {
+                break Ok(url);
+            }
+
+            self.duration()?.sleep(time.elapsed());
+        }
+    }
+}
+
 pub struct SegmentDuration(Duration);
 impl FromStr for SegmentDuration {
     type Err = anyhow::Error;
@@ -70,145 +186,6 @@ impl SegmentDuration {
             debug!("Sleeping thread for {:?}", sleep_time);
             thread::sleep(sleep_time);
         }
-    }
-}
-
-pub struct MediaPlaylist {
-    playlist: String,
-    prev_url: String,
-    request: TextRequest,
-}
-
-impl MediaPlaylist {
-    pub fn new(url: &Url, agent: &Agent) -> Result<Self> {
-        let mut playlist = Self {
-            playlist: String::default(),
-            prev_url: String::default(),
-            request: agent.get(url)?,
-        };
-
-        playlist.reload()?;
-        Ok(playlist)
-    }
-
-    pub fn reload(&mut self) -> Result<()> {
-        self.playlist = self.request.text().map_err(map_if_offline)?;
-        debug!("Playlist:\n{}", self.playlist);
-
-        if self
-            .playlist
-            .lines()
-            .next_back()
-            .unwrap_or_default()
-            .starts_with("#EXT-X-ENDLIST")
-        {
-            return Err(Error::Offline.into());
-        }
-
-        Ok(())
-    }
-
-    pub fn header(&mut self) -> Result<Option<Url>> {
-        Ok(self.playlist.parse::<SegmentHeaderUrl>()?.0.take())
-    }
-
-    pub fn newest(&mut self) -> Result<Url> {
-        self.parse_prefetch_url::<NewestPrefetchUrl>()
-    }
-
-    pub fn next(&mut self) -> Result<Url> {
-        self.parse_prefetch_url::<NextPrefetchUrl>()
-    }
-
-    pub fn duration(&self) -> Result<SegmentDuration> {
-        self.playlist.parse()
-    }
-
-    fn parse_prefetch_url<T: PrefetchUrl>(&mut self) -> Result<Url> {
-        let url = T::parse(&self.playlist).or_else(|_| self.filter_ads::<T>())?;
-        let url_string = url.as_str().to_owned();
-        if self.prev_url == url_string {
-            return Err(Error::Unchanged.into());
-        }
-
-        self.prev_url = url_string;
-        Ok(url)
-    }
-
-    fn filter_ads<T: PrefetchUrl>(&mut self) -> Result<Url> {
-        info!("Filtering ads...");
-
-        //Ads don't have prefetch URLs, wait until they come back to filter ads
-        loop {
-            let time = Instant::now();
-            self.reload()?;
-
-            if let Ok(url) = T::parse(&self.playlist) {
-                break Ok(url);
-            }
-
-            self.duration()?.sleep(time.elapsed());
-        }
-    }
-}
-
-//Used for av1/hevc streams
-struct SegmentHeaderUrl(Option<Url>);
-impl FromStr for SegmentHeaderUrl {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let header_url = s.lines().find_map(|s| {
-            s.starts_with("#EXT-X-MAP")
-                .then_some(s)
-                .and_then(|s| s.split_once('='))
-                .map(|s| s.1.replace('"', ""))
-        });
-
-        if let Some(header_url) = header_url {
-            return Ok(Self(Some(
-                header_url
-                    .parse()
-                    .context("Failed to parse segment header")?,
-            )));
-        }
-
-        Ok(Self(None))
-    }
-}
-
-trait PrefetchUrl {
-    fn parse(playlist: &str) -> Result<Url>;
-}
-
-struct NewestPrefetchUrl;
-impl PrefetchUrl for NewestPrefetchUrl {
-    fn parse(playlist: &str) -> Result<Url> {
-        playlist
-            .lines()
-            .rev()
-            .find(|s| s.starts_with("#EXT-X-TWITCH-PREFETCH"))
-            .and_then(|s| s.split_once(':'))
-            .map(|s| s.1)
-            .context("Invalid newest prefetch segment URL")?
-            .parse()
-            .context("Failed to parse newest prefetch segment URL")
-    }
-}
-
-struct NextPrefetchUrl;
-impl PrefetchUrl for NextPrefetchUrl {
-    fn parse(playlist: &str) -> Result<Url> {
-        playlist
-            .lines()
-            .rev()
-            .filter(|s| s.starts_with("#EXT-X-TWITCH-PREFETCH"))
-            .nth(1)
-            .and_then(|s| s.split_once(':'))
-            .map(|s| s.1)
-            .context("Invalid next prefetch segment URL")?
-            .parse()
-            .context("Failed to parse next prefetch segment URL")
     }
 }
 
