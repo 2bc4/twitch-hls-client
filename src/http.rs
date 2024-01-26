@@ -128,6 +128,16 @@ impl<T: Write> Request<T> {
             args,
         };
 
+        #[cfg(all(target_os = "windows", feature = "rustls"))]
+        {
+            let mut certs = Vec::new();
+            for cert in schannel::cert_store::CertStore::open_current_user("ROOT")?.certs() {
+                certs.extend_from_slice(cert.to_pem()?.as_bytes());
+            }
+
+            request.handle.ssl_cainfo_blob(certs.as_slice())?;
+        }
+
         if request.args.force_ipv4 {
             request.handle.ip_resolve(IpResolve::V4)?;
         }
@@ -162,8 +172,7 @@ impl<T: Write> Request<T> {
             }
         }
 
-        let error = self.handle.get_mut().error.take();
-        if let Some(error) = error {
+        if let Some(error) = self.handle.get_mut().error.take() {
             return Err(error.into());
         }
 

@@ -27,6 +27,7 @@ colors = []
 http2 = ["curl/http2"]
 static-curl = ["curl/static-curl"]
 static-openssl = ["curl/static-ssl"]
+rustls = ["curl/rustls"]
 
 [dependencies]
 anyhow = "1.0.79"
@@ -35,3 +36,6 @@ fastrand = "2.0.1"
 log = { version = "0.4.20", features = ["std"] }
 pico-args = { version = "0.5.0", features = ["eq-separator"] }
 url = "2.5.0"
+
+[target.'cfg(windows)'.dependencies]
+schannel = "0.1.23"
