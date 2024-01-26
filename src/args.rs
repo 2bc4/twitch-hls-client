@@ -179,8 +179,8 @@ impl Args {
             &mut self.never_proxy,
             p.opt_value_from_fn("--never-proxy", split_comma)?,
         );
-        merge_opt(&mut http.user_agent, p.opt_value_from_str("--user-agent")?);
         merge_opt(&mut self.hls.codecs, p.opt_value_from_str("--codecs")?);
+        merge_opt(&mut http.user_agent, p.opt_value_from_str("--user-agent")?);
         merge_opt(&mut http.retries, p.opt_value_from_str("--http-retries")?);
         merge_opt(
             &mut http.timeout,

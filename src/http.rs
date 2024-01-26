@@ -119,7 +119,7 @@ where
 }
 
 impl<T: Write> Request<T> {
-    pub fn new(writer: T, url: &Url, args: Arc<HttpArgs>) -> Result<Self> {
+    fn new(writer: T, url: &Url, args: Arc<HttpArgs>) -> Result<Self> {
         let mut request = Self {
             handle: Easy2::new(RequestHandler {
                 writer,
@@ -144,15 +144,15 @@ impl<T: Write> Request<T> {
         Ok(request)
     }
 
-    pub fn get_ref(&self) -> &T {
+    fn get_ref(&self) -> &T {
         &self.handle.get_ref().writer
     }
 
-    pub fn get_mut(&mut self) -> &mut T {
+    fn get_mut(&mut self) -> &mut T {
         &mut self.handle.get_mut().writer
     }
 
-    pub fn perform(&mut self) -> Result<()> {
+    fn perform(&mut self) -> Result<()> {
         let mut retries = 0;
         loop {
             match self.handle.perform() {
@@ -162,11 +162,10 @@ impl<T: Write> Request<T> {
             }
         }
 
-        self.handle
-            .get_ref()
-            .error
-            .as_ref()
-            .map_or_else(|| Ok(()), |e| Err(io::Error::from(e.kind())))?;
+        let error = self.handle.get_mut().error.take();
+        if let Some(error) = error {
+            return Err(error.into());
+        }
 
         self.get_mut().flush()?; //signal that the request is done
 
@@ -188,7 +187,7 @@ impl<T: Write> Request<T> {
         }
     }
 
-    pub fn url(&mut self, url: &Url) -> Result<()> {
+    fn url(&mut self, url: &Url) -> Result<()> {
         if self.args.force_https {
             ensure!(
                 url.scheme() == "https",
@@ -219,20 +218,18 @@ impl<T: Write> Handler for RequestHandler<T> {
     }
 
     fn debug(&mut self, kind: InfoType, data: &[u8]) {
-        if !matches!(kind, InfoType::Text) {
-            return;
-        }
+        if matches!(kind, InfoType::Text) {
+            let text = String::from_utf8_lossy(data);
+            if text.starts_with("Found bundle") || text.starts_with("Can not multiplex") {
+                return;
+            }
 
-        let text = String::from_utf8_lossy(data);
-        if text.starts_with("Found bundle") || text.starts_with("Can not multiplex") {
-            return;
-        }
+            #[cfg(target_os = "windows")]
+            if text.starts_with("schannel: failed to decrypt data") {
+                return;
+            }
 
-        #[cfg(target_os = "windows")]
-        if text.starts_with("schannel: failed to decrypt data") {
-            return;
+            debug!("{}", text.strip_suffix('\n').unwrap_or(&text));
         }
-
-        debug!("{}", text.strip_suffix('\n').unwrap_or(&text));
     }
 }

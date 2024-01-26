@@ -134,7 +134,6 @@ impl SegmentDuration {
     }
 }
 
-#[derive(Copy, Clone)]
 enum PrefetchSegment {
     Newest,
     Next,

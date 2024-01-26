@@ -40,8 +40,6 @@ fn main_loop(mut playlist: MediaPlaylist, player: Player, agent: &Agent) -> Resu
             worker.url(url)?;
         } else {
             info!("Filtering ads...");
-            playlist.duration()?.sleep(time.elapsed());
-            continue;
         };
 
         playlist.duration()?.sleep(time.elapsed());
