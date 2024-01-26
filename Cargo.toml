@@ -1,6 +1,6 @@
 [package]
 name = "twitch-hls-client"
-version = "1.0.4"
+version = "1.0.5"
 authors = ["2bc4 <119853089+2bc4@users.noreply.github.com>"]
 description = "Minimal CLI client for watching low latency Twitch streams"
 license = "GPL-3.0-or-later"
