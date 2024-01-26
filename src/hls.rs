@@ -1,9 +1,4 @@
-use std::{
-    fmt, iter,
-    str::FromStr,
-    thread,
-    time::{Duration, Instant},
-};
+use std::{fmt, iter, str::FromStr, thread, time::Duration};
 
 use anyhow::{Context, Result};
 use log::{debug, error, info};
@@ -17,8 +12,8 @@ use crate::{
 
 #[derive(Debug)]
 pub enum Error {
-    Unchanged,
     Offline,
+    Advertisement,
     NotLowLatency(Url),
 }
 
@@ -27,8 +22,8 @@ impl std::error::Error for Error {}
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Unchanged => write!(f, "Media playlist is the same as previous"),
             Self::Offline => write!(f, "Stream is offline or unavailable"),
+            Self::Advertisement => write!(f, "Encountered an embedded advertisement"),
             Self::NotLowLatency(_) => write!(f, "Stream is not low latency"),
         }
     }
@@ -36,7 +31,6 @@ impl fmt::Display for Error {
 
 pub struct MediaPlaylist {
     playlist: String,
-    prev_url: String,
     request: TextRequest,
 }
 
@@ -44,7 +38,6 @@ impl MediaPlaylist {
     pub fn new(url: &Url, agent: &Agent) -> Result<Self> {
         let mut playlist = Self {
             playlist: String::default(),
-            prev_url: String::default(),
             request: agent.get(url)?,
         };
 
@@ -89,64 +82,16 @@ impl MediaPlaylist {
         Ok(None)
     }
 
-    pub fn newest(&mut self) -> Result<Url> {
-        self.prefetch_url(|playlist| -> Result<Url> {
-            playlist
-                .lines()
-                .rev()
-                .find(|s| s.starts_with("#EXT-X-TWITCH-PREFETCH"))
-                .and_then(|s| s.split_once(':'))
-                .map(|s| s.1)
-                .context("Invalid newest prefetch segment URL")?
-                .parse()
-                .context("Failed to parse newest prefetch segment URL")
-        })
+    pub fn newest(&mut self) -> Result<Url, Error> {
+        PrefetchSegment::Newest.parse(&self.playlist)
     }
 
-    pub fn next(&mut self) -> Result<Url> {
-        self.prefetch_url(|playlist| -> Result<Url> {
-            playlist
-                .lines()
-                .rev()
-                .filter(|s| s.starts_with("#EXT-X-TWITCH-PREFETCH"))
-                .nth(1)
-                .and_then(|s| s.split_once(':'))
-                .map(|s| s.1)
-                .context("Invalid next prefetch segment URL")?
-                .parse()
-                .context("Failed to parse next prefetch segment URL")
-        })
+    pub fn next(&mut self) -> Result<Url, Error> {
+        PrefetchSegment::Next.parse(&self.playlist)
     }
 
     pub fn duration(&self) -> Result<SegmentDuration> {
         self.playlist.parse()
-    }
-
-    fn prefetch_url(&mut self, parse_fn: fn(playlist: &str) -> Result<Url>) -> Result<Url> {
-        let url = parse_fn(&self.playlist).or_else(|_| self.filter_ads(parse_fn))?;
-        let url_string = url.as_str().to_owned(); //cheaper than cloning entire Url struct
-        if self.prev_url == url_string {
-            return Err(Error::Unchanged.into());
-        }
-
-        self.prev_url = url_string;
-        Ok(url)
-    }
-
-    fn filter_ads(&mut self, parse_fn: fn(playlist: &str) -> Result<Url>) -> Result<Url> {
-        info!("Filtering ads...");
-
-        //Ads don't have prefetch URLs, wait until they come back to filter ads
-        loop {
-            let time = Instant::now();
-            self.reload()?;
-
-            if let Ok(url) = parse_fn(&self.playlist) {
-                break Ok(url);
-            }
-
-            self.duration()?.sleep(time.elapsed());
-        }
     }
 }
 
@@ -186,6 +131,27 @@ impl SegmentDuration {
             debug!("Sleeping thread for {:?}", sleep_time);
             thread::sleep(sleep_time);
         }
+    }
+}
+
+#[derive(Copy, Clone)]
+enum PrefetchSegment {
+    Newest,
+    Next,
+}
+
+impl PrefetchSegment {
+    fn parse(self, playlist: &str) -> Result<Url, Error> {
+        playlist
+            .lines()
+            .rev()
+            .filter(|s| s.starts_with("#EXT-X-TWITCH-PREFETCH"))
+            .nth(self as usize)
+            .and_then(|s| s.split_once(':'))
+            .map(|s| s.1)
+            .ok_or(Error::Advertisement)?
+            .parse()
+            .or(Err(Error::Advertisement))
     }
 }
 
