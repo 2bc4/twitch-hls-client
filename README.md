@@ -1,4 +1,7 @@
 ## twitch-hls-client
+[![crates.io](https://img.shields.io/crates/v/twitch-hls-client.svg)](https://crates.io/crates/twitch-hls-client)
+[![license](https://img.shields.io/github/license/2bc4/twitch-hls-client.svg)](LICENSE)
+
 Minimal CLI client for watching low latency Twitch streams
 
 (Despite the name this doesn't fully implement HLS, it only implements enough to watch low latency streams)
