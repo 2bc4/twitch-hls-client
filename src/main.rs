@@ -39,7 +39,7 @@ fn main_loop(mut playlist: MediaPlaylist, player: Player, agent: &Agent) -> Resu
                 prev_url = url.as_str().to_owned();
                 worker.url(url)?;
             }
-            Err(_) => info!("Filtering ads..."),
+            Err(_) => info!("Filtering ad segment..."),
         };
 
         playlist.duration()?.sleep(time.elapsed());
