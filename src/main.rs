@@ -33,6 +33,7 @@ fn main_loop(mut playlist: MediaPlaylist, player: Player, agent: &Agent) -> Resu
             Ok(url) if url.as_str() == prev_url => {
                 info!("Playlist unchanged, retrying...");
                 playlist.duration()?.sleep_half(time.elapsed());
+                continue;
             }
             Ok(url) => {
                 prev_url = url.as_str().to_owned();
