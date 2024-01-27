@@ -262,7 +262,7 @@ pub fn fetch_twitch_playlist(
     args: &HlsArgs,
     agent: &Agent,
 ) -> Result<Url> {
-    info!("Fetching playlist for channel {} (Twitch)", args.channel);
+    info!("Fetching playlist for channel {}", args.channel);
     let access_token = PlaybackAccessToken::new(client_id, auth_token, &args.channel, agent)?;
     let url = Url::parse_with_params(
         &format!("{}{}.m3u8", constants::TWITCH_HLS_BASE, args.channel),
