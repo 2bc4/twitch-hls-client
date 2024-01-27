@@ -27,19 +27,18 @@ fn main_loop(mut playlist: MediaPlaylist, player: Player, agent: &Agent) -> Resu
     let mut prev_url = String::default();
     loop {
         let time = Instant::now();
-        playlist.reload()?;
 
-        if let Ok(url) = playlist.next() {
-            if url.as_str() == prev_url {
+        playlist.reload()?;
+        match playlist.next() {
+            Ok(url) if url.as_str() == prev_url => {
                 info!("Playlist unchanged, retrying...");
                 playlist.duration()?.sleep_half(time.elapsed());
-                continue;
             }
-            prev_url = url.as_str().to_owned();
-
-            worker.url(url)?;
-        } else {
-            info!("Filtering ads...");
+            Ok(url) => {
+                prev_url = url.as_str().to_owned();
+                worker.url(url)?;
+            }
+            Err(_) => info!("Filtering ads..."),
         };
 
         playlist.duration()?.sleep(time.elapsed());
@@ -57,13 +56,8 @@ fn main() -> Result<()> {
         || hls::fetch_twitch_playlist(&args.client_id, &args.auth_token, &args.hls, &agent),
         |servers| hls::fetch_proxy_playlist(servers, &args.hls, &agent),
     ) {
-        Ok(playlist_url) => {
-            if args.passthrough {
-                return Player::passthrough(&args.player, &playlist_url);
-            }
-
-            MediaPlaylist::new(&playlist_url, &agent)?
-        }
+        Ok(url) if args.passthrough => return Player::passthrough(&args.player, &url),
+        Ok(url) => MediaPlaylist::new(&url, &agent)?,
         Err(e) => match e.downcast_ref::<hls::Error>() {
             Some(hls::Error::Offline) => {
                 info!("{e}, exiting...");
