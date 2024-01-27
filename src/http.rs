@@ -233,7 +233,7 @@ impl<T: Write> Handler for RequestHandler<T> {
                 return;
             }
 
-            #[cfg(target_os = "windows")]
+            #[cfg(all(target_os = "windows", not(feature = "rustls")))]
             if text.starts_with("schannel: failed to decrypt data") {
                 return;
             }
