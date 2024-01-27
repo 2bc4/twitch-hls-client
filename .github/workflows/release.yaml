@@ -58,56 +58,56 @@ jobs:
           - target: x86_64-pc-windows-msvc
             target-cpu: x86-64
             os: windows-latest
-            features: default
+            features: default,static-curl,rustls
             bin-name: twitch-hls-client.exe
             zip-name: x86_64-pc-windows-msvc
 
           - target: x86_64-pc-windows-msvc
             target-cpu: x86-64-v3
             os: windows-latest
-            features: default
+            features: default,static-curl,rustls
             bin-name: twitch-hls-client.exe
             zip-name: x86_64-v3-pc-windows-msvc
 
           - target: i686-pc-windows-msvc
             target-cpu: i686
             os: windows-latest
-            features: default
+            features: default,static-curl,rustls
             bin-name: twitch-hls-client.exe
             zip-name: i686-pc-windows-msvc
 
           - target: x86_64-pc-windows-msvc
             target-cpu: x86-64
             os: windows-latest
-            features: http2
+            features: http2,static-curl,rustls
             bin-name: twitch-hls-client.exe
             zip-name: http2-x86_64-pc-windows-msvc
 
           - target: x86_64-pc-windows-msvc
             target-cpu: x86-64-v3
             os: windows-latest
-            features: http2
+            features: http2,static-curl,rustls
             bin-name: twitch-hls-client.exe
             zip-name: http2-x86_64-v3-pc-windows-msvc
 
           - target: i686-pc-windows-msvc
             target-cpu: i686
             os: windows-latest
-            features: http2
+            features: http2,static-curl,rustls
             bin-name: twitch-hls-client.exe
             zip-name: http2-i686-pc-windows-msvc
 
           - target: x86_64-unknown-linux-musl
             target-cpu: x86-64
             os: ubuntu-latest
-            features: http2,static-curl,static-openssl
+            features: http2,static-curl,static-openssl,rustls
             bin-name: twitch-hls-client
             zip-name: x86_64-unknown-linux-musl
 
           - target: x86_64-unknown-linux-musl
             target-cpu: x86-64-v3
             os: ubuntu-latest
-            features: http2,static-curl,static-openssl
+            features: http2,static-curl,static-openssl,rustls
             bin-name: twitch-hls-client
             zip-name: x86_64-v3-unknown-linux-musl
     steps:
