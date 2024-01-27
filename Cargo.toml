@@ -33,7 +33,7 @@ rustls = ["curl/rustls"]
 anyhow = "1.0.79"
 curl = { version = "0.4.44", git = "https://github.com/alexcrichton/curl-rust.git", rev = "0c1dddf" }
 fastrand = "2.0.1"
-log = { version = "0.4.20", features = ["std"] }
+log = { version = "0.4.20", features = ["std", "max_level_debug"] }
 pico-args = { version = "0.5.0", features = ["eq-separator"] }
 url = "2.5.0"
 
