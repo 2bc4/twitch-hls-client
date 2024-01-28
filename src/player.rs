@@ -7,7 +7,25 @@ use anyhow::{Context, Result};
 use log::{debug, error, info};
 use url::Url;
 
-use crate::args::PlayerArgs;
+#[derive(Clone, Debug)]
+#[allow(clippy::struct_field_names)] //.args
+pub struct Args {
+    pub path: String,
+    pub args: String,
+    pub quiet: bool,
+    pub no_kill: bool,
+}
+
+impl Default for Args {
+    fn default() -> Self {
+        Self {
+            args: "-".to_owned(),
+            path: String::default(),
+            quiet: bool::default(),
+            no_kill: bool::default(),
+        }
+    }
+}
 
 pub struct Player {
     stdin: ChildStdin,
@@ -41,7 +59,7 @@ impl Write for Player {
 }
 
 impl Player {
-    pub fn spawn(args: &PlayerArgs) -> Result<Self> {
+    pub fn spawn(args: &Args) -> Result<Self> {
         info!("Opening player: {} {}", args.path, args.args);
         let mut command = Command::new(&args.path);
         command
@@ -65,7 +83,7 @@ impl Player {
         })
     }
 
-    pub fn passthrough(pargs: &PlayerArgs, url: &Url) -> Result<()> {
+    pub fn passthrough(pargs: &Args, url: &Url) -> Result<()> {
         info!("Passing through playlist URL to player");
 
         let mut pargs = pargs.to_owned();

@@ -5,7 +5,6 @@ use log::{debug, error, info};
 use url::Url;
 
 use crate::{
-    args::HlsArgs,
     constants,
     http::{self, Agent, TextRequest},
 };
@@ -25,6 +24,23 @@ impl fmt::Display for Error {
             Self::Offline => write!(f, "Stream is offline or unavailable"),
             Self::Advertisement => write!(f, "Encountered an embedded advertisement"),
             Self::NotLowLatency(_) => write!(f, "Stream is not low latency"),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct Args {
+    pub codecs: String,
+    pub channel: String,
+    pub quality: String,
+}
+
+impl Default for Args {
+    fn default() -> Self {
+        Self {
+            codecs: "av1,h265,h264".to_owned(),
+            channel: String::default(),
+            quality: String::default(),
         }
     }
 }
@@ -259,7 +275,7 @@ impl PlaybackAccessToken {
 pub fn fetch_twitch_playlist(
     client_id: &Option<String>,
     auth_token: &Option<String>,
-    args: &HlsArgs,
+    args: &Args,
     agent: &Agent,
 ) -> Result<Url> {
     info!("Fetching playlist for channel {}", args.channel);
@@ -292,7 +308,7 @@ pub fn fetch_twitch_playlist(
     )
 }
 
-pub fn fetch_proxy_playlist(servers: &[String], args: &HlsArgs, agent: &Agent) -> Result<Url> {
+pub fn fetch_proxy_playlist(servers: &[String], args: &Args, agent: &Agent) -> Result<Url> {
     info!("Fetching playlist for channel {} (proxy)", args.channel);
     let servers = servers
         .iter()

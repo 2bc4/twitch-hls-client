@@ -3,6 +3,7 @@ use std::{
     io::{self, Write},
     str,
     sync::Arc,
+    time::Duration,
 };
 
 use anyhow::{ensure, Result};
@@ -10,7 +11,7 @@ use curl::easy::{Easy2, Handler, InfoType, IpResolve, List, WriteError};
 use log::{debug, LevelFilter};
 use url::Url;
 
-use crate::args::HttpArgs;
+use crate::constants;
 
 #[derive(Debug)]
 pub enum Error {
@@ -29,13 +30,34 @@ impl fmt::Display for Error {
     }
 }
 
+#[derive(Debug)]
+pub struct Args {
+    pub force_https: bool,
+    pub force_ipv4: bool,
+    pub retries: u64,
+    pub timeout: Duration,
+    pub user_agent: String,
+}
+
+impl Default for Args {
+    fn default() -> Self {
+        Self {
+            retries: 3,
+            timeout: Duration::from_secs(10),
+            user_agent: constants::USER_AGENT.to_owned(),
+            force_https: bool::default(),
+            force_ipv4: bool::default(),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct Agent {
-    args: Arc<HttpArgs>,
+    args: Arc<Args>,
 }
 
 impl Agent {
-    pub fn new(args: HttpArgs) -> Self {
+    pub fn new(args: Args) -> Self {
         Self {
             args: Arc::new(args),
         }
@@ -115,11 +137,11 @@ where
     T: Write,
 {
     handle: Easy2<RequestHandler<T>>,
-    args: Arc<HttpArgs>,
+    args: Arc<Args>,
 }
 
 impl<T: Write> Request<T> {
-    fn new(writer: T, url: &Url, args: Arc<HttpArgs>) -> Result<Self> {
+    fn new(writer: T, url: &Url, args: Arc<Args>) -> Result<Self> {
         let mut request = Self {
             handle: Easy2::new(RequestHandler {
                 writer,

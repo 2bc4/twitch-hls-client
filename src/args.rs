@@ -3,67 +3,7 @@ use std::{env, fs, path::Path, process, time::Duration};
 use anyhow::{bail, ensure, Context, Result};
 use pico_args::Arguments;
 
-use crate::constants;
-
-#[derive(Debug)]
-#[allow(clippy::module_name_repetitions)]
-pub struct HttpArgs {
-    pub force_https: bool,
-    pub force_ipv4: bool,
-    pub retries: u64,
-    pub timeout: Duration,
-    pub user_agent: String,
-}
-
-impl Default for HttpArgs {
-    fn default() -> Self {
-        Self {
-            retries: 3,
-            timeout: Duration::from_secs(10),
-            force_https: bool::default(),
-            force_ipv4: bool::default(),
-            user_agent: constants::USER_AGENT.to_owned(),
-        }
-    }
-}
-
-#[derive(Debug)]
-#[allow(clippy::module_name_repetitions)]
-pub struct HlsArgs {
-    pub codecs: String,
-    pub channel: String,
-    pub quality: String,
-}
-
-impl Default for HlsArgs {
-    fn default() -> Self {
-        Self {
-            codecs: "av1,h265,h264".to_owned(),
-            channel: String::default(),
-            quality: String::default(),
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-#[allow(clippy::module_name_repetitions)]
-pub struct PlayerArgs {
-    pub path: String,
-    pub args: String,
-    pub quiet: bool,
-    pub no_kill: bool,
-}
-
-impl Default for PlayerArgs {
-    fn default() -> Self {
-        Self {
-            args: "-".to_owned(),
-            path: String::default(),
-            quiet: bool::default(),
-            no_kill: bool::default(),
-        }
-    }
-}
+use crate::{constants, hls::Args as HlsArgs, http::Args as HttpArgs, player::Args as PlayerArgs};
 
 #[derive(Default, Debug)]
 pub struct Args {
