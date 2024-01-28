@@ -65,23 +65,28 @@ impl Player {
         })
     }
 
-    pub fn passthrough(args: &PlayerArgs, url: &Url) -> Result<()> {
+    pub fn passthrough(pargs: &PlayerArgs, url: &Url) -> Result<()> {
         info!("Passing through playlist URL to player");
-        let mut args = args.to_owned();
-        args.args = args
-            .args
-            .split_whitespace()
-            .map(|s| {
-                if s == "-" {
-                    url.to_string()
-                } else {
-                    s.to_owned()
-                }
-            })
-            .collect::<Vec<String>>()
-            .join(" ");
 
-        let mut player = Self::spawn(&args)?;
+        let mut pargs = pargs.to_owned();
+        if pargs.args.split_whitespace().any(|a| a == "-") {
+            pargs.args = pargs
+                .args
+                .split_whitespace()
+                .map(|a| {
+                    if a == "-" {
+                        url.to_string()
+                    } else {
+                        a.to_owned()
+                    }
+                })
+                .collect::<Vec<String>>()
+                .join(" ");
+        } else {
+            pargs.args += &format!(" {url}");
+        }
+
+        let mut player = Self::spawn(&pargs)?;
         player
             .process
             .wait()
