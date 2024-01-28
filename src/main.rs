@@ -64,9 +64,9 @@ fn main() -> Result<()> {
                 info!("{e}, exiting...");
                 return Ok(());
             }
-            Some(hls::Error::NotLowLatency(playlist_url)) => {
+            Some(hls::Error::NotLowLatency(url)) => {
                 info!("{e}");
-                return Player::passthrough(&args.player, playlist_url);
+                return Player::passthrough(&args.player, url);
             }
             _ => return Err(e),
         },
