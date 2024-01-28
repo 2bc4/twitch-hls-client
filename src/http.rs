@@ -189,6 +189,7 @@ impl<T: Write> Request<T> {
         loop {
             match self.handle.perform() {
                 Ok(()) => break,
+                Err(e) if e.is_write_error() => break, //player closed, break to return io error
                 Err(_) if retries < self.args.retries => retries += 1,
                 Err(e) => return Err(e.into()),
             }
@@ -243,6 +244,10 @@ impl<T: Write> Handler for RequestHandler<T> {
     fn write(&mut self, data: &[u8]) -> Result<usize, WriteError> {
         if let Err(e) = self.writer.write_all(data) {
             self.error = Some(e);
+        }
+
+        if self.error.is_some() {
+            return Ok(0);
         }
 
         Ok(data.len())
