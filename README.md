@@ -66,9 +66,8 @@ Options:
 
 ### Example usage
 ```
-$ twitch-hls-client twitch.tv/twitchchannel best -s https://eu.luminous.dev/live/[channel],https://lb-eu.cdn-perfprod.com/live/[channel] -p mpv -a '- --profile=low-latency'
-Fetching playlist for channel twitchchannel (proxy)
-Using server https://eu.luminous.dev
+$ twitch-hls-client -p mpv -a '- --profile=low-latency' twitchchannel best
+Fetching playlist for channel twitchchannel
 Opening player: mpv - --profile=low-latency
  (+) Video --vid=1 (h264)
  (+) Audio --aid=1 (aac)
