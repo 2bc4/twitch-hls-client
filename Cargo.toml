@@ -22,20 +22,16 @@ panic = "abort"
 strip = true
 
 [features]
-default = ["curl/ssl", "colors"]
+default = ["colors"]
 colors = []
 http2 = ["curl/http2"]
-static-curl = ["curl/static-curl"]
-static-openssl = ["curl/static-ssl"]
-rustls = ["curl/rustls", "dep:base64", "dep:rustls-native-certs"]
 
 [dependencies]
 anyhow = "1.0.79"
-curl = { version = "0.4.44", default-features = false }
+base64 = "0.21.7"
+curl = { version = "0.4.44", default-features = false, features = ["static-curl", "rustls"]}
 fastrand = "2.0.1"
 log = { version = "0.4.20", features = ["std", "max_level_debug"] }
 pico-args = { version = "0.5.0", features = ["eq-separator"] }
+rustls-native-certs = "0.7.0"
 url = "2.5.0"
-
-base64 = { version = "0.21.7", optional = true }
-rustls-native-certs = { version = "0.7.0", optional = true }

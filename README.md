@@ -113,6 +113,3 @@ Install [Rust](https://rustup.rs) then run `cargo install --locked --git https:/
 #### Cargo features
 - `colors` - Enable terminal colors
 - `http2` - Enable HTTP/2 support (known to cause issues on Windows 10)
-- `static-curl` - Build and statically link to libcurl
-- `static-openssl` - Build and statically link to openssl (only applies on platforms that use openssl)
-- `rustls` - Use rustls instead of the system tls lib (has no effect if dynamic linking to libcurl)

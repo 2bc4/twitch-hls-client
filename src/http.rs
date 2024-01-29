@@ -7,6 +7,7 @@ use std::{
 };
 
 use anyhow::{ensure, Result};
+use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use curl::easy::{Easy2, Handler, InfoType, IpResolve, List, WriteError};
 use log::{debug, LevelFilter};
 use url::Url;
@@ -152,19 +153,13 @@ impl<T: Write> Request<T> {
 
         //rustls-native-certs returns DER, have to manually convert to PEM here for curl
         //normally the base64 would be 64 character line wrapped etc. but curl seems to accept this
-        #[cfg(feature = "rustls")]
-        {
-            use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
-
-            let mut pem = Vec::new();
-            for cert in rustls_native_certs::load_native_certs()? {
-                pem.extend_from_slice("-----BEGIN CERTIFICATE-----\n".as_bytes());
-                pem.extend_from_slice(BASE64_STANDARD.encode(cert).as_bytes());
-                pem.extend_from_slice("\n-----END CERTIFICATE-----\n".as_bytes());
-            }
-
-            request.handle.ssl_cainfo_blob(pem.as_slice())?;
+        let mut pem = Vec::new();
+        for cert in rustls_native_certs::load_native_certs()? {
+            pem.extend_from_slice("-----BEGIN CERTIFICATE-----\n".as_bytes());
+            pem.extend_from_slice(BASE64_STANDARD.encode(cert).as_bytes());
+            pem.extend_from_slice("\n-----END CERTIFICATE-----\n".as_bytes());
         }
+        request.handle.ssl_cainfo_blob(pem.as_slice())?;
 
         if request.args.force_ipv4 {
             request.handle.ip_resolve(IpResolve::V4)?;
@@ -259,11 +254,6 @@ impl<T: Write> Handler for RequestHandler<T> {
         if matches!(kind, InfoType::Text) {
             let text = String::from_utf8_lossy(data);
             if text.starts_with("Found bundle") || text.starts_with("Can not multiplex") {
-                return;
-            }
-
-            #[cfg(all(target_os = "windows", not(feature = "rustls")))]
-            if text.starts_with("schannel: failed to decrypt data") {
                 return;
             }
 

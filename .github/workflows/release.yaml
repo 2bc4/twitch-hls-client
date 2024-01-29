@@ -58,56 +58,56 @@ jobs:
           - target: x86_64-pc-windows-msvc
             target-cpu: x86-64
             os: windows-latest
-            features: colors,static-curl,rustls
+            features: default
             bin-name: twitch-hls-client.exe
             zip-name: x86_64-pc-windows-msvc
 
           - target: x86_64-pc-windows-msvc
             target-cpu: x86-64-v3
             os: windows-latest
-            features: colors,static-curl,rustls
+            features: default
             bin-name: twitch-hls-client.exe
             zip-name: x86_64-v3-pc-windows-msvc
 
           - target: i686-pc-windows-msvc
             target-cpu: i686
             os: windows-latest
-            features: colors,static-curl,rustls
+            features: default
             bin-name: twitch-hls-client.exe
             zip-name: i686-pc-windows-msvc
 
           - target: x86_64-pc-windows-msvc
             target-cpu: x86-64
             os: windows-latest
-            features: colors,http2,static-curl,rustls
+            features: http2
             bin-name: twitch-hls-client.exe
             zip-name: http2-x86_64-pc-windows-msvc
 
           - target: x86_64-pc-windows-msvc
             target-cpu: x86-64-v3
             os: windows-latest
-            features: colors,http2,static-curl,rustls
+            features: http2
             bin-name: twitch-hls-client.exe
             zip-name: http2-x86_64-v3-pc-windows-msvc
 
           - target: i686-pc-windows-msvc
             target-cpu: i686
             os: windows-latest
-            features: colors,http2,static-curl,rustls
+            features: http2
             bin-name: twitch-hls-client.exe
             zip-name: http2-i686-pc-windows-msvc
 
           - target: x86_64-unknown-linux-musl
             target-cpu: x86-64
             os: ubuntu-latest
-            features: colors,http2,static-curl,rustls
+            features: http2
             bin-name: twitch-hls-client
             zip-name: x86_64-unknown-linux-musl
 
           - target: x86_64-unknown-linux-musl
             target-cpu: x86-64-v3
             os: ubuntu-latest
-            features: colors,http2,static-curl,rustls
+            features: http2
             bin-name: twitch-hls-client
             zip-name: x86_64-v3-unknown-linux-musl
     steps:
@@ -122,10 +122,10 @@ jobs:
           components: rust-src
       - name: Build
         shell: bash
-        run: RUSTFLAGS='-Ctarget-cpu=${{ matrix.target-cpu }}' cargo +nightly build -Z build-std=std,panic_abort -Z build-std-features= --release --target=${{ matrix.target }} --no-default-features --features ${{ matrix.features }}
+        run: RUSTFLAGS='-Ctarget-cpu=${{ matrix.target-cpu }}' cargo +nightly build -Z build-std=std,panic_abort -Z build-std-features= --release --target=${{ matrix.target }} --features ${{ matrix.features }}
       - name: Smoke Test
         shell: bash
-        run: RUSTFLAGS='-Ctarget-cpu=${{ matrix.target-cpu }}' cargo +nightly run -Z build-std=std,panic_abort -Z build-std-features= --release --target=${{ matrix.target }} --no-default-features --features ${{ matrix.features }} -- -V
+        run: RUSTFLAGS='-Ctarget-cpu=${{ matrix.target-cpu }}' cargo +nightly run -Z build-std=std,panic_abort -Z build-std-features= --release --target=${{ matrix.target }} --features ${{ matrix.features }} -- -V
       - name: Move Binary
         id: mv
         run: mv "target/${{ matrix.target }}/release/${{ matrix.bin-name }}" .
