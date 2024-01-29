@@ -50,7 +50,7 @@ fn main() -> Result<()> {
     Logger::init(args.debug)?;
     debug!("{:?} {:?}", args, http_args);
 
-    let agent = Agent::new(http_args);
+    let agent = Agent::new(http_args)?;
     let playlist = match args.servers.as_ref().map_or_else(
         || hls::fetch_twitch_playlist(&args.client_id, &args.auth_token, &args.hls, &agent),
         |servers| hls::fetch_proxy_playlist(servers, &args.hls, &agent),
