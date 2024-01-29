@@ -4,8 +4,6 @@
 
 Minimal CLI client for watching low latency Twitch streams
 
-(Despite the name this doesn't fully implement HLS, it only implements enough to watch low latency streams)
-
 ```
 Usage: twitch-hls-client [OPTIONS] -p <PATH> <CHANNEL> <QUALITY>
 
