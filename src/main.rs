@@ -23,23 +23,21 @@ use worker::Worker;
 
 fn main_loop(mut playlist: MediaPlaylist, player: Player, agent: &Agent) -> Result<()> {
     let mut worker = Worker::spawn(player, playlist.newest()?, playlist.header()?, agent)?;
-
-    let mut prev_url = String::default();
     loop {
         let time = Instant::now();
 
         playlist.reload()?;
         match playlist.next() {
-            Ok(url) if url.as_str() == prev_url => {
-                info!("Playlist unchanged, retrying...");
-                playlist.duration()?.sleep_half(time.elapsed());
-                continue;
+            Ok(url) => worker.url(url)?,
+            Err(e) => {
+                if matches!(e.downcast_ref::<hls::Error>(), Some(hls::Error::Unchanged)) {
+                    info!("{e}, retrying...");
+                    playlist.duration()?.sleep_half(time.elapsed());
+                    continue;
+                }
+
+                return Err(e);
             }
-            Ok(url) => {
-                prev_url = url.as_str().to_owned();
-                worker.url(url)?;
-            }
-            Err(_) => info!("Filtering ad segment..."),
         };
 
         playlist.duration()?.sleep(time.elapsed());

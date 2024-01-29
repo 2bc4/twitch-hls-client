@@ -1,4 +1,9 @@
-use std::{fmt, iter, str::FromStr, thread, time::Duration};
+use std::{
+    fmt, iter,
+    str::FromStr,
+    thread,
+    time::{Duration, Instant},
+};
 
 use anyhow::{Context, Result};
 use log::{debug, error, info};
@@ -12,6 +17,7 @@ use crate::{
 #[derive(Debug)]
 pub enum Error {
     Offline,
+    Unchanged,
     Advertisement,
     NotLowLatency(Url),
 }
@@ -22,6 +28,7 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Offline => write!(f, "Stream is offline or unavailable"),
+            Self::Unchanged => write!(f, "Playlist unchanged"),
             Self::Advertisement => write!(f, "Encountered an embedded advertisement"),
             Self::NotLowLatency(_) => write!(f, "Stream is not low latency"),
         }
@@ -47,6 +54,7 @@ impl Default for Args {
 
 pub struct MediaPlaylist {
     playlist: String,
+    prev_url: String,
     request: TextRequest,
 }
 
@@ -54,6 +62,7 @@ impl MediaPlaylist {
     pub fn new(url: &Url, agent: &Agent) -> Result<Self> {
         let mut playlist = Self {
             playlist: String::default(),
+            prev_url: String::default(),
             request: agent.get(url)?,
         };
 
@@ -98,16 +107,44 @@ impl MediaPlaylist {
         Ok(None)
     }
 
-    pub fn newest(&mut self) -> Result<Url, Error> {
-        PrefetchSegment::Newest.parse(&self.playlist)
+    pub fn newest(&mut self) -> Result<Url> {
+        self.prefetch_url(PrefetchSegment::Newest)
     }
 
-    pub fn next(&mut self) -> Result<Url, Error> {
-        PrefetchSegment::Next.parse(&self.playlist)
+    pub fn next(&mut self) -> Result<Url> {
+        self.prefetch_url(PrefetchSegment::Next)
     }
 
     pub fn duration(&self) -> Result<SegmentDuration> {
         self.playlist.parse()
+    }
+
+    fn prefetch_url(&mut self, prefetch_segment: PrefetchSegment) -> Result<Url> {
+        let url = prefetch_segment
+            .parse(&self.playlist)
+            .or_else(|_| self.filter_ads(prefetch_segment))?;
+
+        if self.prev_url == url.as_str() {
+            return Err(Error::Unchanged.into());
+        }
+
+        self.prev_url = url.as_str().to_owned();
+        Ok(url)
+    }
+
+    fn filter_ads(&mut self, prefetch_segment: PrefetchSegment) -> Result<Url> {
+        //Ads don't have prefetch URLs, wait until they come back to filter ads
+        info!("Filtering ads...");
+        loop {
+            let time = Instant::now();
+            self.reload()?;
+
+            if let Ok(url) = prefetch_segment.parse(&self.playlist) {
+                break Ok(url);
+            }
+
+            self.duration()?.sleep(time.elapsed());
+        }
     }
 }
 
@@ -150,6 +187,7 @@ impl SegmentDuration {
     }
 }
 
+#[derive(Copy, Clone)]
 enum PrefetchSegment {
     Newest,
     Next,
