@@ -57,9 +57,6 @@ impl Args {
             }
         }
 
-        let remaining = p.parser.finish();
-        ensure!(remaining.is_empty(), "Invalid argument: {:?}", remaining);
-
         ensure!(!args.player.path.is_empty(), "Player must be set");
         ensure!(!args.hls.quality.is_empty(), "Quality must be set");
         Ok((args, http))
