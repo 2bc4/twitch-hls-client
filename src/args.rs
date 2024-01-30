@@ -1,6 +1,8 @@
-use std::{env, fs, path::Path, process, time::Duration};
+#![allow(clippy::unnecessary_wraps)] //function pointers
 
-use anyhow::{bail, ensure, Context, Result};
+use std::{env, error::Error, fmt::Display, fs, path::Path, process, str::FromStr, time::Duration};
+
+use anyhow::{ensure, Context, Result};
 use pico_args::Arguments;
 
 use crate::{constants, hls::Args as HlsArgs, http::Args as HttpArgs, player::Args as PlayerArgs};
@@ -19,8 +21,70 @@ pub struct Args {
 
 impl Args {
     pub fn parse() -> Result<(Self, HttpArgs)> {
+        let mut p = Parser::new()?;
         let mut args = Self::default();
-        let mut http_args = HttpArgs::default();
+        let mut http = HttpArgs::default();
+
+        p.parse_fn_cfg(&mut args.servers, "-s", "servers", split_comma)?;
+        p.parse_cfg(&mut args.player.path, "-p", "player")?;
+        p.parse_cfg(&mut args.player.args, "-a", "player-args")?;
+        p.parse_switch_or(&mut args.debug, "-d", "--debug")?;
+        p.parse_switch_or(&mut args.player.quiet, "-q", "--quiet")?;
+        p.parse_switch(&mut args.passthrough, "--passthrough")?;
+        p.parse_switch(&mut args.player.no_kill, "--no-kill")?;
+        p.parse_switch(&mut http.force_https, "--force-https")?;
+        p.parse_switch(&mut http.force_ipv4, "--force-ipv4")?;
+        p.parse_fn(&mut args.client_id, "--client-id", parse_optstring)?;
+        p.parse_fn(&mut args.auth_token, "--auth-token", parse_optstring)?;
+        p.parse_fn(&mut args.never_proxy, "--never-proxy", split_comma)?;
+        p.parse(&mut args.hls.codecs, "--codecs")?;
+        p.parse(&mut http.user_agent, "--user-agent")?;
+        p.parse(&mut http.retries, "--http-retries")?;
+        p.parse_fn(&mut http.timeout, "--http-timeout", parse_duration)?;
+
+        args.hls.channel = p
+            .parser
+            .free_from_str::<String>()
+            .context("Missing channel argument")?
+            .to_lowercase()
+            .replace("twitch.tv/", "");
+
+        p.parse_free(&mut args.hls.quality, "quality")?;
+
+        if let Some(ref never_proxy) = args.never_proxy {
+            if never_proxy.iter().any(|a| a.eq(&args.hls.channel)) {
+                args.servers = None;
+            }
+        }
+
+        let remaining = p.parser.finish();
+        ensure!(remaining.is_empty(), "Invalid argument: {:?}", remaining);
+
+        ensure!(!args.player.path.is_empty(), "Player must be set");
+        ensure!(!args.hls.quality.is_empty(), "Quality must be set");
+        Ok((args, http))
+    }
+}
+
+fn split_comma(arg: &str) -> Result<Option<Vec<String>>> {
+    Ok(Some(arg.split(',').map(String::from).collect()))
+}
+
+fn parse_duration(arg: &str) -> Result<Duration> {
+    Ok(Duration::try_from_secs_f64(arg.parse()?)?)
+}
+
+fn parse_optstring(arg: &str) -> Result<Option<String>> {
+    Ok(Some(arg.to_owned()))
+}
+
+struct Parser {
+    parser: Arguments,
+    config: Option<String>,
+}
+
+impl Parser {
+    fn new() -> Result<Self> {
         let mut parser = Arguments::from_env();
         if parser.contains("-h") || parser.contains("--help") {
             println!(include_str!("usage"));
@@ -38,135 +102,116 @@ impl Args {
             process::exit(0);
         }
 
-        if !parser.contains("--no-config") {
-            let config_path = match parser.opt_value_from_str("-c")? {
-                Some(path) => path,
-                None => default_config_path()?,
-            };
+        Ok(Self {
+            config: {
+                if parser.contains("--no-config") {
+                    None
+                } else {
+                    let path = match parser.opt_value_from_str("-c")? {
+                        Some(path) => path,
+                        None => default_config_path()?,
+                    };
 
-            args.parse_config(&mut http_args, &config_path)?;
-        }
-
-        args.merge_cli(&mut parser, &mut http_args)?;
-        if let Some(never_proxy) = &args.never_proxy {
-            if never_proxy.iter().any(|a| a.eq(&args.hls.channel)) {
-                args.servers = None;
-            }
-        }
-
-        ensure!(!args.player.path.is_empty(), "Player must be set");
-        ensure!(!args.hls.quality.is_empty(), "Quality must be set");
-        Ok((args, http_args))
-    }
-
-    fn parse_config(&mut self, http: &mut HttpArgs, path: &str) -> Result<()> {
-        if !Path::new(path).is_file() {
-            return Ok(());
-        }
-
-        let config = fs::read_to_string(path).context("Failed to read config file")?;
-        for line in config.lines() {
-            if line.starts_with('#') {
-                continue;
-            }
-
-            let split = line.split_once('=');
-            if let Some(split) = split {
-                match split.0 {
-                    "servers" => self.servers = Some(split_comma(split.1)?),
-                    "player" => self.player.path = split.1.into(),
-                    "player-args" => self.player.args = split.1.into(),
-                    "debug" => self.debug = split.1.parse()?,
-                    "quiet" => self.player.quiet = split.1.parse()?,
-                    "passthrough" => self.passthrough = split.1.parse()?,
-                    "no-kill" => self.player.no_kill = split.1.parse()?,
-                    "force-https" => http.force_https = split.1.parse()?,
-                    "force-ipv4" => http.force_ipv4 = split.1.parse()?,
-                    "client-id" => self.client_id = Some(split.1.into()),
-                    "auth-token" => self.auth_token = Some(split.1.into()),
-                    "never-proxy" => self.never_proxy = Some(split_comma(split.1)?),
-                    "codecs" => self.hls.codecs = split.1.into(),
-                    "user-agent" => http.user_agent = split.1.into(),
-                    "http-retries" => http.retries = split.1.parse()?,
-                    "http-timeout" => http.timeout = parse_duration(split.1)?,
-                    "quality" => self.hls.quality = split.1.into(),
-                    _ => bail!("Unknown key in config: {}", split.0),
+                    if Path::new(&path).exists() {
+                        Some(fs::read_to_string(path).context("Failed to read config file")?)
+                    } else {
+                        None
+                    }
                 }
-            } else {
-                bail!("Malformed config");
+            },
+            parser,
+        })
+    }
+
+    fn parse<T: FromStr>(&mut self, dst: &mut T, key: &'static str) -> Result<()>
+    where
+        <T as FromStr>::Err: Display + Send + Sync + Error + 'static,
+    {
+        let arg = self.parser.opt_value_from_str(key)?;
+        Ok(self.resolve(dst, arg, key, T::from_str)?)
+    }
+
+    fn parse_cfg<T: FromStr>(
+        &mut self,
+        dst: &mut T,
+        key: &'static str,
+        cfg_key: &'static str,
+    ) -> Result<()>
+    where
+        <T as FromStr>::Err: Display + Send + Sync + Error + 'static,
+    {
+        let arg = self.parser.opt_value_from_str(key)?;
+        Ok(self.resolve(dst, arg, cfg_key, T::from_str)?)
+    }
+
+    fn parse_free<T: FromStr>(&mut self, dst: &mut T, cfg_key: &'static str) -> Result<()>
+    where
+        <T as FromStr>::Err: Display + Send + Sync + Error + 'static,
+    {
+        let arg = self.parser.opt_free_from_str()?;
+        Ok(self.resolve(dst, arg, cfg_key, T::from_str)?)
+    }
+
+    fn parse_switch(&mut self, dst: &mut bool, key: &'static str) -> Result<()> {
+        let arg = Some(self.parser.contains(key));
+        Ok(self.resolve(dst, arg, key, bool::from_str)?)
+    }
+
+    fn parse_switch_or(
+        &mut self,
+        dst: &mut bool,
+        key1: &'static str,
+        key2: &'static str,
+    ) -> Result<()> {
+        let arg = Some(self.parser.contains(key1) || self.parser.contains(key2));
+        Ok(self.resolve(dst, arg, key2, bool::from_str)?)
+    }
+
+    fn parse_fn<T>(
+        &mut self,
+        dst: &mut T,
+        key: &'static str,
+        f: fn(_: &str) -> Result<T>,
+    ) -> Result<()> {
+        let arg = self.parser.opt_value_from_fn(key, f)?;
+        self.resolve(dst, arg, key, f)
+    }
+
+    fn parse_fn_cfg<T>(
+        &mut self,
+        dst: &mut T,
+        key: &'static str,
+        cfg_key: &'static str,
+        f: fn(_: &str) -> Result<T>,
+    ) -> Result<()> {
+        let arg = self.parser.opt_value_from_fn(key, f)?;
+        self.resolve(dst, arg, cfg_key, f)
+    }
+
+    fn resolve<T, E>(
+        &self,
+        dst: &mut T,
+        val: Option<T>,
+        key: &str,
+        f: fn(_: &str) -> Result<T, E>,
+    ) -> Result<(), E> {
+        //unwrap val or get arg from config file
+        if let Some(val) = val {
+            *dst = val;
+        } else if let Some(ref cfg) = self.config {
+            let key = key.trim_start_matches('-');
+            if let Some(line) = cfg.lines().find(|l| l.starts_with(key)) {
+                if let Some(split) = line.split_once('=') {
+                    *dst = f(split.1)?;
+                }
             }
         }
 
         Ok(())
     }
-
-    fn merge_cli(&mut self, p: &mut Arguments, http: &mut HttpArgs) -> Result<()> {
-        merge_opt_opt(&mut self.servers, p.opt_value_from_fn("-s", split_comma)?);
-        merge_opt(&mut self.player.path, p.opt_value_from_str("-p")?);
-        merge_opt(&mut self.player.args, p.opt_value_from_str("-a")?);
-        merge_switch(&mut self.debug, p.contains("-d") || p.contains("--debug"));
-        merge_switch(
-            &mut self.player.quiet,
-            p.contains("-q") || p.contains("--quiet"),
-        );
-        merge_switch(&mut self.passthrough, p.contains("--passthrough"));
-        merge_switch(&mut self.player.no_kill, p.contains("--no-kill"));
-        merge_switch(&mut http.force_https, p.contains("--force-https"));
-        merge_switch(&mut http.force_ipv4, p.contains("--force-ipv4"));
-        merge_opt_opt(&mut self.client_id, p.opt_value_from_str("--client-id")?);
-        merge_opt_opt(&mut self.auth_token, p.opt_value_from_str("--auth-token")?);
-        merge_opt_opt(
-            &mut self.never_proxy,
-            p.opt_value_from_fn("--never-proxy", split_comma)?,
-        );
-        merge_opt(&mut self.hls.codecs, p.opt_value_from_str("--codecs")?);
-        merge_opt(&mut http.user_agent, p.opt_value_from_str("--user-agent")?);
-        merge_opt(&mut http.retries, p.opt_value_from_str("--http-retries")?);
-        merge_opt(
-            &mut http.timeout,
-            p.opt_value_from_fn("--http-timeout", parse_duration)?,
-        );
-
-        self.hls.channel = p
-            .free_from_str::<String>()
-            .context("missing channel argument")?
-            .to_lowercase()
-            .replace("twitch.tv/", "");
-
-        merge_opt(&mut self.hls.quality, p.opt_free_from_str()?);
-
-        Ok(())
-    }
 }
 
-fn merge_opt<T>(dst: &mut T, val: Option<T>) {
-    if let Some(val) = val {
-        *dst = val;
-    }
-}
-
-fn merge_opt_opt<T>(dst: &mut Option<T>, val: Option<T>) {
-    if val.is_some() {
-        *dst = val;
-    }
-}
-
-fn merge_switch(dst: &mut bool, val: bool) {
-    if val {
-        *dst = true;
-    }
-}
-
-#[allow(clippy::unnecessary_wraps)] //function pointer
-fn split_comma(arg: &str) -> Result<Vec<String>> {
-    Ok(arg.split(',').map(String::from).collect())
-}
-
-fn parse_duration(arg: &str) -> Result<Duration> {
-    Ok(Duration::try_from_secs_f64(arg.parse()?)?)
-}
-
-#[cfg(target_os = "linux")]
+#[cfg(all(unix, not(target_os = "macos")))]
 fn default_config_path() -> Result<String> {
     let dir = if let Ok(dir) = env::var("XDG_CONFIG_HOME") {
         dir
@@ -196,7 +241,7 @@ fn default_config_path() -> Result<String> {
     ))
 }
 
-#[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
+#[cfg(not(any(unix, target_os = "windows", target_os = "macos")))]
 fn default_config_path() -> Result<String> {
     Ok(constants::DEFAULT_CONFIG_PATH)
 }
