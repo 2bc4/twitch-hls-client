@@ -1,3 +1,5 @@
+#![allow(clippy::unnecessary_wraps)] //function pointers
+
 use std::{
     fmt, iter,
     str::FromStr,
@@ -5,11 +7,12 @@ use std::{
     time::{Duration, Instant},
 };
 
-use anyhow::{Context, Result};
+use anyhow::{ensure, Context, Result};
 use log::{debug, error, info};
 use url::Url;
 
 use crate::{
+    args::{ArgParse, Parser},
     constants,
     http::{self, Agent, TextRequest},
 };
@@ -37,6 +40,10 @@ impl fmt::Display for Error {
 
 #[derive(Debug)]
 pub struct Args {
+    pub servers: Option<Vec<String>>,
+    pub client_id: Option<String>,
+    pub auth_token: Option<String>,
+    pub never_proxy: Option<Vec<String>>,
     pub codecs: String,
     pub channel: String,
     pub quality: String,
@@ -46,9 +53,44 @@ impl Default for Args {
     fn default() -> Self {
         Self {
             codecs: "av1,h265,h264".to_owned(),
+            servers: Option::default(),
+            client_id: Option::default(),
+            auth_token: Option::default(),
+            never_proxy: Option::default(),
             channel: String::default(),
             quality: String::default(),
         }
+    }
+}
+
+impl ArgParse for Args {
+    fn parse(mut self, parser: &mut Parser) -> Result<Self> {
+        parser.parse_fn_cfg(&mut self.servers, "-s", "servers", Self::split_comma)?;
+        parser.parse_fn(&mut self.client_id, "--client-id", Self::parse_optstring)?;
+        parser.parse_fn(&mut self.auth_token, "--auth-token", Self::parse_optstring)?;
+        parser.parse(&mut self.codecs, "--codecs")?;
+        parser.parse_fn(&mut self.never_proxy, "--never-proxy", Self::split_comma)?;
+
+        self.channel = parser
+            .parse_free_required::<String>()
+            .context("Missing channel argument")?
+            .to_lowercase()
+            .replace("twitch.tv/", "");
+
+        parser.parse_free(&mut self.quality, "quality")?;
+
+        ensure!(!self.quality.is_empty(), "Quality must be set");
+        Ok(self)
+    }
+}
+
+impl Args {
+    fn split_comma(arg: &str) -> Result<Option<Vec<String>>> {
+        Ok(Some(arg.split(',').map(String::from).collect()))
+    }
+
+    fn parse_optstring(arg: &str) -> Result<Option<String>> {
+        Ok(Some(arg.to_owned()))
     }
 }
 
@@ -187,6 +229,21 @@ impl SegmentDuration {
     }
 }
 
+pub fn fetch_playlist(args: &Args, agent: &Agent) -> Result<Url> {
+    if let Some(ref servers) = args.servers {
+        fetch_proxy_playlist(servers, &args.codecs, &args.channel, &args.quality, agent)
+    } else {
+        fetch_twitch_playlist(
+            &args.client_id,
+            &args.auth_token,
+            &args.codecs,
+            &args.channel,
+            &args.quality,
+            agent,
+        )
+    }
+}
+
 #[derive(Copy, Clone)]
 enum PrefetchSegment {
     Newest,
@@ -310,16 +367,18 @@ impl PlaybackAccessToken {
     }
 }
 
-pub fn fetch_twitch_playlist(
+fn fetch_twitch_playlist(
     client_id: &Option<String>,
     auth_token: &Option<String>,
-    args: &Args,
+    codecs: &str,
+    channel: &str,
+    quality: &str,
     agent: &Agent,
 ) -> Result<Url> {
-    info!("Fetching playlist for channel {}", args.channel);
-    let access_token = PlaybackAccessToken::new(client_id, auth_token, &args.channel, agent)?;
+    info!("Fetching playlist for channel {channel}");
+    let access_token = PlaybackAccessToken::new(client_id, auth_token, channel, agent)?;
     let url = Url::parse_with_params(
-        &format!("{}{}.m3u8", constants::TWITCH_HLS_BASE, args.channel),
+        &format!("{}{}.m3u8", constants::TWITCH_HLS_BASE, channel),
         &[
             ("acmb", "e30="),
             ("allow_source", "true"),
@@ -329,7 +388,7 @@ pub fn fetch_twitch_playlist(
             ("playlist_include_framerate", "true"),
             ("player_backend", "mediaplayer"),
             ("reassignments_supported", "true"),
-            ("supported_codecs", &args.codecs),
+            ("supported_codecs", &codecs),
             ("transcode_mode", "cbr_v1"),
             ("p", &fastrand::u32(0..=9_999_999).to_string()),
             ("play_session_id", &access_token.play_session_id),
@@ -340,25 +399,28 @@ pub fn fetch_twitch_playlist(
         ],
     )?;
 
-    parse_variant_playlist(
-        &agent.get(&url)?.text().map_err(map_if_offline)?,
-        &args.quality,
-    )
+    parse_variant_playlist(&agent.get(&url)?.text().map_err(map_if_offline)?, quality)
 }
 
-pub fn fetch_proxy_playlist(servers: &[String], args: &Args, agent: &Agent) -> Result<Url> {
-    info!("Fetching playlist for channel {} (proxy)", args.channel);
+fn fetch_proxy_playlist(
+    servers: &[String],
+    codecs: &str,
+    channel: &str,
+    quality: &str,
+    agent: &Agent,
+) -> Result<Url> {
+    info!("Fetching playlist for channel {channel} (proxy)");
     let servers = servers
         .iter()
         .map(|s| {
             Url::parse_with_params(
-                &s.replace("[channel]", &args.channel),
+                &s.replace("[channel]", channel),
                 &[
                     ("allow_source", "true"),
                     ("allow_audio_only", "true"),
                     ("fast_bread", "true"),
                     ("warp", "true"),
-                    ("supported_codecs", &args.codecs),
+                    ("supported_codecs", &codecs),
                 ],
             )
         })
@@ -400,7 +462,7 @@ pub fn fetch_proxy_playlist(servers: &[String], args: &Args, agent: &Agent) -> R
         })
         .ok_or(Error::Offline)?;
 
-    parse_variant_playlist(&playlist, &args.quality)
+    parse_variant_playlist(&playlist, quality)
 }
 
 fn parse_variant_playlist(master_playlist: &str, quality: &str) -> Result<Url> {

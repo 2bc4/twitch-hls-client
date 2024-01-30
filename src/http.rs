@@ -12,7 +12,10 @@ use curl::easy::{Easy2, Handler, InfoType, IpResolve, List, WriteError};
 use log::{debug, LevelFilter};
 use url::Url;
 
-use crate::constants;
+use crate::{
+    args::{ArgParse, Parser},
+    constants,
+};
 
 #[derive(Debug)]
 pub enum Error {
@@ -31,7 +34,7 @@ impl fmt::Display for Error {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Args {
     pub force_https: bool,
     pub force_ipv4: bool,
@@ -52,6 +55,24 @@ impl Default for Args {
     }
 }
 
+impl ArgParse for Args {
+    fn parse(mut self, parser: &mut Parser) -> Result<Self> {
+        parser.parse_switch(&mut self.force_https, "--force-https")?;
+        parser.parse_switch(&mut self.force_ipv4, "--force-ipv4")?;
+        parser.parse(&mut self.retries, "--http-retries")?;
+        parser.parse_fn(&mut self.timeout, "--http-timeout", Self::parse_duration)?;
+        parser.parse(&mut self.user_agent, "--user-agent")?;
+
+        Ok(self)
+    }
+}
+
+impl Args {
+    fn parse_duration(arg: &str) -> Result<Duration> {
+        Ok(Duration::try_from_secs_f64(arg.parse()?)?)
+    }
+}
+
 #[derive(Clone)]
 pub struct Agent {
     args: Arc<Args>,
@@ -59,9 +80,9 @@ pub struct Agent {
 }
 
 impl Agent {
-    pub fn new(args: Args) -> Result<Self> {
+    pub fn new(args: &Args) -> Result<Self> {
         Ok(Self {
-            args: Arc::new(args),
+            args: Arc::new(args.to_owned()),
             certs: {
                 //rustls-native-certs returns DER, have to manually convert to PEM here for curl
                 //normally the base64 would be 64 character line wrapped etc. but curl seems to accept this

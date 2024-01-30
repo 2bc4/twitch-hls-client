@@ -45,17 +45,14 @@ fn main_loop(mut playlist: MediaPlaylist, player: Player, agent: &Agent) -> Resu
 }
 
 fn main() -> Result<()> {
-    let (args, http_args) = Args::parse()?;
+    let mut args = Args::new()?;
 
     Logger::init(args.debug)?;
-    debug!("{:?} {:?}", args, http_args);
+    debug!("{args:?}");
 
-    let agent = Agent::new(http_args)?;
-    let playlist = match args.servers.as_ref().map_or_else(
-        || hls::fetch_twitch_playlist(&args.client_id, &args.auth_token, &args.hls, &agent),
-        |servers| hls::fetch_proxy_playlist(servers, &args.hls, &agent),
-    ) {
-        Ok(url) if args.passthrough => return Player::passthrough(&args.player, &url),
+    let agent = Agent::new(&args.http)?;
+    let playlist = match hls::fetch_playlist(&args.hls, &agent) {
+        Ok(url) if args.passthrough => return Player::passthrough(&mut args.player, &url),
         Ok(url) => MediaPlaylist::new(&url, &agent)?,
         Err(e) => match e.downcast_ref::<hls::Error>() {
             Some(hls::Error::Offline) => {
@@ -64,13 +61,15 @@ fn main() -> Result<()> {
             }
             Some(hls::Error::NotLowLatency(url)) => {
                 info!("{e}");
-                return Player::passthrough(&args.player, url);
+                return Player::passthrough(&mut args.player, url);
             }
             _ => return Err(e),
         },
     };
 
     let player = Player::spawn(&args.player)?;
+    drop(args);
+
     match main_loop(playlist, player, &agent) {
         Ok(()) => Ok(()),
         Err(e) => {

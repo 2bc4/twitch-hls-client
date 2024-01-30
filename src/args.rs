@@ -1,126 +1,58 @@
-#![allow(clippy::unnecessary_wraps)] //function pointers
+use std::{env, error::Error, fmt::Display, fs, path::Path, process, str::FromStr};
 
-use std::{env, error::Error, fmt::Display, fs, path::Path, process, str::FromStr, time::Duration};
-
-use anyhow::{ensure, Context, Result};
+use anyhow::{Context, Result};
 use pico_args::Arguments;
 
 use crate::{constants, hls::Args as HlsArgs, http::Args as HttpArgs, player::Args as PlayerArgs};
 
-#[derive(Default, Debug)]
-pub struct Args {
-    pub hls: HlsArgs,
-    pub player: PlayerArgs,
-    pub servers: Option<Vec<String>>,
-    pub debug: bool,
-    pub passthrough: bool,
-    pub client_id: Option<String>,
-    pub auth_token: Option<String>,
-    pub never_proxy: Option<Vec<String>>,
+pub trait ArgParse {
+    fn parse(self, parser: &mut Parser) -> Result<Self>
+    where
+        Self: Sized;
 }
 
-impl Args {
-    pub fn parse() -> Result<(Self, HttpArgs)> {
-        let mut p = Parser::new()?;
-        let mut args = Self::default();
-        let mut http = HttpArgs::default();
+#[derive(Default, Debug)]
+pub struct Args {
+    pub http: HttpArgs,
+    pub player: PlayerArgs,
+    pub hls: HlsArgs,
+    pub debug: bool,
+    pub passthrough: bool,
+}
 
-        p.parse_fn_cfg(&mut args.servers, "-s", "servers", split_comma)?;
-        p.parse_cfg(&mut args.player.path, "-p", "player")?;
-        p.parse_cfg(&mut args.player.args, "-a", "player-args")?;
-        p.parse_switch_or(&mut args.debug, "-d", "--debug")?;
-        p.parse_switch_or(&mut args.player.quiet, "-q", "--quiet")?;
-        p.parse_switch(&mut args.passthrough, "--passthrough")?;
-        p.parse_switch(&mut args.player.no_kill, "--no-kill")?;
-        p.parse_switch(&mut http.force_https, "--force-https")?;
-        p.parse_switch(&mut http.force_ipv4, "--force-ipv4")?;
-        p.parse_fn(&mut args.client_id, "--client-id", parse_optstring)?;
-        p.parse_fn(&mut args.auth_token, "--auth-token", parse_optstring)?;
-        p.parse_fn(&mut args.never_proxy, "--never-proxy", split_comma)?;
-        p.parse(&mut args.hls.codecs, "--codecs")?;
-        p.parse(&mut http.user_agent, "--user-agent")?;
-        p.parse(&mut http.retries, "--http-retries")?;
-        p.parse_fn(&mut http.timeout, "--http-timeout", parse_duration)?;
+impl ArgParse for Args {
+    fn parse(mut self, parser: &mut Parser) -> Result<Self> {
+        parser.parse_switch_or(&mut self.debug, "-d", "--debug")?;
+        parser.parse_switch(&mut self.passthrough, "--passthrough")?;
 
-        args.hls.channel = p
-            .parser
-            .free_from_str::<String>()
-            .context("Missing channel argument")?
-            .to_lowercase()
-            .replace("twitch.tv/", "");
-
-        p.parse_free(&mut args.hls.quality, "quality")?;
-
-        if let Some(ref never_proxy) = args.never_proxy {
-            if never_proxy.iter().any(|a| a.eq(&args.hls.channel)) {
-                args.servers = None;
-            }
-        }
-
-        ensure!(!args.player.path.is_empty(), "Player must be set");
-        ensure!(!args.hls.quality.is_empty(), "Quality must be set");
-        Ok((args, http))
+        self.http = self.http.parse(parser)?;
+        self.player = self.player.parse(parser)?;
+        self.hls = self.hls.parse(parser)?;
+        Ok(self)
     }
 }
 
-fn split_comma(arg: &str) -> Result<Option<Vec<String>>> {
-    Ok(Some(arg.split(',').map(String::from).collect()))
+impl Args {
+    pub fn new() -> Result<Self> {
+        let mut parser = Parser::new()?;
+        let mut args = Self::default().parse(&mut parser)?;
+        if let Some(ref never_proxy) = args.hls.never_proxy {
+            if never_proxy.iter().any(|a| a.eq(&args.hls.channel)) {
+                args.hls.servers = None;
+            }
+        }
+
+        Ok(args)
+    }
 }
 
-fn parse_duration(arg: &str) -> Result<Duration> {
-    Ok(Duration::try_from_secs_f64(arg.parse()?)?)
-}
-
-fn parse_optstring(arg: &str) -> Result<Option<String>> {
-    Ok(Some(arg.to_owned()))
-}
-
-struct Parser {
+pub struct Parser {
     parser: Arguments,
     config: Option<String>,
 }
 
 impl Parser {
-    fn new() -> Result<Self> {
-        let mut parser = Arguments::from_env();
-        if parser.contains("-h") || parser.contains("--help") {
-            println!(include_str!("usage"));
-            process::exit(0);
-        }
-
-        if parser.contains("-V") || parser.contains("--version") {
-            println!(
-                "{} {} (curl {})",
-                env!("CARGO_PKG_NAME"),
-                env!("CARGO_PKG_VERSION"),
-                curl::Version::get().version(),
-            );
-
-            process::exit(0);
-        }
-
-        Ok(Self {
-            config: {
-                if parser.contains("--no-config") {
-                    None
-                } else {
-                    let path = match parser.opt_value_from_str("-c")? {
-                        Some(path) => path,
-                        None => default_config_path()?,
-                    };
-
-                    if Path::new(&path).try_exists()? {
-                        Some(fs::read_to_string(path).context("Failed to read config file")?)
-                    } else {
-                        None
-                    }
-                }
-            },
-            parser,
-        })
-    }
-
-    fn parse<T: FromStr>(&mut self, dst: &mut T, key: &'static str) -> Result<()>
+    pub fn parse<T: FromStr>(&mut self, dst: &mut T, key: &'static str) -> Result<()>
     where
         <T as FromStr>::Err: Display + Send + Sync + Error + 'static,
     {
@@ -128,7 +60,7 @@ impl Parser {
         Ok(self.resolve(dst, arg, key, T::from_str)?)
     }
 
-    fn parse_cfg<T: FromStr>(
+    pub fn parse_cfg<T: FromStr>(
         &mut self,
         dst: &mut T,
         key: &'static str,
@@ -141,7 +73,7 @@ impl Parser {
         Ok(self.resolve(dst, arg, cfg_key, T::from_str)?)
     }
 
-    fn parse_free<T: FromStr>(&mut self, dst: &mut T, cfg_key: &'static str) -> Result<()>
+    pub fn parse_free<T: FromStr>(&mut self, dst: &mut T, cfg_key: &'static str) -> Result<()>
     where
         <T as FromStr>::Err: Display + Send + Sync + Error + 'static,
     {
@@ -149,12 +81,19 @@ impl Parser {
         Ok(self.resolve(dst, arg, cfg_key, T::from_str)?)
     }
 
-    fn parse_switch(&mut self, dst: &mut bool, key: &'static str) -> Result<()> {
+    pub fn parse_free_required<T: FromStr>(&mut self) -> Result<T>
+    where
+        <T as FromStr>::Err: Display + Send + Sync + Error + 'static,
+    {
+        Ok(self.parser.free_from_str()?)
+    }
+
+    pub fn parse_switch(&mut self, dst: &mut bool, key: &'static str) -> Result<()> {
         let arg = self.parser.contains(key).then_some(true);
         Ok(self.resolve(dst, arg, key, bool::from_str)?)
     }
 
-    fn parse_switch_or(
+    pub fn parse_switch_or(
         &mut self,
         dst: &mut bool,
         key1: &'static str,
@@ -164,7 +103,7 @@ impl Parser {
         Ok(self.resolve(dst, arg, key2, bool::from_str)?)
     }
 
-    fn parse_fn<T>(
+    pub fn parse_fn<T>(
         &mut self,
         dst: &mut T,
         key: &'static str,
@@ -174,7 +113,7 @@ impl Parser {
         self.resolve(dst, arg, key, f)
     }
 
-    fn parse_fn_cfg<T>(
+    pub fn parse_fn_cfg<T>(
         &mut self,
         dst: &mut T,
         key: &'static str,
@@ -206,39 +145,78 @@ impl Parser {
 
         Ok(())
     }
-}
 
-#[cfg(all(unix, not(target_os = "macos")))]
-fn default_config_path() -> Result<String> {
-    let dir = if let Ok(dir) = env::var("XDG_CONFIG_HOME") {
-        dir
-    } else {
-        format!("{}/.config", env::var("HOME")?)
-    };
+    #[cfg(all(unix, not(target_os = "macos")))]
+    fn default_config_path() -> Result<String> {
+        let dir = if let Ok(dir) = env::var("XDG_CONFIG_HOME") {
+            dir
+        } else {
+            format!("{}/.config", env::var("HOME")?)
+        };
 
-    Ok(format!("{dir}/{}", constants::DEFAULT_CONFIG_PATH))
-}
+        Ok(format!("{dir}/{}", constants::DEFAULT_CONFIG_PATH))
+    }
 
-#[cfg(target_os = "windows")]
-fn default_config_path() -> Result<String> {
-    Ok(format!(
-        "{}/{}",
-        env::var("APPDATA")?,
-        constants::DEFAULT_CONFIG_PATH,
-    ))
-}
+    #[cfg(target_os = "windows")]
+    fn default_config_path() -> Result<String> {
+        Ok(format!(
+            "{}/{}",
+            env::var("APPDATA")?,
+            constants::DEFAULT_CONFIG_PATH,
+        ))
+    }
 
-#[cfg(target_os = "macos")]
-fn default_config_path() -> Result<String> {
-    //I have no idea if this is correct
-    Ok(format!(
-        "{}/Library/Application Support/{}",
-        env::var("HOME")?,
-        constants::DEFAULT_CONFIG_PATH,
-    ))
-}
+    #[cfg(target_os = "macos")]
+    fn default_config_path() -> Result<String> {
+        //I have no idea if this is correct
+        Ok(format!(
+            "{}/Library/Application Support/{}",
+            env::var("HOME")?,
+            constants::DEFAULT_CONFIG_PATH,
+        ))
+    }
 
-#[cfg(not(any(unix, target_os = "windows", target_os = "macos")))]
-fn default_config_path() -> Result<String> {
-    Ok(constants::DEFAULT_CONFIG_PATH)
+    #[cfg(not(any(unix, target_os = "windows", target_os = "macos")))]
+    fn default_config_path() -> Result<String> {
+        Ok(constants::DEFAULT_CONFIG_PATH)
+    }
+
+    fn new() -> Result<Self> {
+        let mut parser = Arguments::from_env();
+        if parser.contains("-h") || parser.contains("--help") {
+            println!(include_str!("usage"));
+            process::exit(0);
+        }
+
+        if parser.contains("-V") || parser.contains("--version") {
+            println!(
+                "{} {} (curl {})",
+                env!("CARGO_PKG_NAME"),
+                env!("CARGO_PKG_VERSION"),
+                curl::Version::get().version(),
+            );
+
+            process::exit(0);
+        }
+
+        Ok(Self {
+            config: {
+                if parser.contains("--no-config") {
+                    None
+                } else {
+                    let path = match parser.opt_value_from_str("-c")? {
+                        Some(path) => path,
+                        None => Self::default_config_path()?,
+                    };
+
+                    if Path::new(&path).try_exists()? {
+                        Some(fs::read_to_string(path).context("Failed to read config file")?)
+                    } else {
+                        None
+                    }
+                }
+            },
+            parser,
+        })
+    }
 }

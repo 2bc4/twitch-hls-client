@@ -3,9 +3,11 @@ use std::{
     process::{Child, ChildStdin, Command, Stdio},
 };
 
-use anyhow::{Context, Result};
+use anyhow::{ensure, Context, Result};
 use log::{debug, error, info};
 use url::Url;
+
+use crate::args::{ArgParse, Parser};
 
 #[derive(Clone, Debug)]
 #[allow(clippy::struct_field_names)] //.args
@@ -24,6 +26,18 @@ impl Default for Args {
             quiet: bool::default(),
             no_kill: bool::default(),
         }
+    }
+}
+
+impl ArgParse for Args {
+    fn parse(mut self, parser: &mut Parser) -> Result<Self> {
+        parser.parse_cfg(&mut self.path, "-p", "player")?;
+        parser.parse_cfg(&mut self.args, "-a", "player-args")?;
+        parser.parse_switch_or(&mut self.quiet, "-q", "--quiet")?;
+        parser.parse_switch(&mut self.no_kill, "--no-kill")?;
+
+        ensure!(!self.path.is_empty(), "Player must be set");
+        Ok(self)
     }
 }
 
@@ -59,14 +73,14 @@ impl Write for Player {
 }
 
 impl Player {
-    pub fn spawn(args: &Args) -> Result<Self> {
-        info!("Opening player: {} {}", args.path, args.args);
-        let mut command = Command::new(&args.path);
+    pub fn spawn(pargs: &Args) -> Result<Self> {
+        info!("Opening player: {} {}", pargs.path, pargs.args);
+        let mut command = Command::new(&pargs.path);
         command
-            .args(args.args.split_whitespace())
+            .args(pargs.args.split_whitespace())
             .stdin(Stdio::piped());
 
-        if args.quiet {
+        if pargs.quiet {
             command.stdout(Stdio::null()).stderr(Stdio::null());
         }
 
@@ -79,14 +93,12 @@ impl Player {
         Ok(Self {
             stdin,
             process,
-            no_kill: args.no_kill,
+            no_kill: pargs.no_kill,
         })
     }
 
-    pub fn passthrough(pargs: &Args, url: &Url) -> Result<()> {
+    pub fn passthrough(pargs: &mut Args, url: &Url) -> Result<()> {
         info!("Passing through playlist URL to player");
-
-        let mut pargs = pargs.to_owned();
         if pargs.args.split_whitespace().any(|a| a == "-") {
             pargs.args = pargs
                 .args
@@ -104,7 +116,7 @@ impl Player {
             pargs.args += &format!(" {url}");
         }
 
-        let mut player = Self::spawn(&pargs)?;
+        let mut player = Self::spawn(pargs)?;
         player
             .process
             .wait()
