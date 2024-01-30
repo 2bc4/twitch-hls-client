@@ -30,14 +30,14 @@ impl Default for Args {
 }
 
 impl ArgParse for Args {
-    fn parse(mut self, parser: &mut Parser) -> Result<Self> {
+    fn parse(&mut self, parser: &mut Parser) -> Result<()> {
         parser.parse_cfg(&mut self.path, "-p", "player")?;
         parser.parse_cfg(&mut self.args, "-a", "player-args")?;
         parser.parse_switch_or(&mut self.quiet, "-q", "--quiet")?;
         parser.parse_switch(&mut self.no_kill, "--no-kill")?;
 
         ensure!(!self.path.is_empty(), "Player must be set");
-        Ok(self)
+        Ok(())
     }
 }
 

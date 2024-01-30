@@ -6,9 +6,7 @@ use pico_args::Arguments;
 use crate::{constants, hls::Args as HlsArgs, http::Args as HttpArgs, player::Args as PlayerArgs};
 
 pub trait ArgParse {
-    fn parse(self, parser: &mut Parser) -> Result<Self>
-    where
-        Self: Sized;
+    fn parse(&mut self, parser: &mut Parser) -> Result<()>;
 }
 
 #[derive(Default, Debug)]
@@ -21,21 +19,23 @@ pub struct Args {
 }
 
 impl ArgParse for Args {
-    fn parse(mut self, parser: &mut Parser) -> Result<Self> {
+    fn parse(&mut self, parser: &mut Parser) -> Result<()> {
         parser.parse_switch_or(&mut self.debug, "-d", "--debug")?;
         parser.parse_switch(&mut self.passthrough, "--passthrough")?;
 
-        self.http = self.http.parse(parser)?;
-        self.player = self.player.parse(parser)?;
-        self.hls = self.hls.parse(parser)?;
-        Ok(self)
+        self.http.parse(parser)?;
+        self.player.parse(parser)?;
+        self.hls.parse(parser)?;
+        Ok(())
     }
 }
 
 impl Args {
     pub fn new() -> Result<Self> {
         let mut parser = Parser::new()?;
-        let mut args = Self::default().parse(&mut parser)?;
+        let mut args = Self::default();
+        args.parse(&mut parser)?;
+
         if let Some(ref never_proxy) = args.hls.never_proxy {
             if never_proxy.iter().any(|a| a.eq(&args.hls.channel)) {
                 args.hls.servers = None;

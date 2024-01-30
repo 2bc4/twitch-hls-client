@@ -56,14 +56,14 @@ impl Default for Args {
 }
 
 impl ArgParse for Args {
-    fn parse(mut self, parser: &mut Parser) -> Result<Self> {
+    fn parse(&mut self, parser: &mut Parser) -> Result<()> {
         parser.parse_switch(&mut self.force_https, "--force-https")?;
         parser.parse_switch(&mut self.force_ipv4, "--force-ipv4")?;
         parser.parse(&mut self.retries, "--http-retries")?;
         parser.parse_fn(&mut self.timeout, "--http-timeout", Self::parse_duration)?;
         parser.parse(&mut self.user_agent, "--user-agent")?;
 
-        Ok(self)
+        Ok(())
     }
 }
 

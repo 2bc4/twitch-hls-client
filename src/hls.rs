@@ -64,7 +64,7 @@ impl Default for Args {
 }
 
 impl ArgParse for Args {
-    fn parse(mut self, parser: &mut Parser) -> Result<Self> {
+    fn parse(&mut self, parser: &mut Parser) -> Result<()> {
         parser.parse_fn_cfg(&mut self.servers, "-s", "servers", Self::split_comma)?;
         parser.parse_fn(&mut self.client_id, "--client-id", Self::parse_optstring)?;
         parser.parse_fn(&mut self.auth_token, "--auth-token", Self::parse_optstring)?;
@@ -80,7 +80,7 @@ impl ArgParse for Args {
         parser.parse_free(&mut self.quality, "quality")?;
 
         ensure!(!self.quality.is_empty(), "Quality must be set");
-        Ok(self)
+        Ok(())
     }
 }
 
