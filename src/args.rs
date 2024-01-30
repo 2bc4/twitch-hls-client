@@ -112,7 +112,7 @@ impl Parser {
                         None => default_config_path()?,
                     };
 
-                    if Path::new(&path).exists() {
+                    if Path::new(&path).try_exists()? {
                         Some(fs::read_to_string(path).context("Failed to read config file")?)
                     } else {
                         None
@@ -192,7 +192,7 @@ impl Parser {
         &self,
         dst: &mut T,
         val: Option<T>,
-        key: &str,
+        key: &'static str,
         f: fn(_: &str) -> Result<T, E>,
     ) -> Result<(), E> {
         //unwrap val or get arg from config file
