@@ -6,7 +6,7 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{ensure, Result};
+use anyhow::{ensure, Context, Result};
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use curl::easy::{Easy2, Handler, InfoType, IpResolve, List, WriteError};
 use log::{debug, LevelFilter};
@@ -131,6 +131,15 @@ impl TextRequest {
         self.request.get_mut().clear();
 
         Ok(text)
+    }
+
+    pub fn url(&mut self) -> Result<Url> {
+        Ok(self
+            .request
+            .handle
+            .effective_url()?
+            .context("Failed to get URL from request")?
+            .parse()?)
     }
 
     fn get(mut request: Request<Vec<u8>>) -> Result<Self> {

@@ -101,11 +101,24 @@ pub struct MediaPlaylist {
 }
 
 impl MediaPlaylist {
-    pub fn new(url: &Url, agent: &Agent) -> Result<Self> {
+    pub fn new(args: &Args, agent: &Agent) -> Result<Self> {
+        let url = if let Some(ref servers) = args.servers {
+            Self::fetch_proxy_playlist(servers, &args.codecs, &args.channel, &args.quality, agent)
+        } else {
+            Self::fetch_twitch_playlist(
+                &args.client_id,
+                &args.auth_token,
+                &args.codecs,
+                &args.channel,
+                &args.quality,
+                agent,
+            )
+        }?;
+
         let mut playlist = Self {
             playlist: String::default(),
             prev_url: String::default(),
-            request: agent.get(url)?,
+            request: agent.get(&url)?,
         };
 
         playlist.reload()?;
@@ -113,7 +126,7 @@ impl MediaPlaylist {
     }
 
     pub fn reload(&mut self) -> Result<()> {
-        self.playlist = self.request.text().map_err(map_if_offline)?;
+        self.playlist = self.request.text().map_err(Self::map_if_offline)?;
         debug!("Playlist:\n{}", self.playlist);
 
         if self
@@ -161,6 +174,10 @@ impl MediaPlaylist {
         self.playlist.parse()
     }
 
+    pub fn url(&mut self) -> Result<Url> {
+        self.request.url()
+    }
+
     fn prefetch_url(&mut self, prefetch_segment: PrefetchSegment) -> Result<Url> {
         let url = prefetch_segment
             .parse(&self.playlist)
@@ -188,9 +205,140 @@ impl MediaPlaylist {
             self.duration()?.sleep(time.elapsed());
         }
     }
+
+    fn fetch_twitch_playlist(
+        client_id: &Option<String>,
+        auth_token: &Option<String>,
+        codecs: &str,
+        channel: &str,
+        quality: &str,
+        agent: &Agent,
+    ) -> Result<Url> {
+        info!("Fetching playlist for channel {channel}");
+        let access_token = PlaybackAccessToken::new(client_id, auth_token, channel, agent)?;
+        let url = Url::parse_with_params(
+            &format!("{}{}.m3u8", constants::TWITCH_HLS_BASE, channel),
+            &[
+                ("acmb", "e30="),
+                ("allow_source", "true"),
+                ("allow_audio_only", "true"),
+                ("cdm", "wv"),
+                ("fast_bread", "true"),
+                ("playlist_include_framerate", "true"),
+                ("player_backend", "mediaplayer"),
+                ("reassignments_supported", "true"),
+                ("supported_codecs", &codecs),
+                ("transcode_mode", "cbr_v1"),
+                ("p", &fastrand::u32(0..=9_999_999).to_string()),
+                ("play_session_id", &access_token.play_session_id),
+                ("sig", &access_token.signature),
+                ("token", &access_token.token),
+                ("player_version", "1.23.0"),
+                ("warp", "true"),
+            ],
+        )?;
+
+        Self::parse_variant_playlist(
+            &agent.get(&url)?.text().map_err(Self::map_if_offline)?,
+            quality,
+        )
+    }
+
+    fn fetch_proxy_playlist(
+        servers: &[String],
+        codecs: &str,
+        channel: &str,
+        quality: &str,
+        agent: &Agent,
+    ) -> Result<Url> {
+        info!("Fetching playlist for channel {channel} (proxy)");
+        let servers = servers
+            .iter()
+            .map(|s| {
+                Url::parse_with_params(
+                    &s.replace("[channel]", channel),
+                    &[
+                        ("allow_source", "true"),
+                        ("allow_audio_only", "true"),
+                        ("fast_bread", "true"),
+                        ("warp", "true"),
+                        ("supported_codecs", &codecs),
+                    ],
+                )
+            })
+            .collect::<Result<Vec<Url>, _>>()
+            .context("Invalid server URL")?;
+
+        let playlist = servers
+            .iter()
+            .find_map(|s| {
+                info!(
+                    "Using server {}://{}",
+                    s.scheme(),
+                    s.host_str().unwrap_or("<unknown>")
+                );
+
+                let mut request = match agent.get(s) {
+                    Ok(request) => request,
+                    Err(e) => {
+                        error!("{e}");
+                        return None;
+                    }
+                };
+
+                match request.text() {
+                    Ok(playlist_url) => Some(playlist_url),
+                    Err(e) => {
+                        if matches!(
+                            e.downcast_ref::<http::Error>(),
+                            Some(http::Error::NotFound(_))
+                        ) {
+                            error!("Playlist not found. Stream offline?");
+                            return None;
+                        }
+
+                        error!("{e}");
+                        None
+                    }
+                }
+            })
+            .ok_or(Error::Offline)?;
+
+        Self::parse_variant_playlist(&playlist, quality)
+    }
+
+    fn parse_variant_playlist(master_playlist: &str, quality: &str) -> Result<Url> {
+        debug!("Master playlist:\n{master_playlist}");
+        let playlist_url = master_playlist
+            .lines()
+            .skip_while(|s| {
+                !(s.contains("#EXT-X-MEDIA") && (s.contains(quality) || quality == "best"))
+            })
+            .nth(2)
+            .context("Invalid quality or malformed master playlist")?
+            .parse::<Url>()?;
+
+        if !master_playlist.contains("FUTURE=\"true\"") {
+            return Err(Error::NotLowLatency(playlist_url).into());
+        }
+
+        Ok(playlist_url)
+    }
+
+    fn map_if_offline(error: anyhow::Error) -> anyhow::Error {
+        if matches!(
+            error.downcast_ref::<http::Error>(),
+            Some(http::Error::NotFound(_))
+        ) {
+            return Error::Offline.into();
+        }
+
+        error
+    }
 }
 
 pub struct SegmentDuration(Duration);
+
 impl FromStr for SegmentDuration {
     type Err = anyhow::Error;
 
@@ -226,21 +374,6 @@ impl SegmentDuration {
             debug!("Sleeping thread for {:?}", sleep_time);
             thread::sleep(sleep_time);
         }
-    }
-}
-
-pub fn fetch_playlist(args: &Args, agent: &Agent) -> Result<Url> {
-    if let Some(ref servers) = args.servers {
-        fetch_proxy_playlist(servers, &args.codecs, &args.channel, &args.quality, agent)
-    } else {
-        fetch_twitch_playlist(
-            &args.client_id,
-            &args.auth_token,
-            &args.codecs,
-            &args.channel,
-            &args.quality,
-            agent,
-        )
     }
 }
 
@@ -365,129 +498,4 @@ impl PlaybackAccessToken {
     fn gen_id() -> String {
         iter::repeat_with(fastrand::alphanumeric).take(32).collect()
     }
-}
-
-fn fetch_twitch_playlist(
-    client_id: &Option<String>,
-    auth_token: &Option<String>,
-    codecs: &str,
-    channel: &str,
-    quality: &str,
-    agent: &Agent,
-) -> Result<Url> {
-    info!("Fetching playlist for channel {channel}");
-    let access_token = PlaybackAccessToken::new(client_id, auth_token, channel, agent)?;
-    let url = Url::parse_with_params(
-        &format!("{}{}.m3u8", constants::TWITCH_HLS_BASE, channel),
-        &[
-            ("acmb", "e30="),
-            ("allow_source", "true"),
-            ("allow_audio_only", "true"),
-            ("cdm", "wv"),
-            ("fast_bread", "true"),
-            ("playlist_include_framerate", "true"),
-            ("player_backend", "mediaplayer"),
-            ("reassignments_supported", "true"),
-            ("supported_codecs", &codecs),
-            ("transcode_mode", "cbr_v1"),
-            ("p", &fastrand::u32(0..=9_999_999).to_string()),
-            ("play_session_id", &access_token.play_session_id),
-            ("sig", &access_token.signature),
-            ("token", &access_token.token),
-            ("player_version", "1.23.0"),
-            ("warp", "true"),
-        ],
-    )?;
-
-    parse_variant_playlist(&agent.get(&url)?.text().map_err(map_if_offline)?, quality)
-}
-
-fn fetch_proxy_playlist(
-    servers: &[String],
-    codecs: &str,
-    channel: &str,
-    quality: &str,
-    agent: &Agent,
-) -> Result<Url> {
-    info!("Fetching playlist for channel {channel} (proxy)");
-    let servers = servers
-        .iter()
-        .map(|s| {
-            Url::parse_with_params(
-                &s.replace("[channel]", channel),
-                &[
-                    ("allow_source", "true"),
-                    ("allow_audio_only", "true"),
-                    ("fast_bread", "true"),
-                    ("warp", "true"),
-                    ("supported_codecs", &codecs),
-                ],
-            )
-        })
-        .collect::<Result<Vec<Url>, _>>()
-        .context("Invalid server URL")?;
-
-    let playlist = servers
-        .iter()
-        .find_map(|s| {
-            info!(
-                "Using server {}://{}",
-                s.scheme(),
-                s.host_str().unwrap_or("<unknown>")
-            );
-
-            let mut request = match agent.get(s) {
-                Ok(request) => request,
-                Err(e) => {
-                    error!("{e}");
-                    return None;
-                }
-            };
-
-            match request.text() {
-                Ok(playlist_url) => Some(playlist_url),
-                Err(e) => {
-                    if matches!(
-                        e.downcast_ref::<http::Error>(),
-                        Some(http::Error::NotFound(_))
-                    ) {
-                        error!("Playlist not found. Stream offline?");
-                        return None;
-                    }
-
-                    error!("{e}");
-                    None
-                }
-            }
-        })
-        .ok_or(Error::Offline)?;
-
-    parse_variant_playlist(&playlist, quality)
-}
-
-fn parse_variant_playlist(master_playlist: &str, quality: &str) -> Result<Url> {
-    debug!("Master playlist:\n{master_playlist}");
-    let playlist_url = master_playlist
-        .lines()
-        .skip_while(|s| !(s.contains("#EXT-X-MEDIA") && (s.contains(quality) || quality == "best")))
-        .nth(2)
-        .context("Invalid quality or malformed master playlist")?
-        .parse::<Url>()?;
-
-    if !master_playlist.contains("FUTURE=\"true\"") {
-        return Err(Error::NotLowLatency(playlist_url).into());
-    }
-
-    Ok(playlist_url)
-}
-
-fn map_if_offline(error: anyhow::Error) -> anyhow::Error {
-    if matches!(
-        error.downcast_ref::<http::Error>(),
-        Some(http::Error::NotFound(_))
-    ) {
-        return Error::Offline.into();
-    }
-
-    error
 }

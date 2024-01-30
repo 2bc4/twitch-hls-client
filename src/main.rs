@@ -51,9 +51,11 @@ fn main() -> Result<()> {
     debug!("{args:?}");
 
     let agent = Agent::new(&args.http)?;
-    let playlist = match hls::fetch_playlist(&args.hls, &agent) {
-        Ok(url) if args.passthrough => return Player::passthrough(&mut args.player, &url),
-        Ok(url) => MediaPlaylist::new(&url, &agent)?,
+    let playlist = match MediaPlaylist::new(&args.hls, &agent) {
+        Ok(mut playlist) if args.passthrough => {
+            return Player::passthrough(&mut args.player, &playlist.url()?)
+        }
+        Ok(playlist) => playlist,
         Err(e) => match e.downcast_ref::<hls::Error>() {
             Some(hls::Error::Offline) => {
                 info!("{e}, exiting...");
