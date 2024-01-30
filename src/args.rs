@@ -153,7 +153,7 @@ impl Parser {
     }
 
     fn parse_switch(&mut self, dst: &mut bool, key: &'static str) -> Result<()> {
-        let arg = Some(self.parser.contains(key));
+        let arg = self.parser.contains(key).then_some(true);
         Ok(self.resolve(dst, arg, key, bool::from_str)?)
     }
 
@@ -163,7 +163,7 @@ impl Parser {
         key1: &'static str,
         key2: &'static str,
     ) -> Result<()> {
-        let arg = Some(self.parser.contains(key1) || self.parser.contains(key2));
+        let arg = (self.parser.contains(key1) || self.parser.contains(key2)).then_some(true);
         Ok(self.resolve(dst, arg, key2, bool::from_str)?)
     }
 
