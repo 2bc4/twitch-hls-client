@@ -1,9 +1,36 @@
-[workspace]
-members = ["twitch-hls-client", "rustls-native-certs", "curl-rust"]
-resolver = "1"
+[package]
+name = "twitch-hls-client"
+version = "1.0.9"
+authors = ["2bc4 <119853089+2bc4@users.noreply.github.com>"]
+description = "Minimal CLI client for watching low latency Twitch streams"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/2bc4/twitch-hls-client"
+edition = "2021"
+rust-version = "1.75"
+
+[lints.rust]
+unsafe_code = "forbid"
+warnings = "deny"
+
+[lints.clippy]
+pedantic = "deny"
 
 [profile.release]
 codegen-units = 1
 lto = true
 panic = "abort"
 strip = true
+
+[features]
+default = ["colors"]
+colors = []
+http2 = ["curl/http2"]
+
+[dependencies]
+anyhow = "1.0.79"
+curl = { git = "https://github.com/2bc4/curl-rust.git", default-features = false, features = ["static-curl", "rustls"]}
+fastrand = "2.0.1"
+log = { version = "0.4.20", features = ["std", "max_level_debug"] }
+pico-args = { version = "0.5.0", features = ["eq-separator"] }
+rustls-native-certs = { git = "https://github.com/2bc4/rustls-native-certs.git" }
+url = "2.5.0"

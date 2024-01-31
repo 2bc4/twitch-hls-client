@@ -1,6 +1,0 @@
-[submodule "rustls-native-certs"]
-	path = rustls-native-certs
-	url = https://github.com/2bc4/rustls-native-certs.git
-[submodule "curl-rust"]
-	path = curl-rust
-	url = https://github.com/2bc4/curl-rust.git
