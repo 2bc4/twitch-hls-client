@@ -19,7 +19,9 @@ jobs:
         version: [ 'ubuntu-latest', 'windows-latest' ]
     runs-on: ${{ matrix.version }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - name: setup
         uses: dtolnay/rust-toolchain@nightly
         with:
@@ -39,7 +41,9 @@ jobs:
           - clippy --all
     runs-on: ${{ matrix.version }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@nightly
         with:
@@ -111,7 +115,9 @@ jobs:
             bin-name: twitch-hls-client
             zip-name: x86_64-v3-unknown-linux-musl
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - name: Install Linux dependencies
         if: ${{ contains(matrix.os, 'ubuntu') }}
         run: sudo apt-get install -y musl-tools musl-dev
