@@ -1,0 +1,9 @@
+[workspace]
+members = ["twitch-hls-client", "rustls-native-certs"]
+resolver = "1"
+
+[profile.release]
+codegen-units = 1
+lto = true
+panic = "abort"
+strip = true

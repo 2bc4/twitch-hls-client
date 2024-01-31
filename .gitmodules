@@ -1,0 +1,3 @@
+[submodule "rustls-native-certs"]
+	path = rustls-native-certs
+	url = https://github.com/2bc4/rustls-native-certs.git
