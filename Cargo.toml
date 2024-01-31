@@ -1,5 +1,5 @@
 [workspace]
-members = ["twitch-hls-client", "rustls-native-certs"]
+members = ["twitch-hls-client", "rustls-native-certs", "curl-rust"]
 resolver = "1"
 
 [profile.release]
