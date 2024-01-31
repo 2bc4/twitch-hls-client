@@ -75,16 +75,14 @@ impl Args {
 #[derive(Clone)]
 pub struct Agent {
     args: Arc<Args>,
-    certs: Arc<Mutex<Box<[u8]>>>,
+    certs: Arc<Mutex<Vec<u8>>>,
 }
 
 impl Agent {
     pub fn new(args: &Args) -> Result<Self> {
         Ok(Self {
             args: Arc::new(args.to_owned()),
-            certs: Arc::new(Mutex::new(
-                rustls_native_certs::load_native_certs()?.into_boxed_slice(),
-            )),
+            certs: Arc::new(Mutex::new(rustls_native_certs::load_native_certs()?)),
         })
     }
 
@@ -105,7 +103,7 @@ impl Agent {
             .lock()
             .expect("Failed to lock certs mutex while freeing");
 
-        *certs = Box::default();
+        *certs = Vec::default();
         Ok(request)
     }
 }
