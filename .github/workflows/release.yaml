@@ -129,19 +129,22 @@ jobs:
       - name: Build
         shell: bash
         run: RUSTFLAGS='-Ctarget-cpu=${{ matrix.target-cpu }}' cargo +nightly build -Z build-std=std,panic_abort -Z build-std-features= --release --target=${{ matrix.target }} --features ${{ matrix.features }}
-      - name: Smoke Test
+      - name: Smoke test
         shell: bash
         run: RUSTFLAGS='-Ctarget-cpu=${{ matrix.target-cpu }}' cargo +nightly run -Z build-std=std,panic_abort -Z build-std-features= --release --target=${{ matrix.target }} --features ${{ matrix.features }} -- -V
-      - name: Move Binary
-        id: mv
+      - name: Remove directory
+        shell: bash
+        run: rm -rf ./twitch-hls-client
+      - name: Move binary
+        shell: bash
         run: mv "target/${{ matrix.target }}/release/${{ matrix.bin-name }}" .
-      - name: Zip Files
+      - name: Zip files
         uses: vimtor/action-zip@v1.1
         id: archive
         with:
           files: README.md LICENSE ${{ matrix.bin-name }}
           dest: twitch-hls-client-${{ matrix.zip-name }}.zip
-      - name: Upload Archive
+      - name: Upload archive
         uses: ncipollo/release-action@v1
         with:
           draft: true
