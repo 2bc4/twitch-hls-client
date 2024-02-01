@@ -50,7 +50,7 @@ impl Worker {
                     request.call(&url)?;
                 }
             })
-            .context("Failed to spawn segment worker")?;
+            .context("Failed to spawn worker")?;
 
         let mut worker = Self {
             handle: Some(handle),
