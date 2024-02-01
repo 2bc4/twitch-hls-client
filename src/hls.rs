@@ -79,6 +79,12 @@ impl ArgParse for Args {
 
         parser.parse_free(&mut self.quality, "quality")?;
 
+        if let Some(ref never_proxy) = self.never_proxy {
+            if never_proxy.iter().any(|a| a.eq(&self.channel)) {
+                self.servers = None;
+            }
+        }
+
         ensure!(!self.quality.is_empty(), "Quality must be set");
         Ok(())
     }

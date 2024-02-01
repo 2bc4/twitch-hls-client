@@ -36,12 +36,6 @@ impl Args {
         let mut args = Self::default();
         args.parse(&mut parser)?;
 
-        if let Some(ref never_proxy) = args.hls.never_proxy {
-            if never_proxy.iter().any(|a| a.eq(&args.hls.channel)) {
-                args.hls.servers = None;
-            }
-        }
-
         Ok(args)
     }
 }
