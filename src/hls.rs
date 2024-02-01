@@ -447,13 +447,8 @@ impl PlaybackAccessToken {
 
         Ok(Self {
             token: {
-                let start = response
-                    .find(r#"{\"adblock\""#)
-                    .context("Failed to parse token start in GQL response")?;
-
-                let end = response
-                    .find(r#"","signature""#)
-                    .context("Failed to parse token end in GQL response")?;
+                let start = response.find(r#"{\"adblock\""#).ok_or(Error::Offline)?;
+                let end = response.find(r#"","signature""#).ok_or(Error::Offline)?;
 
                 response[start..end].replace('\\', "")
             },
