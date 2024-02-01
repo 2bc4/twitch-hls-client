@@ -1,5 +1,5 @@
 use std::{
-    fmt::{self, Write as _},
+    fmt,
     io::{self, Write},
     mem, str,
     sync::{Arc, Mutex},
@@ -176,15 +176,16 @@ impl<T: Write> WriterRequest<T> {
 struct StringWriter(pub String);
 
 impl Write for StringWriter {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.0
-            .write_str(&String::from_utf8_lossy(buf))
-            .expect("Failed to write to StringWriter"); //can only error on OOM?
-
-        Ok(buf.len())
+    fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+        unimplemented!();
     }
 
     fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+
+    fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
+        self.0.push_str(&String::from_utf8_lossy(buf));
         Ok(())
     }
 }
