@@ -109,4 +109,4 @@ Install [Rust](https://rustup.rs) then run `cargo install --locked --git https:/
 
 #### Cargo features
 - `colors` - Enable terminal colors
-- `http2` - Enable HTTP/2 support (known to cause issues on Windows 10)
+- `http2` - Enable HTTP/2 support
