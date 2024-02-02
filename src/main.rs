@@ -45,13 +45,13 @@ fn main_loop(mut playlist: MediaPlaylist, player: Player, agent: &Agent) -> Resu
                 unchanged_count += 1;
                 continue;
             }
-            Ok(url) => {
-                prev_url = url.as_str().to_owned();
-
+            Ok(mut url) => {
                 if unchanged_count > 1 {
                     prefetch_segment = PrefetchSegment::Newest; //catch up
+                    url = playlist.prefetch_url(prefetch_segment)?;
                 }
                 unchanged_count = 0;
+                prev_url = url.as_str().to_owned();
 
                 if prefetch_segment == PrefetchSegment::Newest {
                     worker.sync_url(url)?;
