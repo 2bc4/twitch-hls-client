@@ -308,3 +308,25 @@ impl<T: Write> Handler for RequestHandler<T> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn force_https() {
+        let agent = Agent::new(&Args {
+            force_https: true,
+            ..Default::default()
+        })
+        .unwrap();
+
+        assert!(agent
+            .get(&"http://not-https.invalid".parse().unwrap())
+            .is_err());
+
+        assert!(agent
+            .get(&"https://is-https.invalid".parse().unwrap())
+            .is_ok());
+    }
+}
