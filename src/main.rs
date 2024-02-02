@@ -26,29 +26,32 @@ fn main_loop(mut playlist: MediaPlaylist, player: Player, agent: &Agent) -> Resu
 
     let mut prefetch_segment = PrefetchSegment::Newest;
     let mut prev_url = String::default();
-    let mut was_unchanged = false;
+    let mut unchanged_count = 0u32;
     loop {
         let time = Instant::now();
 
         playlist.reload()?;
         match playlist.prefetch_url(prefetch_segment) {
             Ok(url) if prev_url == url.as_str() => {
-                if was_unchanged {
-                    info!("Playlist unchanged, retrying...");
-                    playlist.duration()?.sleep_half(time.elapsed());
-                } else {
+                if unchanged_count == 0 {
                     //already have the next segment, send it
                     info!("Playlist unchanged, fetching next segment...");
                     worker.sync_url(playlist.prefetch_url(PrefetchSegment::Newest)?)?;
-
-                    was_unchanged = true;
+                } else {
+                    info!("Playlist unchanged, retrying...");
+                    playlist.duration()?.sleep_half(time.elapsed());
                 }
 
+                unchanged_count += 1;
                 continue;
             }
             Ok(url) => {
                 prev_url = url.as_str().to_owned();
-                was_unchanged = false;
+
+                if unchanged_count > 1 {
+                    prefetch_segment = PrefetchSegment::Newest; //catch up
+                }
+                unchanged_count = 0;
 
                 if prefetch_segment == PrefetchSegment::Newest {
                     worker.sync_url(url)?;
@@ -60,7 +63,7 @@ fn main_loop(mut playlist: MediaPlaylist, player: Player, agent: &Agent) -> Resu
             Err(e) => match e.downcast_ref::<hls::Error>() {
                 Some(hls::Error::Advertisement) => {
                     info!("Filtering ad segment...");
-                    prefetch_segment = PrefetchSegment::Newest; //catch up
+                    prefetch_segment = PrefetchSegment::Newest; //catch up when back
                 }
                 _ => return Err(e),
             },
