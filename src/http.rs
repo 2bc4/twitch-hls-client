@@ -46,7 +46,7 @@ impl Default for Args {
     fn default() -> Self {
         Self {
             retries: 3,
-            timeout: Duration::from_secs(10),
+            timeout: Duration::from_secs(5),
             user_agent: constants::USER_AGENT.to_owned(),
             force_https: bool::default(),
             force_ipv4: bool::default(),
