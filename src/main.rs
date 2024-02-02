@@ -21,9 +21,7 @@ use logger::Logger;
 use player::Player;
 use worker::Worker;
 
-fn main_loop(mut playlist: MediaPlaylist, player: Player, agent: &Agent) -> Result<()> {
-    let mut worker = Worker::spawn(player, playlist.header()?, agent.clone())?;
-
+fn main_loop(mut playlist: MediaPlaylist, mut worker: Worker) -> Result<()> {
     let mut prefetch_segment = PrefetchSegment::Newest;
     let mut prev_url = String::default();
     let mut unchanged_count = 0u32;
@@ -46,19 +44,21 @@ fn main_loop(mut playlist: MediaPlaylist, player: Player, agent: &Agent) -> Resu
                 continue;
             }
             Ok(mut url) => {
-                if unchanged_count > 1 {
+                //at least a full segment duration has passed
+                if unchanged_count > 2 {
                     prefetch_segment = PrefetchSegment::Newest; //catch up
                     url = playlist.prefetch_url(prefetch_segment)?;
                 }
                 unchanged_count = 0;
                 prev_url = url.as_str().to_owned();
 
-                if prefetch_segment == PrefetchSegment::Newest {
-                    worker.sync_url(url)?;
-                    prefetch_segment = PrefetchSegment::Next;
-                } else {
-                    worker.url(url)?;
-                }
+                match prefetch_segment {
+                    PrefetchSegment::Newest => {
+                        worker.sync_url(url)?;
+                        prefetch_segment = PrefetchSegment::Next;
+                    }
+                    PrefetchSegment::Next => worker.url(url)?,
+                };
             }
             Err(e) => match e.downcast_ref::<hls::Error>() {
                 Some(hls::Error::Advertisement) => {
@@ -80,7 +80,7 @@ fn main() -> Result<()> {
     debug!("{args:?}");
 
     let agent = Agent::new(&args.http)?;
-    let playlist = match MediaPlaylist::new(&args.hls, &agent) {
+    let mut playlist = match MediaPlaylist::new(&args.hls, &agent) {
         Ok(mut playlist) if args.passthrough => {
             return Player::passthrough(&mut args.player, &playlist.url()?)
         }
@@ -98,10 +98,14 @@ fn main() -> Result<()> {
         },
     };
 
-    let player = Player::spawn(&args.player)?;
+    let worker = Worker::spawn(
+        Player::spawn(&args.player)?,
+        playlist.header()?,
+        agent.clone(),
+    )?;
     drop(args);
 
-    match main_loop(playlist, player, &agent) {
+    match main_loop(playlist, worker) {
         Ok(()) => Ok(()),
         Err(e) => {
             if matches!(e.downcast_ref::<hls::Error>(), Some(hls::Error::Offline)) {
