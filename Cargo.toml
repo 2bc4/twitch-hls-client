@@ -22,7 +22,7 @@ panic = "abort"
 strip = true
 
 [features]
-default = ["colors"]
+default = ["colors", "http2"]
 colors = []
 http2 = ["curl/http2"]
 
