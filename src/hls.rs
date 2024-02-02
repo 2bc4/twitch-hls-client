@@ -511,40 +511,23 @@ http://segment.invalid
 
     #[test]
     fn variant_playlist() {
-        assert!(
-            MediaPlaylist::parse_variant_playlist(MASTER_PLAYLIST, "1080p").unwrap()
-                == Url::parse("http://1080p.invalid").unwrap()
-        );
+        let qualities = [
+            ("best", Some("1080p")),
+            ("1080p", None),
+            ("720p60", None),
+            ("720p30", None),
+            ("480p", None),
+            ("360p", None),
+            ("160p", None),
+            ("audio_only", Some("audio-only")),
+        ];
 
-        assert!(
-            MediaPlaylist::parse_variant_playlist(MASTER_PLAYLIST, "720p60").unwrap()
-                == Url::parse("http://720p60.invalid").unwrap()
-        );
-
-        assert!(
-            MediaPlaylist::parse_variant_playlist(MASTER_PLAYLIST, "720p30").unwrap()
-                == Url::parse("http://720p30.invalid").unwrap()
-        );
-
-        assert!(
-            MediaPlaylist::parse_variant_playlist(MASTER_PLAYLIST, "480p").unwrap()
-                == Url::parse("http://480p.invalid").unwrap()
-        );
-
-        assert!(
-            MediaPlaylist::parse_variant_playlist(MASTER_PLAYLIST, "360p").unwrap()
-                == Url::parse("http://360p.invalid").unwrap()
-        );
-
-        assert!(
-            MediaPlaylist::parse_variant_playlist(MASTER_PLAYLIST, "160p").unwrap()
-                == Url::parse("http://160p.invalid").unwrap()
-        );
-
-        assert!(
-            MediaPlaylist::parse_variant_playlist(MASTER_PLAYLIST, "audio_only").unwrap()
-                == Url::parse("http://audio-only.invalid").unwrap()
-        );
+        for (quality, url) in qualities {
+            assert!(
+                MediaPlaylist::parse_variant_playlist(MASTER_PLAYLIST, quality).unwrap()
+                    == Url::parse(&format!("http://{}.invalid", url.unwrap_or(quality))).unwrap()
+            );
+        }
     }
 
     #[test]
