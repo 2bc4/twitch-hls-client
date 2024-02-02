@@ -26,18 +26,29 @@ fn main_loop(mut playlist: MediaPlaylist, player: Player, agent: &Agent) -> Resu
 
     let mut prefetch_segment = PrefetchSegment::Newest;
     let mut prev_url = String::default();
+    let mut was_unchanged = false;
     loop {
         let time = Instant::now();
 
         playlist.reload()?;
         match playlist.prefetch_url(prefetch_segment) {
             Ok(url) if prev_url == url.as_str() => {
-                info!("Playlist unchanged, retrying...");
-                playlist.duration()?.sleep_half(time.elapsed());
+                if was_unchanged {
+                    info!("Playlist unchanged, retrying...");
+                    playlist.duration()?.sleep_half(time.elapsed());
+                } else {
+                    //already have the next segment, send it
+                    info!("Playlist unchanged, fetching next segment...");
+                    worker.sync_url(playlist.prefetch_url(PrefetchSegment::Newest)?)?;
+
+                    was_unchanged = true;
+                }
+
                 continue;
             }
             Ok(url) => {
                 prev_url = url.as_str().to_owned();
+                was_unchanged = false;
 
                 if prefetch_segment == PrefetchSegment::Newest {
                     worker.sync_url(url)?;
