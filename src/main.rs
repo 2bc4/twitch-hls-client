@@ -15,29 +15,44 @@ use anyhow::Result;
 use log::{debug, info};
 
 use args::Args;
-use hls::MediaPlaylist;
+use hls::{MediaPlaylist, PrefetchSegment};
 use http::Agent;
 use logger::Logger;
 use player::Player;
 use worker::Worker;
 
 fn main_loop(mut playlist: MediaPlaylist, player: Player, agent: &Agent) -> Result<()> {
-    let mut worker = Worker::spawn(player, playlist.newest()?, playlist.header()?, agent)?;
+    let mut worker = Worker::spawn(player, playlist.header()?, agent.clone())?;
+
+    let mut prefetch_segment = PrefetchSegment::Newest;
+    let mut prev_url = String::default();
     loop {
         let time = Instant::now();
 
         playlist.reload()?;
-        match playlist.next() {
-            Ok(url) => worker.url(url)?,
-            Err(e) => {
-                if matches!(e.downcast_ref::<hls::Error>(), Some(hls::Error::Unchanged)) {
-                    info!("{e}, retrying...");
-                    playlist.duration()?.sleep_half(time.elapsed());
-                    continue;
-                }
-
-                return Err(e);
+        match playlist.prefetch_url(prefetch_segment) {
+            Ok(url) if prev_url == url.as_str() => {
+                info!("Playlist unchanged, retrying...");
+                playlist.duration()?.sleep_half(time.elapsed());
+                continue;
             }
+            Ok(url) => {
+                prev_url = url.as_str().to_owned();
+
+                if prefetch_segment == PrefetchSegment::Newest {
+                    worker.sync_url(url)?;
+                    prefetch_segment = PrefetchSegment::Next;
+                } else {
+                    worker.url(url)?;
+                }
+            }
+            Err(e) => match e.downcast_ref::<hls::Error>() {
+                Some(hls::Error::Advertisement) => {
+                    info!("Filtering ad segment...");
+                    prefetch_segment = PrefetchSegment::Newest; //catch up
+                }
+                _ => return Err(e),
+            },
         };
 
         playlist.duration()?.sleep(time.elapsed());
