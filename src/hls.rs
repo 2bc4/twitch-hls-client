@@ -302,7 +302,7 @@ impl MediaPlaylist {
     }
 }
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone)]
 pub enum PrefetchSegment {
     Newest,
     Next,
@@ -457,5 +457,111 @@ impl PlaybackAccessToken {
 
     fn gen_id() -> String {
         iter::repeat_with(fastrand::alphanumeric).take(32).collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const MASTER_PLAYLIST: &'static str = r#"#EXT3MU
+#EXT-X-TWITCH-INFO:NODE="...FUTURE="true"..."
+#EXT-X-MEDIA:TYPE=VIDEO,GROUP-ID="chunked",NAME="1080p60 (source)",AUTOSELECT=YES,DEFAULT=YES
+#EXT-X-STREAM-INF:BANDWIDTH=0,RESOLUTION=1920x1080,CODECS="avc1.64002A,mp4a.40.2",VIDEO="chunked",FRAME-RATE=60.000
+http://1080p.invalid
+#EXT-X-MEDIA:TYPE=VIDEO,GROUP-ID="720p60",NAME="720p60",AUTOSELECT=YES,DEFAULT=YES
+#EXT-X-STREAM-INF:BANDWIDTH=0,RESOLUTION=1280x720,CODECS="avc1.4D401F,mp4a.40.2",VIDEO="720p60",FRAME-RATE=60.000
+http://720p60.invalid
+#EXT-X-MEDIA:TYPE=VIDEO,GROUP-ID="720p30",NAME="720p",AUTOSELECT=YES,DEFAULT=YES
+#EXT-X-STREAM-INF:BANDWIDTH=0,RESOLUTION=1280x720,CODECS="avc1.4D401F,mp4a.40.2",VIDEO="720p30",FRAME-RATE=30.000
+http://720p30.invalid
+#EXT-X-MEDIA:TYPE=VIDEO,GROUP-ID="480p30",NAME="480p",AUTOSELECT=YES,DEFAULT=YES
+#EXT-X-STREAM-INF:BANDWIDTH=0,RESOLUTION=852x480,CODECS="avc1.4D401F,mp4a.40.2",VIDEO="480p30",FRAME-RATE=30.000
+http://480p.invalid
+#EXT-X-MEDIA:TYPE=VIDEO,GROUP-ID="360p30",NAME="360p",AUTOSELECT=YES,DEFAULT=YES
+#EXT-X-STREAM-INF:BANDWIDTH=0,RESOLUTION=640x360,CODECS="avc1.4D401F,mp4a.40.2",VIDEO="360p30",FRAME-RATE=30.000
+http://360p.invalid
+#EXT-X-MEDIA:TYPE=VIDEO,GROUP-ID="160p30",NAME="160p",AUTOSELECT=YES,DEFAULT=YES
+#EXT-X-STREAM-INF:BANDWIDTH=0,RESOLUTION=284x160,CODECS="avc1.4D401F,mp4a.40.2",VIDEO="160p30",FRAME-RATE=30.000
+http://160p.invalid
+#EXT-X-MEDIA:TYPE=VIDEO,GROUP-ID="audio_only",NAME="audio_only",AUTOSELECT=NO,DEFAULT=NO
+#EXT-X-STREAM-INF:BANDWIDTH=0,CODECS="mp4a.40.2",VIDEO="audio_only"
+http://audio-only.invalid"#;
+
+    const PLAYLIST: &'static str = r#"#EXT3MU
+#EXT-X-TARGETDURATION:6
+#EXT-X-MEDIA-SEQUENCE:00000
+#EXT-X-TWITCH-LIVE-SEQUENCE:00000
+#EXT-X-TWITCH-ELAPSED-SECS:00000.000
+#EXT-X-TWITCH-TOTAL-SECS:00000.000
+#EXT-X-PROGRAM-DATE-TIME:1970-01-01T00:00:00.000Z
+#EXTINF:2.000,live
+http://segment.invalid
+#EXT-X-PROGRAM-DATE-TIME:1970-01-01T00:00:00.000Z
+#EXTINF:2.000,live
+http://segment.invalid
+#EXT-X-PROGRAM-DATE-TIME:1970-01-01T00:00:00.000Z
+#EXTINF:2.000,live
+http://segment.invalid
+#EXT-X-PROGRAM-DATE-TIME:1970-01-01T00:00:00.000Z
+#EXTINF:0.978,live
+http://segment.invalid
+#EXT-X-TWITCH-PREFETCH:http://next-prefetch-url.invalid
+#EXT-X-TWITCH-PREFETCH:http://newest-prefetch-url.invalid"#;
+
+    #[test]
+    fn variant_playlist() {
+        assert!(
+            MediaPlaylist::parse_variant_playlist(MASTER_PLAYLIST, "1080p").unwrap()
+                == Url::parse("http://1080p.invalid").unwrap()
+        );
+
+        assert!(
+            MediaPlaylist::parse_variant_playlist(MASTER_PLAYLIST, "720p60").unwrap()
+                == Url::parse("http://720p60.invalid").unwrap()
+        );
+
+        assert!(
+            MediaPlaylist::parse_variant_playlist(MASTER_PLAYLIST, "720p30").unwrap()
+                == Url::parse("http://720p30.invalid").unwrap()
+        );
+
+        assert!(
+            MediaPlaylist::parse_variant_playlist(MASTER_PLAYLIST, "480p").unwrap()
+                == Url::parse("http://480p.invalid").unwrap()
+        );
+
+        assert!(
+            MediaPlaylist::parse_variant_playlist(MASTER_PLAYLIST, "360p").unwrap()
+                == Url::parse("http://360p.invalid").unwrap()
+        );
+
+        assert!(
+            MediaPlaylist::parse_variant_playlist(MASTER_PLAYLIST, "160p").unwrap()
+                == Url::parse("http://160p.invalid").unwrap()
+        );
+
+        assert!(
+            MediaPlaylist::parse_variant_playlist(MASTER_PLAYLIST, "audio_only").unwrap()
+                == Url::parse("http://audio-only.invalid").unwrap()
+        );
+    }
+
+    #[test]
+    fn segment_duration() {
+        assert!(PLAYLIST.parse::<SegmentDuration>().unwrap().0 == Duration::from_secs_f32(0.978));
+    }
+
+    #[test]
+    fn prefetch_url() {
+        assert!(
+            PrefetchSegment::Newest.parse(PLAYLIST).unwrap()
+                == Url::parse("http://newest-prefetch-url.invalid").unwrap()
+        );
+
+        assert!(
+            PrefetchSegment::Next.parse(PLAYLIST).unwrap()
+                == Url::parse("http://next-prefetch-url.invalid").unwrap()
+        );
     }
 }
