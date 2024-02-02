@@ -48,7 +48,7 @@ Options:
       --http-retries <COUNT>
           Retry HTTP requests <COUNT> times before giving up [default: 3]
       --http-timeout <SECONDS>
-          HTTP request timeout in seconds [default: 10]
+          HTTP request timeout in seconds [default: 5]
   -h, --help
           Print help
   -V, --version
