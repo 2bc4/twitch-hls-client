@@ -209,6 +209,7 @@ impl MediaPlaylist {
                 ),
                 ("os_name", "Windows"),
                 ("os_version", "NT 10.0"),
+                ("platform", "web"),
             ],
         )?;
 
@@ -237,6 +238,7 @@ impl MediaPlaylist {
                         ("fast_bread", "true"),
                         ("warp", "true"),
                         ("supported_codecs", &codecs),
+                        ("platform", "web"),
                     ],
                 )
             })
