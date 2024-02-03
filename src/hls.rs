@@ -198,8 +198,15 @@ impl MediaPlaylist {
                 ("play_session_id", &access_token.play_session_id),
                 ("sig", &access_token.signature),
                 ("token", &access_token.token),
-                ("player_version", "1.23.0"),
+                ("player_version", "1.24.0-rc.1.3"),
                 ("warp", "true"),
+                ("browser_family", "firefox"),
+                (
+                    "browser_version",
+                    &constants::USER_AGENT[(constants::USER_AGENT.len() - 5)..],
+                ),
+                ("os_name", "Windows"),
+                ("os_version", "NT 10.0"),
             ],
         )?;
 
