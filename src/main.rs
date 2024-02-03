@@ -21,59 +21,83 @@ use logger::Logger;
 use player::Player;
 use worker::Worker;
 
-fn main_loop(mut playlist: MediaPlaylist, mut worker: Worker) -> Result<()> {
-    let mut prefetch_segment = PrefetchSegment::Newest;
-    let mut prev_url = String::default();
-    let mut unchanged_count = 0u32;
-    loop {
-        let time = Instant::now();
-        debug!("----------RELOADING----------");
+struct UrlHandler {
+    playlist: MediaPlaylist,
+    worker: Worker,
+    prefetch_kind: PrefetchSegment,
+    prev_url: String,
+    unchanged_count: u32,
+}
 
-        playlist.reload()?;
-        match playlist.prefetch_url(prefetch_segment) {
-            Ok(url) if prev_url == url.as_str() => {
-                if unchanged_count == 0 {
+impl UrlHandler {
+    fn new(playlist: MediaPlaylist, worker: Worker) -> Self {
+        Self {
+            playlist,
+            worker,
+            prefetch_kind: PrefetchSegment::Newest,
+            prev_url: String::default(),
+            unchanged_count: u32::default(),
+        }
+    }
+
+    fn process(&mut self, time: Instant) -> Result<()> {
+        match self.playlist.prefetch_url(self.prefetch_kind) {
+            Ok(url) if self.prev_url == url.as_str() => {
+                if self.unchanged_count == 0 {
                     //already have the next segment, send it
                     info!("Playlist unchanged, fetching next segment...");
-                    let url = playlist.prefetch_url(PrefetchSegment::Newest)?;
-                    prev_url = url.as_str().to_owned();
+                    let url = self.playlist.prefetch_url(PrefetchSegment::Newest)?;
+                    self.prev_url = url.as_str().to_owned();
 
-                    worker.sync_url(url)?;
+                    self.worker.sync_url(url)?;
                 } else {
                     info!("Playlist unchanged, retrying...");
-                    playlist.duration()?.sleep_half(time.elapsed());
+                    self.playlist.duration()?.sleep_half(time.elapsed());
                 }
 
-                unchanged_count += 1;
-                continue;
+                self.unchanged_count += 1;
+                return Ok(());
             }
             Ok(mut url) => {
                 //at least a full segment duration has passed
-                if unchanged_count > 2 {
-                    prefetch_segment = PrefetchSegment::Newest; //catch up
-                    url = playlist.prefetch_url(prefetch_segment)?;
+                if self.unchanged_count > 2 {
+                    self.prefetch_kind = PrefetchSegment::Newest; //catch up
+                    url = self.playlist.prefetch_url(self.prefetch_kind)?;
                 }
-                unchanged_count = 0;
-                prev_url = url.as_str().to_owned();
+                self.unchanged_count = 0;
+                self.prev_url = url.as_str().to_owned();
 
-                match prefetch_segment {
+                match self.prefetch_kind {
                     PrefetchSegment::Newest => {
-                        worker.sync_url(url)?;
-                        prefetch_segment = PrefetchSegment::Next;
+                        self.worker.sync_url(url)?;
+                        self.prefetch_kind = PrefetchSegment::Next;
+                        return Ok(());
                     }
-                    PrefetchSegment::Next => worker.url(url)?,
+                    PrefetchSegment::Next => self.worker.url(url)?,
                 };
             }
             Err(e) => match e.downcast_ref::<hls::Error>() {
                 Some(hls::Error::Advertisement) => {
                     info!("Filtering ad segment...");
-                    prefetch_segment = PrefetchSegment::Newest; //catch up when back
+                    self.prefetch_kind = PrefetchSegment::Newest; //catch up when back
                 }
                 _ => return Err(e),
             },
         };
 
-        playlist.duration()?.sleep(time.elapsed());
+        self.playlist.duration()?.sleep(time.elapsed());
+        Ok(())
+    }
+}
+
+fn main_loop(mut handler: UrlHandler) -> Result<()> {
+    handler.process(Instant::now())?;
+    loop {
+        let time = Instant::now();
+        debug!("----------RELOADING----------");
+
+        handler.playlist.reload()?;
+        handler.process(time)?;
     }
 }
 
@@ -109,7 +133,7 @@ fn main() -> Result<()> {
     )?;
     drop(args);
 
-    match main_loop(playlist, worker) {
+    match main_loop(UrlHandler::new(playlist, worker)) {
         Ok(()) => Ok(()),
         Err(e) => {
             if matches!(e.downcast_ref::<hls::Error>(), Some(hls::Error::Offline)) {
