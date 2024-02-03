@@ -123,6 +123,8 @@ impl MediaPlaylist {
     }
 
     pub fn reload(&mut self) -> Result<()> {
+        debug!("----------RELOADING----------");
+
         self.playlist = self.request.text().map_err(Self::map_if_offline)?;
         debug!("Playlist:\n{}", self.playlist);
 

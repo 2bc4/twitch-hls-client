@@ -94,7 +94,6 @@ fn main_loop(mut handler: UrlHandler) -> Result<()> {
     handler.process(Instant::now())?;
     loop {
         let time = Instant::now();
-        debug!("----------RELOADING----------");
 
         handler.playlist.reload()?;
         handler.process(time)?;
