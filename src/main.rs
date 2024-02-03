@@ -34,7 +34,10 @@ fn main_loop(mut playlist: MediaPlaylist, mut worker: Worker) -> Result<()> {
                 if unchanged_count == 0 {
                     //already have the next segment, send it
                     info!("Playlist unchanged, fetching next segment...");
-                    worker.sync_url(playlist.prefetch_url(PrefetchSegment::Newest)?)?;
+                    let url = playlist.prefetch_url(PrefetchSegment::Newest)?;
+                    prev_url = url.as_str().to_owned();
+
+                    worker.sync_url(url)?;
                 } else {
                     info!("Playlist unchanged, retrying...");
                     playlist.duration()?.sleep_half(time.elapsed());
