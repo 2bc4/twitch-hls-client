@@ -517,16 +517,17 @@ http://segment.invalid
             ("1080p", None),
             ("720p60", None),
             ("720p30", None),
+            ("720p", Some("720p60")),
             ("480p", None),
             ("360p", None),
             ("160p", None),
             ("audio_only", Some("audio-only")),
         ];
 
-        for (quality, url) in qualities {
+        for (quality, host) in qualities {
             assert_eq!(
                 MediaPlaylist::parse_variant_playlist(MASTER_PLAYLIST, quality).unwrap(),
-                Url::parse(&format!("http://{}.invalid", url.unwrap_or(quality))).unwrap()
+                Url::parse(&format!("http://{}.invalid", host.unwrap_or(quality))).unwrap()
             );
         }
     }
