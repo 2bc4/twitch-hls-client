@@ -27,6 +27,7 @@ fn main_loop(mut playlist: MediaPlaylist, mut worker: Worker) -> Result<()> {
     let mut unchanged_count = 0u32;
     loop {
         let time = Instant::now();
+        debug!("----------RELOADING----------");
 
         playlist.reload()?;
         match playlist.prefetch_url(prefetch_segment) {
