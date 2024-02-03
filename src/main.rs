@@ -49,7 +49,7 @@ impl UrlHandler {
                     let url = self.playlist.prefetch_url(PrefetchSegment::Newest)?;
                     self.prev_url = url.as_str().to_owned();
 
-                    self.worker.sync_url(url)?;
+                    self.worker.url(url)?;
                 } else {
                     info!("Playlist unchanged, retrying...");
                     self.playlist.duration()?.sleep_half(time.elapsed());
