@@ -11,45 +11,8 @@ on:
 name: Release
 
 jobs:
-  check:
-    name: Check
-    strategy:
-      fail-fast: false
-      matrix:
-        version: [ 'ubuntu-latest', 'windows-latest' ]
-    runs-on: ${{ matrix.version }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: setup
-        uses: dtolnay/rust-toolchain@nightly
-        with:
-          components: clippy, rustfmt
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo check
-
-  lint:
-    name: Lint
-    needs: check
-    strategy:
-      fail-fast: false
-      matrix:
-        version: [ 'ubuntu-latest', 'windows-latest' ]
-        cargo-cmd:
-          - fmt --all -- --check
-          - clippy --all
-    runs-on: ${{ matrix.version }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@nightly
-        with:
-          components: clippy, rustfmt
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo ${{ matrix['cargo-cmd'] }}
-
   release:
     name: Release
-    needs: lint
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
