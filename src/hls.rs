@@ -495,6 +495,7 @@ http://audio-only.invalid"#;
 #EXT-X-TWITCH-ELAPSED-SECS:00000.000
 #EXT-X-TWITCH-TOTAL-SECS:00000.000
 #EXT-X-PROGRAM-DATE-TIME:1970-01-01T00:00:00.000Z
+#EXT-X-MAP:URL=http://header.invalid
 #EXTINF:2.000,live
 http://segment.invalid
 #EXT-X-PROGRAM-DATE-TIME:1970-01-01T00:00:00.000Z
@@ -523,28 +524,47 @@ http://segment.invalid
         ];
 
         for (quality, url) in qualities {
-            assert!(
-                MediaPlaylist::parse_variant_playlist(MASTER_PLAYLIST, quality).unwrap()
-                    == Url::parse(&format!("http://{}.invalid", url.unwrap_or(quality))).unwrap()
+            assert_eq!(
+                MediaPlaylist::parse_variant_playlist(MASTER_PLAYLIST, quality).unwrap(),
+                Url::parse(&format!("http://{}.invalid", url.unwrap_or(quality))).unwrap()
             );
         }
     }
 
     #[test]
+    fn segment_header() {
+        let mut playlist = MediaPlaylist {
+            playlist: PLAYLIST.to_owned(),
+            request: Agent::new(&http::Args::default())
+                .unwrap()
+                .get(&"http://playlist.invalid".parse().unwrap())
+                .unwrap(),
+        };
+
+        assert_eq!(
+            playlist.header().unwrap(),
+            Some(Url::parse("http://header.invalid").unwrap())
+        );
+    }
+
+    #[test]
     fn segment_duration() {
-        assert!(PLAYLIST.parse::<SegmentDuration>().unwrap().0 == Duration::from_secs_f32(0.978));
+        assert_eq!(
+            PLAYLIST.parse::<SegmentDuration>().unwrap().0,
+            Duration::from_secs_f32(0.978)
+        );
     }
 
     #[test]
     fn prefetch_url() {
-        assert!(
-            PrefetchSegment::Newest.parse(PLAYLIST).unwrap()
-                == Url::parse("http://newest-prefetch-url.invalid").unwrap()
+        assert_eq!(
+            PrefetchSegment::Newest.parse(PLAYLIST).unwrap(),
+            Url::parse("http://newest-prefetch-url.invalid").unwrap()
         );
 
-        assert!(
-            PrefetchSegment::Next.parse(PLAYLIST).unwrap()
-                == Url::parse("http://next-prefetch-url.invalid").unwrap()
+        assert_eq!(
+            PrefetchSegment::Next.parse(PLAYLIST).unwrap(),
+            Url::parse("http://next-prefetch-url.invalid").unwrap()
         );
     }
 }
