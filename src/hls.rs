@@ -141,32 +141,36 @@ impl MediaPlaylist {
         Ok(())
     }
 
-    //Used for av1/hevc streams
-    pub fn header(&mut self) -> Result<Option<Url>> {
-        let header_url = self
-            .playlist
-            .lines()
-            .find(|s| s.starts_with("#EXT-X-MAP"))
-            .and_then(|s| s.split_once('='))
-            .map(|s| s.1.replace('"', ""));
-
-        if let Some(header_url) = header_url {
-            return Ok(Some(
-                header_url
-                    .parse()
-                    .context("Failed to parse segment header URL")?,
-            ));
-        }
-
-        Ok(None)
+    pub fn header(&self) -> Result<Option<Url>> {
+        Ok(self.playlist.parse::<SegmentHeader>()?.0)
     }
 
-    pub fn prefetch_url(&mut self, prefetch_segment: PrefetchSegment) -> Result<Url> {
+    pub fn prefetch_url(&self, prefetch_segment: PrefetchSegment) -> Result<Url> {
         Ok(prefetch_segment.parse(&self.playlist)?)
     }
 
     pub fn duration(&self) -> Result<SegmentDuration> {
-        self.playlist.parse()
+        self.playlist
+            .lines()
+            .rev()
+            .find(|l| l.starts_with("#EXTINF"))
+            .context("Failed to get prefetch segment duration")?
+            .parse()
+    }
+
+    pub fn segments(&self) -> Result<Vec<Segment>> {
+        let mut lines = self.playlist.lines();
+
+        let mut segments = Vec::new();
+        while let Some(extinf) = lines.next() {
+            if extinf.starts_with("#EXTINF") && !extinf.contains("Amazon") {
+                if let Some(url) = lines.next() {
+                    segments.push(Segment::new(extinf, url)?);
+                }
+            }
+        }
+
+        Ok(segments)
     }
 
     pub fn url(&mut self) -> Result<Url> {
@@ -334,6 +338,7 @@ impl PrefetchSegment {
     }
 }
 
+#[derive(PartialEq, Debug)]
 pub struct SegmentDuration(Duration);
 
 impl FromStr for SegmentDuration {
@@ -342,10 +347,7 @@ impl FromStr for SegmentDuration {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(Self(
             Duration::try_from_secs_f32(
-                s.lines()
-                    .rev()
-                    .find(|s| s.starts_with("#EXTINF"))
-                    .and_then(|s| s.split_once(':'))
+                s.split_once(':')
                     .and_then(|s| s.1.split_once(','))
                     .map(|s| s.0.parse())
                     .context("Invalid segment duration")??,
@@ -371,6 +373,46 @@ impl SegmentDuration {
             debug!("Sleeping thread for {:?}", sleep_time);
             thread::sleep(sleep_time);
         }
+    }
+}
+
+//Used for av1/hevc streams
+pub struct SegmentHeader(Option<Url>);
+
+impl FromStr for SegmentHeader {
+    type Err = anyhow::Error;
+
+    fn from_str(playlist: &str) -> Result<Self, Self::Err> {
+        let header_url = playlist
+            .lines()
+            .find(|s| s.starts_with("#EXT-X-MAP"))
+            .and_then(|s| s.split_once('='))
+            .map(|s| s.1.replace('"', ""));
+
+        if let Some(header_url) = header_url {
+            return Ok(Self(Some(
+                header_url
+                    .parse()
+                    .context("Failed to parse segment header URL")?,
+            )));
+        }
+
+        Ok(Self(None))
+    }
+}
+
+#[derive(PartialEq, Debug)]
+pub struct Segment {
+    pub duration: SegmentDuration,
+    pub url: Url,
+}
+
+impl Segment {
+    fn new(extinf: &str, url: &str) -> Result<Self> {
+        Ok(Self {
+            duration: extinf.parse()?,
+            url: url.parse()?,
+        })
     }
 }
 
@@ -505,24 +547,26 @@ http://audio-only.invalid"#;
 #EXT-X-TWITCH-LIVE-SEQUENCE:00000
 #EXT-X-TWITCH-ELAPSED-SECS:00000.000
 #EXT-X-TWITCH-TOTAL-SECS:00000.000
+#EXT-X-MAP:URI=http://header.invalid
 #EXT-X-PROGRAM-DATE-TIME:1970-01-01T00:00:00.000Z
-#EXT-X-MAP:URL=http://header.invalid
-#EXTINF:2.000,live
-http://segment.invalid
+#EXTINF:5.020,live
+http://segment1.invalid
 #EXT-X-PROGRAM-DATE-TIME:1970-01-01T00:00:00.000Z
-#EXTINF:2.000,live
-http://segment.invalid
+#EXTINF:4.910,live
+http://segment2.invalid
 #EXT-X-PROGRAM-DATE-TIME:1970-01-01T00:00:00.000Z
+#EXTINF:2.002,Amazon
+http://ad-segment.invalid
 #EXTINF:2.000,live
-http://segment.invalid
+http://segment3.invalid
 #EXT-X-PROGRAM-DATE-TIME:1970-01-01T00:00:00.000Z
 #EXTINF:0.978,live
-http://segment.invalid
+http://segment4.invalid
 #EXT-X-TWITCH-PREFETCH:http://next-prefetch-url.invalid
 #EXT-X-TWITCH-PREFETCH:http://newest-prefetch-url.invalid"#;
 
     #[test]
-    fn variant_playlist() {
+    fn parse_variant_playlist() {
         let qualities = [
             ("best", Some("1080p")),
             ("1080p", None),
@@ -544,31 +588,24 @@ http://segment.invalid
     }
 
     #[test]
-    fn segment_header() {
-        let mut playlist = MediaPlaylist {
-            playlist: PLAYLIST.to_owned(),
-            request: Agent::new(&http::Args::default())
-                .unwrap()
-                .get(&"http://playlist.invalid".parse().unwrap())
-                .unwrap(),
-        };
-
+    fn parse_segment_header() {
         assert_eq!(
-            playlist.header().unwrap(),
+            PLAYLIST.parse::<SegmentHeader>().unwrap().0,
             Some(Url::parse("http://header.invalid").unwrap())
         );
     }
 
     #[test]
-    fn segment_duration() {
+    fn parse_prefetch_segment_duration() {
+        let playlist = create_playlist();
         assert_eq!(
-            PLAYLIST.parse::<SegmentDuration>().unwrap().0,
-            Duration::from_secs_f32(0.978)
+            playlist.duration().unwrap(),
+            SegmentDuration(Duration::from_secs_f32(0.978))
         );
     }
 
     #[test]
-    fn prefetch_url() {
+    fn parse_prefetch_urls() {
         assert_eq!(
             PrefetchSegment::Newest.parse(PLAYLIST).unwrap(),
             Url::parse("http://newest-prefetch-url.invalid").unwrap()
@@ -578,5 +615,41 @@ http://segment.invalid
             PrefetchSegment::Next.parse(PLAYLIST).unwrap(),
             Url::parse("http://next-prefetch-url.invalid").unwrap()
         );
+    }
+
+    #[test]
+    fn parse_segments() {
+        let playlist = create_playlist();
+        assert_eq!(
+            playlist.segments().unwrap(),
+            vec![
+                Segment {
+                    duration: SegmentDuration(Duration::from_secs_f32(5.020)),
+                    url: Url::parse("http://segment1.invalid").unwrap(),
+                },
+                Segment {
+                    duration: SegmentDuration(Duration::from_secs_f32(4.910)),
+                    url: Url::parse("http://segment2.invalid").unwrap(),
+                },
+                Segment {
+                    duration: SegmentDuration(Duration::from_secs_f32(2.000)),
+                    url: Url::parse("http://segment3.invalid").unwrap(),
+                },
+                Segment {
+                    duration: SegmentDuration(Duration::from_secs_f32(0.978)),
+                    url: Url::parse("http://segment4.invalid").unwrap(),
+                },
+            ],
+        );
+    }
+
+    fn create_playlist() -> MediaPlaylist {
+        MediaPlaylist {
+            playlist: PLAYLIST.to_owned(),
+            request: Agent::new(&http::Args::default())
+                .unwrap()
+                .get(&"http://playlist.invalid".parse().unwrap())
+                .unwrap(),
+        }
     }
 }

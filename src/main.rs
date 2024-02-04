@@ -13,6 +13,7 @@ use std::{
 
 use anyhow::Result;
 use log::{debug, info};
+use url::Url;
 
 use args::Args;
 use hls::{MediaPlaylist, PrefetchSegment};
@@ -49,7 +50,7 @@ impl UrlHandler {
                     let url = self.playlist.prefetch_url(PrefetchSegment::Newest)?;
                     self.prev_url = url.as_str().to_owned();
 
-                    self.worker.url(url)?;
+                    self.worker.sync_url(url)?;
                 } else {
                     info!("Playlist unchanged, retrying...");
                     self.playlist.duration()?.sleep_half(time.elapsed());
@@ -59,12 +60,36 @@ impl UrlHandler {
                 return Ok(());
             }
             Ok(mut url) => {
-                //at least a full segment duration has passed
-                if self.unchanged_count > 2 {
-                    self.prefetch_kind = PrefetchSegment::Newest; //catch up
-                    url = self.playlist.prefetch_url(self.prefetch_kind)?;
+                //next segment may no longer be next prefetch segment
+                if self.unchanged_count > 1 {
+                    let segments = self.playlist.segments()?;
+                    if let Some(idx) = segments
+                        .iter()
+                        .position(|s| s.url.as_str() == self.prev_url)
+                    {
+                        debug!("Finding next segment...");
+                        match segments.get(idx + 1) {
+                            Some(segment) => {
+                                //we are no longer using prefetch urls
+                                debug!("Found next segment");
+
+                                self.prev_url = segment.url.as_str().to_owned();
+                                segment.duration.sleep(time.elapsed());
+
+                                return Ok(());
+                            }
+                            None if idx + 1 == segments.len() => {
+                                debug!("Next segment is next prefetch segment");
+                                self.unchanged_count = 0;
+                            }
+                            None => {
+                                url = self.jump_to_newest()?;
+                            }
+                        };
+                    } else {
+                        url = self.jump_to_newest()?;
+                    }
                 }
-                self.unchanged_count = 0;
                 self.prev_url = url.as_str().to_owned();
 
                 match self.prefetch_kind {
@@ -88,6 +113,14 @@ impl UrlHandler {
         self.playlist.duration()?.sleep(time.elapsed());
         Ok(())
     }
+
+    fn jump_to_newest(&mut self) -> Result<Url> {
+        info!("Failed to find next segment, jumping to newest");
+        self.prefetch_kind = PrefetchSegment::Newest;
+        self.unchanged_count = 0;
+
+        self.playlist.prefetch_url(self.prefetch_kind)
+    }
 }
 
 fn main_loop(mut handler: UrlHandler) -> Result<()> {
@@ -107,7 +140,7 @@ fn main() -> Result<()> {
     debug!("{args:?}");
 
     let agent = Agent::new(&args.http)?;
-    let mut playlist = match MediaPlaylist::new(&args.hls, &agent) {
+    let playlist = match MediaPlaylist::new(&args.hls, &agent) {
         Ok(mut playlist) if args.passthrough => {
             return Player::passthrough(&mut args.player, &playlist.url()?)
         }
