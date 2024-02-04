@@ -71,11 +71,13 @@ impl LowLatencyHandler {
                     let (segment, is_last) = get_next_segment(&self.playlist, &self.prev_url)?;
                     match segment {
                         Some(segment) => {
+                            //no longer using prefetch urls
                             debug!("Found next segment");
 
                             self.prev_url = segment.url.as_str().to_owned();
-                            segment.duration.sleep(time.elapsed());
+                            self.worker.url(segment.url)?;
 
+                            segment.duration.sleep(time.elapsed());
                             return Ok(());
                         }
                         None if is_last => {
