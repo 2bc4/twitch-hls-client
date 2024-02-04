@@ -2,7 +2,6 @@ use std::{ops::ControlFlow, time::Instant};
 
 use anyhow::{Context, Result};
 use log::{debug, info};
-use url::Url;
 
 use crate::{
     hls::{MediaPlaylist, PrefetchSegment, Segment},
@@ -20,7 +19,7 @@ pub struct LowLatencyHandler {
     worker: Worker,
     prev_url: String,
     prefetch_kind: PrefetchSegment,
-    unchanged_count: u32,
+    was_unchanged: bool,
 }
 
 impl SegmentHandler for LowLatencyHandler {
@@ -30,7 +29,7 @@ impl SegmentHandler for LowLatencyHandler {
             worker,
             prev_url: String::default(),
             prefetch_kind: PrefetchSegment::Newest,
-            unchanged_count: u32::default(),
+            was_unchanged: bool::default(),
         }
     }
 
@@ -50,45 +49,45 @@ impl LowLatencyHandler {
     fn handle_segment(&mut self, time: Instant) -> Result<()> {
         match self.playlist.prefetch_url(self.prefetch_kind) {
             Ok(url) if self.prev_url == url.as_str() => {
-                if self.unchanged_count == 0 {
+                if self.was_unchanged {
+                    info!("Playlist unchanged, retrying...");
+                    self.playlist.last_duration()?.sleep_half(time.elapsed());
+                } else {
                     //already have the next segment, send it
                     info!("Playlist unchanged, fetching next segment...");
                     let url = self.playlist.prefetch_url(PrefetchSegment::Newest)?;
                     self.prev_url = url.as_str().to_owned();
 
                     self.worker.sync_url(url)?;
-                } else {
-                    info!("Playlist unchanged, retrying...");
-                    self.playlist.last_duration()?.sleep_half(time.elapsed());
+                    self.was_unchanged = true;
                 }
 
-                self.unchanged_count += 1;
                 return Ok(());
             }
             Ok(mut url) => {
-                //next segment may no longer be next prefetch segment
-                if self.unchanged_count > 1 {
-                    let (segment, is_last) = get_next_segment(&self.playlist, &self.prev_url)?;
-                    match segment {
-                        Some(segment) => {
-                            //no longer using prefetch urls
-                            debug!("Found next segment");
+                let (segment, is_last) = get_next_segment(&self.playlist, &self.prev_url)?;
+                match segment {
+                    Some(segment) => {
+                        //no longer using prefetch urls
+                        debug!("Found next segment");
 
-                            self.prev_url = segment.url.as_str().to_owned();
-                            self.worker.url(segment.url)?;
+                        self.prev_url = segment.url.as_str().to_owned();
+                        self.worker.url(segment.url)?;
 
-                            segment.duration.sleep(time.elapsed());
-                            return Ok(());
-                        }
-                        None if is_last => {
-                            debug!("Next segment is next prefetch segment");
-                            self.unchanged_count = 0;
-                        }
-                        _ => {
-                            url = self.jump_to_newest()?;
-                        }
-                    };
-                }
+                        segment.duration.sleep(time.elapsed());
+                        return Ok(());
+                    }
+                    None if is_last => {
+                        //happy path
+                        debug!("Next segment is next prefetch segment");
+                    }
+                    _ => {
+                        debug!("Jumping to newest");
+                        self.prefetch_kind = PrefetchSegment::Newest;
+                        url = self.playlist.prefetch_url(self.prefetch_kind)?;
+                    }
+                };
+                self.was_unchanged = false;
                 self.prev_url = url.as_str().to_owned();
 
                 match self.prefetch_kind {
@@ -105,14 +104,6 @@ impl LowLatencyHandler {
 
         self.playlist.last_duration()?.sleep(time.elapsed());
         Ok(())
-    }
-
-    fn jump_to_newest(&mut self) -> Result<Url> {
-        info!("Failed to find next segment, jumping to newest");
-        self.prefetch_kind = PrefetchSegment::Newest;
-        self.unchanged_count = 0;
-
-        self.playlist.prefetch_url(self.prefetch_kind)
     }
 }
 
