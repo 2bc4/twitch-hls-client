@@ -4,7 +4,6 @@ mod hls;
 mod http;
 mod logger;
 mod player;
-mod segment_handler;
 mod worker;
 
 use std::{
@@ -16,11 +15,10 @@ use anyhow::Result;
 use log::{debug, info};
 
 use args::Args;
-use hls::{MasterPlaylist, MediaPlaylist};
+use hls::{LowLatencyHandler, MasterPlaylist, MediaPlaylist, NormalLatencyHandler, SegmentHandler};
 use http::Agent;
 use logger::Logger;
 use player::Player;
-use segment_handler::{LowLatencyHandler, NormalLatencyHandler, SegmentHandler};
 use worker::Worker;
 
 fn main_loop(mut handler: impl SegmentHandler) -> Result<()> {

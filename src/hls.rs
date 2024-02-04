@@ -1,8 +1,10 @@
 #![allow(clippy::unnecessary_wraps)] //function pointers
 
+pub mod handler;
 pub mod playlist;
 pub mod segment;
 
+pub use self::handler::{LowLatencyHandler, NormalLatencyHandler, SegmentHandler};
 pub use self::playlist::{MasterPlaylist, MediaPlaylist};
 pub use self::segment::{PrefetchSegment, Segment};
 
