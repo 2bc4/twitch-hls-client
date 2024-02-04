@@ -24,6 +24,8 @@ Options:
           Silence player output
       --passthrough
           Passthrough playlist URL to player and do nothing else
+      --no-low-latency
+          Disable low latency streaming
       --no-config
           Ignore config file
       --no-kill

@@ -6,7 +6,7 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{ensure, Context, Result};
+use anyhow::{ensure, Result};
 use curl::easy::{Easy2, Handler, InfoType, IpResolve, List, WriteError};
 use log::{debug, LevelFilter};
 use url::Url;
@@ -127,15 +127,6 @@ impl TextRequest {
     pub fn text(&mut self) -> Result<String> {
         self.request.perform()?;
         Ok(mem::take(&mut self.request.get_mut().0))
-    }
-
-    pub fn url(&mut self) -> Result<Url> {
-        Ok(self
-            .request
-            .handle
-            .effective_url()?
-            .context("Failed to get URL from request")?
-            .parse()?)
     }
 
     fn get(mut request: Request<StringWriter>) -> Result<Self> {
