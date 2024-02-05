@@ -56,6 +56,7 @@ impl LowLatency {
     pub fn downgrade(self) -> NormalLatency {
         let mut handler = NormalLatency::new(self.playlist, self.worker);
         handler.prev_url = self.prev_url;
+        handler.should_sync = false;
 
         handler
     }
