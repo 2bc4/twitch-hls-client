@@ -65,8 +65,8 @@ Options:
 ```
 $ twitch-hls-client -p mpv -a '- --profile=low-latency' twitchchannel best
 Fetching playlist for channel twitchchannel
-Low latency streaming
 Opening player: mpv - --profile=low-latency
+Low latency streaming
  (+) Video --vid=1 (h264)
  (+) Audio --aid=1 (aac)
 Using hardware decoding (vaapi).
