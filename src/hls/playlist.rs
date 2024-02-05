@@ -42,10 +42,6 @@ impl MasterPlaylist {
         };
 
         master_playlist.low_latency = master_playlist.low_latency && args.low_latency;
-        if master_playlist.low_latency {
-            info!("Low latency streaming");
-        }
-
         Ok(master_playlist)
     }
 
