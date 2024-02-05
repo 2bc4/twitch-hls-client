@@ -26,6 +26,7 @@ pub struct LowLatency {
 
 impl SegmentHandler for LowLatency {
     fn new(playlist: MediaPlaylist, worker: Worker) -> Self {
+        info!("Low latency streaming");
         Self {
             playlist,
             worker,
@@ -118,7 +119,6 @@ pub struct NormalLatency {
 
 impl SegmentHandler for NormalLatency {
     fn new(playlist: MediaPlaylist, worker: Worker) -> Self {
-        info!("Low latency streaming");
         Self {
             playlist,
             worker,
