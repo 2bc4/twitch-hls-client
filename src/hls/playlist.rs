@@ -1,11 +1,11 @@
-use std::iter;
+use std::{iter, ops::ControlFlow, time::Instant};
 
 use anyhow::{Context, Result};
 use log::{debug, error, info};
 use url::Url;
 
 use super::{
-    segment::{Duration, Header, PrefetchSegment, Segment},
+    segment::{Duration, Header, PrefetchSegmentKind, Segment},
     Args, Error,
 };
 
@@ -210,20 +210,55 @@ impl MediaPlaylist {
         Ok(self.playlist.parse::<Header>()?.0)
     }
 
-    pub fn prefetch_url(&self, prefetch_segment: PrefetchSegment) -> Result<Url> {
-        Ok(prefetch_segment.parse(&self.playlist)?)
+    pub fn prefetch_segment(&self, kind: PrefetchSegmentKind) -> Result<Segment> {
+        kind.to_segment(self.last_duration()?, &self.playlist)
     }
 
-    pub fn last_duration(&self) -> Result<Duration> {
-        self.playlist
+    pub fn next_segment(&self, prev_url: &str) -> Result<(Option<Segment>, bool)> {
+        let segments = self.segments()?;
+        if let Some(idx) = segments.iter().position(|s| prev_url == s.url.as_str()) {
+            if idx + 1 == segments.len() {
+                return Ok((None, true));
+            }
+
+            let segment = segments
+                .into_iter()
+                .nth(idx + 1)
+                .context("Failed to get next segment")?;
+
+            return Ok((Some(segment), false));
+        }
+
+        Ok((None, false))
+    }
+
+    pub fn last_segment(&self) -> Result<Segment> {
+        self.segments()?
+            .into_iter()
+            .last()
+            .context("Failed to get last segment")
+    }
+
+    pub fn filter_if_ad(&self, time: &Instant) -> Result<ControlFlow<()>> {
+        let duration = self
+            .playlist
             .lines()
             .rev()
-            .find(|l| l.starts_with("#EXTINF"))
-            .context("Failed to get prefetch segment duration")?
-            .parse()
+            .find(|l| l.starts_with("#EXTINF") && l.contains("Amazon"))
+            .map(|_| self.last_duration())
+            .transpose()?;
+
+        if let Some(duration) = duration {
+            info!("Filtering ad segment...");
+            duration.sleep(time.elapsed());
+
+            return Ok(ControlFlow::Break(()));
+        }
+
+        Ok(ControlFlow::Continue(()))
     }
 
-    pub fn segments(&self) -> Result<Vec<Segment>> {
+    fn segments(&self) -> Result<Vec<Segment>> {
         let mut lines = self.playlist.lines();
 
         let mut segments = Vec::new();
@@ -238,12 +273,13 @@ impl MediaPlaylist {
         Ok(segments)
     }
 
-    pub fn has_ad(&self) -> bool {
+    fn last_duration(&self) -> Result<Duration> {
         self.playlist
             .lines()
             .rev()
             .find(|l| l.starts_with("#EXTINF"))
-            .is_some_and(|l| l.contains("Amazon"))
+            .context("Failed to get prefetch segment duration")?
+            .parse()
     }
 }
 

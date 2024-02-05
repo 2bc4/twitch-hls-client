@@ -6,27 +6,6 @@ use url::Url;
 
 use super::Error;
 
-#[derive(Copy, Clone)]
-pub enum PrefetchSegment {
-    Newest,
-    Next,
-}
-
-impl PrefetchSegment {
-    pub fn parse(self, playlist: &str) -> Result<Url, Error> {
-        playlist
-            .lines()
-            .rev()
-            .filter(|s| s.starts_with("#EXT-X-TWITCH-PREFETCH"))
-            .nth(self as usize)
-            .and_then(|s| s.split_once(':'))
-            .map(|s| s.1)
-            .ok_or(Error::Advertisement)?
-            .parse()
-            .or(Err(Error::Advertisement))
-    }
-}
-
 #[derive(Clone, PartialEq, Debug)]
 pub struct Duration(StdDuration);
 
@@ -105,6 +84,30 @@ impl Segment {
     }
 }
 
+#[derive(Copy, Clone)]
+pub enum PrefetchSegmentKind {
+    Newest,
+    Next,
+}
+
+impl PrefetchSegmentKind {
+    pub fn to_segment(self, duration: Duration, playlist: &str) -> Result<Segment> {
+        Ok(Segment {
+            duration,
+            url: playlist
+                .lines()
+                .rev()
+                .filter(|s| s.starts_with("#EXT-X-TWITCH-PREFETCH"))
+                .nth(self as usize) //Newest = 0, Next = 1
+                .and_then(|s| s.split_once(':'))
+                .map(|s| s.1)
+                .ok_or(Error::Advertisement)?
+                .parse()
+                .or(Err(Error::Advertisement))?,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::playlist::tests::create_playlist;
@@ -120,50 +123,22 @@ mod tests {
     }
 
     #[test]
-    fn parse_last_duration() {
-        let playlist = create_playlist();
-        assert_eq!(
-            playlist.last_duration().unwrap(),
-            Duration(StdDuration::from_secs_f32(0.978))
-        );
-    }
-
-    #[test]
-    fn parse_segments() {
-        let playlist = create_playlist();
-        assert_eq!(
-            playlist.segments().unwrap(),
-            vec![
-                Segment {
-                    duration: Duration(StdDuration::from_secs_f32(5.020)),
-                    url: Url::parse("http://segment1.invalid").unwrap(),
-                },
-                Segment {
-                    duration: Duration(StdDuration::from_secs_f32(4.910)),
-                    url: Url::parse("http://segment2.invalid").unwrap(),
-                },
-                Segment {
-                    duration: Duration(StdDuration::from_secs_f32(2.000)),
-                    url: Url::parse("http://segment3.invalid").unwrap(),
-                },
-                Segment {
-                    duration: Duration(StdDuration::from_secs_f32(0.978)),
-                    url: Url::parse("http://segment4.invalid").unwrap(),
-                },
-            ],
-        );
-    }
-
-    #[test]
     fn parse_prefetch_segments() {
+        let playlist = create_playlist();
         assert_eq!(
-            PrefetchSegment::Newest.parse(PLAYLIST).unwrap(),
-            Url::parse("http://newest-prefetch-url.invalid").unwrap()
+            playlist.prefetch_segment(PrefetchSegmentKind::Newest).unwrap(),
+            Segment {
+                duration: Duration(StdDuration::from_secs_f32(0.978)),
+                url: Url::parse("http://newest-prefetch-url.invalid").unwrap(),
+            },
         );
 
         assert_eq!(
-            PrefetchSegment::Next.parse(PLAYLIST).unwrap(),
-            Url::parse("http://next-prefetch-url.invalid").unwrap()
+            playlist.prefetch_segment(PrefetchSegmentKind::Next).unwrap(),
+            Segment {
+                duration: Duration(StdDuration::from_secs_f32(0.978)),
+                url: Url::parse("http://next-prefetch-url.invalid").unwrap(),
+            },
         );
     }
 }
