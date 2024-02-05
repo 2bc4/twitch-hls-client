@@ -1,7 +1,7 @@
 use std::{ops::ControlFlow, time::Instant};
 
 use anyhow::{Context, Result};
-use log::{debug, info};
+use log::{debug, error, info};
 
 use super::Error;
 
@@ -94,7 +94,7 @@ impl LowLatency {
                         debug!("Next segment is next prefetch segment");
                     }
                     _ => {
-                        debug!("Jumping to newest");
+                        error!("Failed to find next segment, jumping to newest");
                         self.prefetch_kind = PrefetchSegment::Newest;
                         url = self.playlist.prefetch_url(self.prefetch_kind)?;
                     }
@@ -162,6 +162,7 @@ impl NormalLatency {
                 segment
             }
             (None, _) => {
+                error!("Failed to find next segment, jumping to newest");
                 let segments = self.playlist.segments()?;
 
                 segments
