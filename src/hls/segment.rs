@@ -104,3 +104,66 @@ impl Segment {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::super::playlist::tests::create_playlist;
+    use super::super::tests::PLAYLIST;
+    use super::*;
+
+    #[test]
+    fn parse_header() {
+        assert_eq!(
+            PLAYLIST.parse::<Header>().unwrap().0,
+            Some(Url::parse("http://header.invalid").unwrap())
+        );
+    }
+
+    #[test]
+    fn parse_last_duration() {
+        let playlist = create_playlist();
+        assert_eq!(
+            playlist.last_duration().unwrap(),
+            Duration(StdDuration::from_secs_f32(0.978))
+        );
+    }
+
+    #[test]
+    fn parse_segments() {
+        let playlist = create_playlist();
+        assert_eq!(
+            playlist.segments().unwrap(),
+            vec![
+                Segment {
+                    duration: Duration(StdDuration::from_secs_f32(5.020)),
+                    url: Url::parse("http://segment1.invalid").unwrap(),
+                },
+                Segment {
+                    duration: Duration(StdDuration::from_secs_f32(4.910)),
+                    url: Url::parse("http://segment2.invalid").unwrap(),
+                },
+                Segment {
+                    duration: Duration(StdDuration::from_secs_f32(2.000)),
+                    url: Url::parse("http://segment3.invalid").unwrap(),
+                },
+                Segment {
+                    duration: Duration(StdDuration::from_secs_f32(0.978)),
+                    url: Url::parse("http://segment4.invalid").unwrap(),
+                },
+            ],
+        );
+    }
+
+    #[test]
+    fn parse_prefetch_segments() {
+        assert_eq!(
+            PrefetchSegment::Newest.parse(PLAYLIST).unwrap(),
+            Url::parse("http://newest-prefetch-url.invalid").unwrap()
+        );
+
+        assert_eq!(
+            PrefetchSegment::Next.parse(PLAYLIST).unwrap(),
+            Url::parse("http://next-prefetch-url.invalid").unwrap()
+        );
+    }
+}

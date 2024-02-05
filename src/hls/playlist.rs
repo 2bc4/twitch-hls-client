@@ -354,3 +354,67 @@ fn map_if_offline(error: anyhow::Error) -> anyhow::Error {
 
     error
 }
+
+#[cfg(test)]
+pub mod tests {
+    use super::super::tests::PLAYLIST;
+    use super::*;
+
+    pub const MASTER_PLAYLIST: &'static str = r#"#EXT3MU
+#EXT-X-TWITCH-INFO:NODE="...FUTURE="true"..."
+#EXT-X-MEDIA:TYPE=VIDEO,GROUP-ID="chunked",NAME="1080p60 (source)",AUTOSELECT=YES,DEFAULT=YES
+#EXT-X-STREAM-INF:BANDWIDTH=0,RESOLUTION=1920x1080,CODECS="avc1.64002A,mp4a.40.2",VIDEO="chunked",FRAME-RATE=60.000
+http://1080p.invalid
+#EXT-X-MEDIA:TYPE=VIDEO,GROUP-ID="720p60",NAME="720p60",AUTOSELECT=YES,DEFAULT=YES
+#EXT-X-STREAM-INF:BANDWIDTH=0,RESOLUTION=1280x720,CODECS="avc1.4D401F,mp4a.40.2",VIDEO="720p60",FRAME-RATE=60.000
+http://720p60.invalid
+#EXT-X-MEDIA:TYPE=VIDEO,GROUP-ID="720p30",NAME="720p",AUTOSELECT=YES,DEFAULT=YES
+#EXT-X-STREAM-INF:BANDWIDTH=0,RESOLUTION=1280x720,CODECS="avc1.4D401F,mp4a.40.2",VIDEO="720p30",FRAME-RATE=30.000
+http://720p30.invalid
+#EXT-X-MEDIA:TYPE=VIDEO,GROUP-ID="480p30",NAME="480p",AUTOSELECT=YES,DEFAULT=YES
+#EXT-X-STREAM-INF:BANDWIDTH=0,RESOLUTION=852x480,CODECS="avc1.4D401F,mp4a.40.2",VIDEO="480p30",FRAME-RATE=30.000
+http://480p.invalid
+#EXT-X-MEDIA:TYPE=VIDEO,GROUP-ID="360p30",NAME="360p",AUTOSELECT=YES,DEFAULT=YES
+#EXT-X-STREAM-INF:BANDWIDTH=0,RESOLUTION=640x360,CODECS="avc1.4D401F,mp4a.40.2",VIDEO="360p30",FRAME-RATE=30.000
+http://360p.invalid
+#EXT-X-MEDIA:TYPE=VIDEO,GROUP-ID="160p30",NAME="160p",AUTOSELECT=YES,DEFAULT=YES
+#EXT-X-STREAM-INF:BANDWIDTH=0,RESOLUTION=284x160,CODECS="avc1.4D401F,mp4a.40.2",VIDEO="160p30",FRAME-RATE=30.000
+http://160p.invalid
+#EXT-X-MEDIA:TYPE=VIDEO,GROUP-ID="audio_only",NAME="audio_only",AUTOSELECT=NO,DEFAULT=NO
+#EXT-X-STREAM-INF:BANDWIDTH=0,CODECS="mp4a.40.2",VIDEO="audio_only"
+http://audio-only.invalid"#;
+
+    pub fn create_playlist() -> MediaPlaylist {
+        MediaPlaylist {
+            playlist: PLAYLIST.to_owned(),
+            request: Agent::new(&http::Args::default())
+                .unwrap()
+                .get(&"http://playlist.invalid".parse().unwrap())
+                .unwrap(),
+        }
+    }
+
+    #[test]
+    fn parse_variant_playlist() {
+        let qualities = [
+            ("best", Some("1080p")),
+            ("1080p", None),
+            ("720p60", None),
+            ("720p30", None),
+            ("720p", Some("720p60")),
+            ("480p", None),
+            ("360p", None),
+            ("160p", None),
+            ("audio_only", Some("audio-only")),
+        ];
+
+        for (quality, host) in qualities {
+            assert_eq!(
+                MasterPlaylist::parse_variant_playlist(MASTER_PLAYLIST, quality)
+                    .unwrap()
+                    .url,
+                Url::parse(&format!("http://{}.invalid", host.unwrap_or(quality))).unwrap()
+            );
+        }
+    }
+}
