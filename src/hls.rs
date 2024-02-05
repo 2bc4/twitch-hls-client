@@ -12,6 +12,7 @@ use std::fmt;
 pub enum Error {
     Offline,
     Advertisement,
+    Downgrade,
 }
 
 impl std::error::Error for Error {}
@@ -20,7 +21,13 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Offline => write!(f, "Stream is offline or unavailable"),
-            Self::Advertisement => write!(f, "Encountered an embedded advertisement"),
+            Self::Advertisement => write!(f, "Unhandled embedded advertisement"),
+            Self::Downgrade => {
+                write!(
+                    f,
+                    "Unhandled attempt to downgrade to normal latency handler"
+                )
+            }
         }
     }
 }

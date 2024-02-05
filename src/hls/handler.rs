@@ -3,6 +3,8 @@ use std::{ops::ControlFlow, time::Instant};
 use anyhow::{Context, Result};
 use log::{debug, info};
 
+use super::Error;
+
 use super::{
     playlist::MediaPlaylist,
     segment::{PrefetchSegment, Segment},
@@ -49,6 +51,13 @@ impl SegmentHandler for LowLatency {
 }
 
 impl LowLatency {
+    pub fn downgrade(self) -> NormalLatency {
+        let mut handler = NormalLatency::new(self.playlist, self.worker);
+        handler.prev_url = self.prev_url;
+
+        handler
+    }
+
     fn handle_segment(&mut self, time: Instant) -> Result<()> {
         match self.playlist.prefetch_url(self.prefetch_kind) {
             Ok(url) if self.prev_url == url.as_str() => {
@@ -72,13 +81,13 @@ impl LowLatency {
                 match segment {
                     Some(segment) => {
                         //no longer using prefetch urls
-                        debug!("Found next segment");
+                        info!("Downgrading to normal latency handler");
 
                         self.prev_url = segment.url.as_str().to_owned();
                         self.worker.url(segment.url)?;
-
                         segment.duration.sleep(time.elapsed());
-                        return Ok(());
+
+                        return Err(Error::Downgrade.into());
                     }
                     None if is_last => {
                         //happy path

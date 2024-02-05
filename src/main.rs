@@ -24,7 +24,7 @@ use logger::Logger;
 use player::Player;
 use worker::Worker;
 
-fn main_loop(mut handler: impl SegmentHandler) -> Result<()> {
+fn main_loop(handler: &mut impl SegmentHandler) -> Result<()> {
     handler.process(Instant::now())?;
     loop {
         let time = Instant::now();
@@ -67,9 +67,16 @@ fn main() -> Result<()> {
     };
 
     let result = if low_latency {
-        main_loop(LowLatency::new(playlist, worker))
+        let mut handler = LowLatency::new(playlist, worker);
+        match main_loop(&mut handler) {
+            Ok(()) => Ok(()),
+            Err(e) => match e.downcast_ref::<hls::Error>() {
+                Some(hls::Error::Downgrade) => main_loop(&mut handler.downgrade()),
+                _ => Err(e),
+            },
+        }
     } else {
-        main_loop(NormalLatency::new(playlist, worker))
+        main_loop(&mut NormalLatency::new(playlist, worker))
     };
 
     match result {
