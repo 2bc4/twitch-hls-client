@@ -15,7 +15,10 @@ use anyhow::Result;
 use log::{debug, info};
 
 use args::Args;
-use hls::{LowLatencyHandler, MasterPlaylist, MediaPlaylist, NormalLatencyHandler, SegmentHandler};
+use hls::{
+    handler::{LowLatency, NormalLatency, SegmentHandler},
+    playlist::{MasterPlaylist, MediaPlaylist},
+};
 use http::Agent;
 use logger::Logger;
 use player::Player;
@@ -64,9 +67,9 @@ fn main() -> Result<()> {
     };
 
     let result = if low_latency {
-        main_loop(LowLatencyHandler::new(playlist, worker))
+        main_loop(LowLatency::new(playlist, worker))
     } else {
-        main_loop(NormalLatencyHandler::new(playlist, worker))
+        main_loop(NormalLatency::new(playlist, worker))
     };
 
     match result {

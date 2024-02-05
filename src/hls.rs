@@ -4,15 +4,9 @@ pub mod handler;
 pub mod playlist;
 pub mod segment;
 
-pub use self::handler::{LowLatencyHandler, NormalLatencyHandler, SegmentHandler};
-pub use self::playlist::{MasterPlaylist, MediaPlaylist};
-pub use self::segment::{PrefetchSegment, Segment};
-
-use std::fmt;
-
-use anyhow::{ensure, Context, Result};
-
 use crate::args::{ArgParse, Parser};
+use anyhow::{ensure, Context, Result};
+use std::fmt;
 
 #[derive(Debug)]
 pub enum Error {

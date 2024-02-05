@@ -1,4 +1,4 @@
-use std::{str::FromStr, thread, time::Duration};
+use std::{str::FromStr, thread, time::Duration as StdDuration};
 
 use anyhow::{Context, Result};
 use log::debug;
@@ -28,14 +28,14 @@ impl PrefetchSegment {
 }
 
 #[derive(Clone, PartialEq, Debug)]
-pub struct SegmentDuration(Duration);
+pub struct Duration(StdDuration);
 
-impl FromStr for SegmentDuration {
+impl FromStr for Duration {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(Self(
-            Duration::try_from_secs_f32(
+            StdDuration::try_from_secs_f32(
                 s.split_once(':')
                     .and_then(|s| s.1.split_once(','))
                     .map(|s| s.0.parse())
@@ -46,18 +46,18 @@ impl FromStr for SegmentDuration {
     }
 }
 
-impl SegmentDuration {
-    pub fn sleep(&self, elapsed: Duration) {
+impl Duration {
+    pub fn sleep(&self, elapsed: StdDuration) {
         Self::sleep_thread(self.0, elapsed);
     }
 
-    pub fn sleep_half(&self, elapsed: Duration) {
+    pub fn sleep_half(&self, elapsed: StdDuration) {
         if let Some(half) = self.0.checked_div(2) {
             Self::sleep_thread(half, elapsed);
         }
     }
 
-    fn sleep_thread(duration: Duration, elapsed: Duration) {
+    fn sleep_thread(duration: StdDuration, elapsed: StdDuration) {
         if let Some(sleep_time) = duration.checked_sub(elapsed) {
             debug!("Sleeping thread for {:?}", sleep_time);
             thread::sleep(sleep_time);
@@ -66,9 +66,9 @@ impl SegmentDuration {
 }
 
 //Used for av1/hevc streams
-pub struct SegmentHeader(pub Option<Url>);
+pub struct Header(pub Option<Url>);
 
-impl FromStr for SegmentHeader {
+impl FromStr for Header {
     type Err = anyhow::Error;
 
     fn from_str(playlist: &str) -> Result<Self, Self::Err> {
@@ -92,7 +92,7 @@ impl FromStr for SegmentHeader {
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Segment {
-    pub duration: SegmentDuration,
+    pub duration: Duration,
     pub url: Url,
 }
 

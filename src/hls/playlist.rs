@@ -5,9 +5,10 @@ use log::{debug, error, info};
 use url::Url;
 
 use super::{
-    segment::{PrefetchSegment, Segment, SegmentDuration, SegmentHeader},
+    segment::{Duration, Header, PrefetchSegment, Segment},
     Args, Error,
 };
+
 use crate::{
     constants,
     http::{self, Agent, TextRequest},
@@ -206,14 +207,14 @@ impl MediaPlaylist {
     }
 
     pub fn header(&self) -> Result<Option<Url>> {
-        Ok(self.playlist.parse::<SegmentHeader>()?.0)
+        Ok(self.playlist.parse::<Header>()?.0)
     }
 
     pub fn prefetch_url(&self, prefetch_segment: PrefetchSegment) -> Result<Url> {
         Ok(prefetch_segment.parse(&self.playlist)?)
     }
 
-    pub fn last_duration(&self) -> Result<SegmentDuration> {
+    pub fn last_duration(&self) -> Result<Duration> {
         self.playlist
             .lines()
             .rev()

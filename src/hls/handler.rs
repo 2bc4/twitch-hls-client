@@ -3,10 +3,12 @@ use std::{ops::ControlFlow, time::Instant};
 use anyhow::{Context, Result};
 use log::{debug, info};
 
-use crate::{
-    hls::{MediaPlaylist, PrefetchSegment, Segment},
-    worker::Worker,
+use super::{
+    playlist::MediaPlaylist,
+    segment::{PrefetchSegment, Segment},
 };
+
+use crate::worker::Worker;
 
 pub trait SegmentHandler {
     fn new(playlist: MediaPlaylist, worker: Worker) -> Self;
@@ -14,7 +16,7 @@ pub trait SegmentHandler {
     fn process(&mut self, time: Instant) -> Result<()>;
 }
 
-pub struct LowLatencyHandler {
+pub struct LowLatency {
     playlist: MediaPlaylist,
     worker: Worker,
     prev_url: String,
@@ -22,7 +24,7 @@ pub struct LowLatencyHandler {
     was_unchanged: bool,
 }
 
-impl SegmentHandler for LowLatencyHandler {
+impl SegmentHandler for LowLatency {
     fn new(playlist: MediaPlaylist, worker: Worker) -> Self {
         Self {
             playlist,
@@ -45,7 +47,7 @@ impl SegmentHandler for LowLatencyHandler {
     }
 }
 
-impl LowLatencyHandler {
+impl LowLatency {
     fn handle_segment(&mut self, time: Instant) -> Result<()> {
         match self.playlist.prefetch_url(self.prefetch_kind) {
             Ok(url) if self.prev_url == url.as_str() => {
@@ -107,14 +109,14 @@ impl LowLatencyHandler {
     }
 }
 
-pub struct NormalLatencyHandler {
+pub struct NormalLatency {
     playlist: MediaPlaylist,
     worker: Worker,
     should_sync: bool,
     prev_url: String,
 }
 
-impl SegmentHandler for NormalLatencyHandler {
+impl SegmentHandler for NormalLatency {
     fn new(playlist: MediaPlaylist, worker: Worker) -> Self {
         info!("Low latency streaming");
         Self {
@@ -137,7 +139,7 @@ impl SegmentHandler for NormalLatencyHandler {
     }
 }
 
-impl NormalLatencyHandler {
+impl NormalLatency {
     fn handle_segment(&mut self, time: Instant) -> Result<()> {
         let segment = match get_next_segment(&self.playlist, &self.prev_url)? {
             (Some(segment), _) => {
