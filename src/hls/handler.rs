@@ -24,6 +24,7 @@ pub struct LowLatency {
     prev_url: String,
     prefetch_kind: PrefetchSegment,
     was_unchanged: bool,
+    init: bool,
 }
 
 impl SegmentHandler for LowLatency {
@@ -35,6 +36,7 @@ impl SegmentHandler for LowLatency {
             prev_url: String::default(),
             prefetch_kind: PrefetchSegment::Newest,
             was_unchanged: bool::default(),
+            init: true,
         }
     }
 
@@ -94,7 +96,12 @@ impl LowLatency {
                         debug!("Next segment is next prefetch segment");
                     }
                     _ => {
-                        error!("Failed to find next segment, jumping to newest");
+                        if self.init {
+                            self.init = false;
+                        } else {
+                            error!("Failed to find next segment, jumping to newest");
+                        }
+
                         self.prefetch_kind = PrefetchSegment::Newest;
                         url = self.playlist.prefetch_url(self.prefetch_kind)?;
                     }
@@ -162,7 +169,9 @@ impl NormalLatency {
                 segment
             }
             (None, _) => {
-                error!("Failed to find next segment, jumping to newest");
+                if !self.should_sync {
+                    error!("Failed to find next segment, jumping to newest");
+                }
                 let segments = self.playlist.segments()?;
 
                 segments
