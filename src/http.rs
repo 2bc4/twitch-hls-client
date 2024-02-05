@@ -210,6 +210,7 @@ impl<T: Write> Request<T> {
         request.handle.timeout(request.args.timeout)?;
         request.handle.tcp_nodelay(true)?;
         request.handle.accept_encoding("")?; //empty string accepts all available encodings
+        request.handle.buffer_size(constants::CURL_BUFFER_SIZE)?;
         request.handle.useragent(&request.args.user_agent)?;
         request.url(url)?;
         Ok(request)
@@ -228,16 +229,11 @@ impl<T: Write> Request<T> {
                     let io_error = self.handle.get_mut().error.take().ok_or(e)?;
                     return Err(io_error.into());
                 }
-                Err(e) => {
-                    if retries < self.args.retries {
-                        error!("{e}");
-
-                        retries += 1;
-                        continue;
-                    }
-
-                    return Err(e.into());
+                Err(e) if retries < self.args.retries => {
+                    error!("{e}");
+                    retries += 1;
                 }
+                Err(e) => return Err(e.into()),
             }
         }
 
