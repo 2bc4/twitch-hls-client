@@ -1,7 +1,7 @@
 use std::{ops::ControlFlow, time::Instant};
 
 use anyhow::Result;
-use log::{debug, error, info};
+use log::{debug, info};
 
 use super::Error;
 use super::{playlist::MediaPlaylist, segment::PrefetchSegmentKind};
@@ -100,7 +100,7 @@ impl LowLatency {
                         if self.init {
                             self.init = false;
                         } else {
-                            error!("Failed to find next segment, jumping to newest");
+                            info!("Failed to find next segment, jumping to newest");
                         }
 
                         self.prefetch_kind = PrefetchSegmentKind::Newest;
@@ -172,7 +172,7 @@ impl NormalLatency {
             }
             (None, _) => {
                 if !self.should_sync {
-                    error!("Failed to find next segment, jumping to newest");
+                    info!("Failed to find next segment, jumping to newest");
                 }
 
                 self.playlist.last_segment()?
