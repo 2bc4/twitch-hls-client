@@ -89,6 +89,7 @@ impl LowLatency {
                         self.prev_url = segment.url.as_str().to_owned();
                         self.worker.url(segment.url)?;
                         segment.duration.sleep(time.elapsed());
+                        self.reload()?;
 
                         return Err(Error::Downgrade.into());
                     }
