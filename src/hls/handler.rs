@@ -70,13 +70,14 @@ impl LowLatency {
                         .playlist
                         .prefetch_segment(PrefetchSegmentKind::Newest)?
                         .url;
-                    self.prev_url = url.as_str().to_owned();
 
+                    self.prev_url = url.to_string();
                     self.worker.sync_url(url)?;
+
                     self.was_unchanged = true;
                 }
 
-                return Ok(());
+                Ok(())
             }
             Ok(mut segment) => {
                 let (next, reached_end) = self.playlist.next_segment(&self.prev_url)?;
@@ -85,7 +86,7 @@ impl LowLatency {
                         //no longer using prefetch urls
                         info!("Downgrading to normal latency handler");
 
-                        self.prev_url = next.url.as_str().to_owned();
+                        self.prev_url = next.url.to_string();
                         self.worker.url(next.url)?;
                         next.duration.sleep(time.elapsed());
 
@@ -108,7 +109,7 @@ impl LowLatency {
                     }
                 };
                 self.was_unchanged = false;
-                self.prev_url = segment.url.as_str().to_owned();
+                self.prev_url = segment.url.to_string();
 
                 match self.prefetch_kind {
                     PrefetchSegmentKind::Newest => {
@@ -120,19 +121,18 @@ impl LowLatency {
                 };
 
                 segment.duration.sleep(time.elapsed());
+                Ok(())
             }
-            Err(e) => return Err(e),
-        };
-
-        Ok(())
+            Err(e) => Err(e),
+        }
     }
 }
 
 pub struct NormalLatency {
     playlist: MediaPlaylist,
     worker: Worker,
-    should_sync: bool,
     prev_url: String,
+    should_sync: bool,
 }
 
 impl SegmentHandler for NormalLatency {
@@ -140,8 +140,8 @@ impl SegmentHandler for NormalLatency {
         Self {
             playlist,
             worker,
-            should_sync: true,
             prev_url: String::default(),
+            should_sync: true,
         }
     }
 
@@ -179,7 +179,7 @@ impl NormalLatency {
             }
         };
 
-        self.prev_url = segment.url.as_str().to_owned();
+        self.prev_url = segment.url.to_string();
         self.worker.send(segment.url, self.should_sync)?;
         if self.should_sync {
             self.should_sync = false;
