@@ -154,10 +154,11 @@ impl NormalLatency {
             }
             (None, _) => {
                 let segments = self.playlist.segments()?;
+
                 segments
+                    .into_iter()
                     .last()
                     .context("Failed to get latest segment")?
-                    .clone()
             }
         };
 
@@ -192,10 +193,11 @@ fn get_next_segment(playlist: &MediaPlaylist, prev_url: &str) -> Result<(Option<
         }
 
         let segment = segments
-            .get(idx + 1)
+            .into_iter()
+            .nth(idx + 1)
             .context("Failed to get next segment")?;
 
-        return Ok((Some(segment.clone()), false));
+        return Ok((Some(segment), false));
     }
 
     Ok((None, false))
