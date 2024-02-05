@@ -126,7 +126,9 @@ mod tests {
     fn parse_prefetch_segments() {
         let playlist = create_playlist();
         assert_eq!(
-            playlist.prefetch_segment(PrefetchSegmentKind::Newest).unwrap(),
+            playlist
+                .prefetch_segment(PrefetchSegmentKind::Newest)
+                .unwrap(),
             Segment {
                 duration: Duration(StdDuration::from_secs_f32(0.978)),
                 url: Url::parse("http://newest-prefetch-url.invalid").unwrap(),
@@ -134,7 +136,9 @@ mod tests {
         );
 
         assert_eq!(
-            playlist.prefetch_segment(PrefetchSegmentKind::Next).unwrap(),
+            playlist
+                .prefetch_segment(PrefetchSegmentKind::Next)
+                .unwrap(),
             Segment {
                 duration: Duration(StdDuration::from_secs_f32(0.978)),
                 url: Url::parse("http://next-prefetch-url.invalid").unwrap(),
