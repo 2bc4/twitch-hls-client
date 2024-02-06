@@ -3,7 +3,26 @@ use std::{str::FromStr, thread, time::Duration as StdDuration};
 use anyhow::{Context, Result};
 use log::debug;
 
-use super::Error;
+//Used for av1/hevc streams
+pub struct Header(pub Option<String>);
+
+impl FromStr for Header {
+    type Err = anyhow::Error;
+
+    fn from_str(playlist: &str) -> Result<Self, Self::Err> {
+        let header_url = playlist
+            .lines()
+            .find(|s| s.starts_with("#EXT-X-MAP"))
+            .and_then(|s| s.split_once('='))
+            .map(|s| s.1.replace('"', ""));
+
+        if let Some(header_url) = header_url {
+            return Ok(Self(Some(header_url)));
+        }
+
+        Ok(Self(None))
+    }
+}
 
 #[derive(Default, Clone, PartialEq, Debug)]
 pub struct Duration {
@@ -47,27 +66,6 @@ impl Duration {
     }
 }
 
-//Used for av1/hevc streams
-pub struct Header(pub Option<String>);
-
-impl FromStr for Header {
-    type Err = anyhow::Error;
-
-    fn from_str(playlist: &str) -> Result<Self, Self::Err> {
-        let header_url = playlist
-            .lines()
-            .find(|s| s.starts_with("#EXT-X-MAP"))
-            .and_then(|s| s.split_once('='))
-            .map(|s| s.1.replace('"', ""));
-
-        if let Some(header_url) = header_url {
-            return Ok(Self(Some(header_url)));
-        }
-
-        Ok(Self(None))
-    }
-}
-
 #[derive(Default, Clone, Debug)]
 pub struct Segment {
     pub duration: Duration,
@@ -80,42 +78,9 @@ impl PartialEq for Segment {
     }
 }
 
-impl Segment {
-    pub fn new(duration: Duration, url: &str) -> Result<Self> {
-        Ok(Self {
-            duration,
-            url: url.to_owned(),
-        })
-    }
-}
-
-#[derive(Copy, Clone)]
-pub enum PrefetchSegmentKind {
-    Newest,
-    Next,
-}
-
-impl PrefetchSegmentKind {
-    pub fn to_segment(self, duration: Duration, playlist: &str) -> Result<Segment> {
-        Ok(Segment {
-            duration,
-            url: playlist
-                .lines()
-                .rev()
-                .filter(|s| s.starts_with("#EXT-X-TWITCH-PREFETCH"))
-                .nth(self as usize) //Newest = 0, Next = 1
-                .and_then(|s| s.split_once(':'))
-                .map(|s| s.1)
-                .ok_or(Error::Advertisement)?
-                .parse()
-                .or(Err(Error::Advertisement))?,
-        })
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::super::playlist::tests::create_playlist;
+    use super::super::playlist::{tests::create_playlist, PrefetchSegmentKind};
     use super::super::tests::PLAYLIST;
     use super::*;
 

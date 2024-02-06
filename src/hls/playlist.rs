@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use log::{debug, error, info};
 
 use super::{
-    segment::{Duration, Header, PrefetchSegmentKind, Segment},
+    segment::{Duration, Header, Segment},
     Args, Error,
 };
 
@@ -210,32 +210,57 @@ impl MediaPlaylist {
     }
 
     pub fn prefetch_segment(&self, kind: PrefetchSegmentKind) -> Result<Segment> {
-        kind.to_segment(self.last_duration()?, &self.playlist)
+        PrefetchSegmentKind::to_segment(
+            self.last_duration()?,
+            self.playlist
+                .lines()
+                .rev()
+                .filter(|s| s.starts_with("#EXT-X-TWITCH-PREFETCH"))
+                .nth(kind as usize) //Newest = 0, Next = 1
+                .context("Failed to find prefetch segment in playlist")?,
+        )
     }
 
-    pub fn next_segment(&self, prev: &Segment) -> Result<(Option<Segment>, bool)> {
-        let segments = self.segments()?;
-        if let Some(idx) = segments.iter().position(|s| prev == s) {
-            if idx + 1 == segments.len() {
-                return Ok((None, true));
+    pub fn segments(&self) -> Result<Vec<Segment>> {
+        let mut lines = self.playlist.lines();
+
+        let mut segments = Vec::new();
+        while let Some(extinf) = lines.next() {
+            if extinf.starts_with("#EXTINF") {
+                let duration = extinf.parse::<Duration>()?;
+                if !duration.is_ad {
+                    if let Some(url) = lines.next() {
+                        segments.push(Segment {
+                            duration,
+                            url: url.to_owned(),
+                        });
+                    }
+                }
             }
-
-            let segment = segments
-                .into_iter()
-                .nth(idx + 1)
-                .context("Failed to get next segment")?;
-
-            return Ok((Some(segment), false));
         }
 
-        Ok((None, false))
+        Ok(segments)
     }
 
-    pub fn last_segment(&self) -> Result<Segment> {
-        self.segments()?
-            .into_iter()
-            .last()
-            .context("Failed to get last segment")
+    pub fn next_segment(&self, prev: &Segment) -> Result<NextSegment> {
+        let segments = self.segments()?;
+        if let Some(idx) = segments.iter().position(|s| prev == s) {
+            let idx = idx + 1;
+
+            //next is prefetch segment or current segment if not low latency
+            if idx == segments.len() {
+                return Ok(NextSegment::Current);
+            }
+
+            return Ok(NextSegment::Found(
+                segments
+                    .into_iter()
+                    .nth(idx)
+                    .context("Failed to get next segment")?,
+            ));
+        }
+
+        Ok(NextSegment::Unknown)
     }
 
     pub fn filter_if_ad(&self, time: &Instant) -> Result<ControlFlow<()>> {
@@ -250,24 +275,6 @@ impl MediaPlaylist {
         Ok(ControlFlow::Continue(()))
     }
 
-    fn segments(&self) -> Result<Vec<Segment>> {
-        let mut lines = self.playlist.lines();
-
-        let mut segments = Vec::new();
-        while let Some(extinf) = lines.next() {
-            if extinf.starts_with("#EXTINF") {
-                let duration = extinf.parse::<Duration>()?;
-                if !duration.is_ad {
-                    if let Some(url) = lines.next() {
-                        segments.push(Segment::new(duration, url)?);
-                    }
-                }
-            }
-        }
-
-        Ok(segments)
-    }
-
     fn last_duration(&self) -> Result<Duration> {
         self.playlist
             .lines()
@@ -276,6 +283,30 @@ impl MediaPlaylist {
             .context("Failed to get prefetch segment duration")?
             .parse()
     }
+}
+
+#[derive(Copy, Clone)]
+pub enum PrefetchSegmentKind {
+    Newest,
+    Next,
+}
+
+impl PrefetchSegmentKind {
+    pub fn to_segment(duration: Duration, prefetch: &str) -> Result<Segment> {
+        Ok(Segment {
+            duration,
+            url: prefetch
+                .split_once(':')
+                .map(|s| s.1.to_owned())
+                .context("Failed to parse prefetch segment URL")?,
+        })
+    }
+}
+
+pub enum NextSegment {
+    Found(Segment),
+    Current,
+    Unknown,
 }
 
 struct PlaybackAccessToken {

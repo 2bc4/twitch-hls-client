@@ -1,11 +1,11 @@
 use std::{ops::ControlFlow, time::Instant};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use log::{debug, info};
 
 use super::{
-    playlist::MediaPlaylist,
-    segment::{PrefetchSegmentKind, Segment},
+    playlist::{MediaPlaylist, NextSegment, PrefetchSegmentKind},
+    segment::Segment,
     Error,
 };
 
@@ -64,11 +64,10 @@ impl LowLatency {
         match self.playlist.prefetch_segment(self.prefetch_kind) {
             Ok(segment) if self.prev_segment == segment => {
                 if self.was_unchanged {
-                    info!("Playlist unchanged, retrying...");
-                    segment.duration.sleep_half(time.elapsed());
+                    playlist_unchanged(&segment, time);
                 } else {
                     //already have the next segment, send it
-                    info!("Playlist unchanged, fetching next segment...");
+                    debug!("Playlist unchanged, fetching next segment...");
                     let segment = self
                         .playlist
                         .prefetch_segment(PrefetchSegmentKind::Newest)?;
@@ -82,11 +81,9 @@ impl LowLatency {
                 Ok(())
             }
             Ok(mut segment) => {
-                let (next, reached_end) = self.playlist.next_segment(&self.prev_segment)?;
-                match next {
-                    Some(next) => {
+                match self.playlist.next_segment(&self.prev_segment)? {
+                    NextSegment::Found(next) => {
                         //no longer using prefetch urls
-                        info!("Downgrading to normal latency handler");
 
                         self.prev_segment = next.clone();
                         self.worker.url(next.url)?;
@@ -95,15 +92,12 @@ impl LowLatency {
                         self.reload()?;
                         return Err(Error::Downgrade.into());
                     }
-                    None if reached_end => {
-                        //happy path
-                        debug!("Next segment is next prefetch segment");
-                    }
-                    _ => {
+                    NextSegment::Current => debug!("Next segment is next prefetch segment"),
+                    NextSegment::Unknown => {
                         if self.init {
                             self.init = false;
                         } else {
-                            info!("Failed to find next segment, jumping to newest");
+                            info!("Failed to find next segment, jumping to newest...");
                         }
 
                         self.prefetch_kind = PrefetchSegmentKind::Newest;
@@ -162,22 +156,21 @@ impl SegmentHandler for NormalLatency {
 impl NormalLatency {
     fn handle_segment(&mut self, time: Instant) -> Result<()> {
         let segment = match self.playlist.next_segment(&self.prev_segment)? {
-            (Some(segment), _) => {
-                if self.prev_segment == segment {
-                    info!("Playlist unchanged, retrying...");
-                    segment.duration.sleep_half(time.elapsed());
-
-                    return Ok(());
-                }
-
-                segment
+            NextSegment::Found(segment) => segment,
+            NextSegment::Current => {
+                playlist_unchanged(&self.prev_segment, time);
+                return Ok(());
             }
-            (None, _) => {
+            NextSegment::Unknown => {
                 if !self.should_sync {
                     info!("Failed to find next segment, jumping to newest");
                 }
 
-                self.playlist.last_segment()?
+                self.playlist
+                    .segments()?
+                    .into_iter()
+                    .last()
+                    .context("Failed to get last segment")?
             }
         };
 
@@ -191,4 +184,9 @@ impl NormalLatency {
         segment.duration.sleep(time.elapsed());
         Ok(())
     }
+}
+
+fn playlist_unchanged(segment: &Segment, time: Instant) {
+    info!("Playlist unchanged, retrying...");
+    segment.duration.sleep_half(time.elapsed());
 }
