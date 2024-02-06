@@ -114,3 +114,4 @@ Install [Rust](https://rustup.rs) then run `cargo install --locked --git https:/
 #### Cargo features
 - `colors` - Enable terminal colors
 - `http2` - Enable HTTP/2 support
+- `debug-logging` - Enable debug logging support (disabling saves some CPU cycles and binary size)

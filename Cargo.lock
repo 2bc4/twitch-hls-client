@@ -60,7 +60,7 @@ checksum = "06ea2b9bc92be3c2baa9334a323ebca2d6f074ff852cd1d7b11064035cd3868f"
 [[package]]
 name = "curl"
 version = "0.4.44"
-source = "git+https://github.com/2bc4/curl-rust.git#5c20e84afbfccfcf07829187eaef4b4de738ecdc"
+source = "git+https://github.com/2bc4/curl-rust.git#7b1a55ac0cf104eba0dcb0eff1489eca994f6382"
 dependencies = [
  "curl-sys",
  "libc",
@@ -72,7 +72,7 @@ dependencies = [
 [[package]]
 name = "curl-sys"
 version = "0.4.72+curl-8.6.1"
-source = "git+https://github.com/2bc4/curl-rust.git#5c20e84afbfccfcf07829187eaef4b4de738ecdc"
+source = "git+https://github.com/2bc4/curl-rust.git#7b1a55ac0cf104eba0dcb0eff1489eca994f6382"
 dependencies = [
  "cc",
  "libc",

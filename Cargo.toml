@@ -23,14 +23,15 @@ panic = "abort"
 strip = true
 
 [features]
-default = ["colors", "http2"]
+default = ["colors", "http2", "debug-logging"]
 colors = []
 http2 = ["curl/http2"]
+debug-logging = ["log/max_level_debug", "curl/verbose"]
 
 [dependencies]
 anyhow = "1.0.79"
 curl = { git = "https://github.com/2bc4/curl-rust.git", default-features = false, features = ["static-curl", "rustls"]}
 fastrand = "2.0.1"
-log = { version = "0.4.20", features = ["std", "max_level_debug"] }
+log = { version = "0.4.20", features = ["std", "max_level_info"] }
 pico-args = { version = "0.5.0", features = ["eq-separator"] }
 rustls-native-certs = { git = "https://github.com/2bc4/rustls-native-certs.git" }

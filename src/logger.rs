@@ -1,13 +1,12 @@
 use std::{
     env,
     io::{self, IsTerminal},
-    thread,
-    time::{Duration, SystemTime},
 };
 
 use anyhow::Result;
 use log::{self, Level, LevelFilter, Log, Metadata, Record};
 
+#[allow(dead_code)] //.enable_debug if debug logging feature disabled
 pub struct Logger {
     enable_debug: bool,
     enable_colors: bool,
@@ -21,8 +20,11 @@ impl Log for Logger {
     fn log(&self, record: &Record<'_>) {
         let level = record.level();
         match level {
+            #[cfg(feature = "debug-logging")]
             Level::Error | Level::Info | Level::Debug if self.enable_debug => {
-                let thread = thread::current();
+                use std::time::{Duration, SystemTime};
+
+                let thread = std::thread::current();
                 println!(
                     "{} {} ({}) {}: {}",
                     SystemTime::now()
@@ -56,6 +58,11 @@ impl Logger {
         } else {
             LevelFilter::Info
         });
+
+        #[cfg(not(feature = "debug-logging"))]
+        if enable_debug {
+            log::info!("Debug logging was disabled at build time");
+        }
 
         Ok(())
     }
