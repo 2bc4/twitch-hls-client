@@ -9,7 +9,6 @@ use std::{
 use anyhow::{ensure, Result};
 use curl::easy::{Easy2, Handler, InfoType, IpResolve, List, WriteError};
 use log::{debug, error, LevelFilter};
-use url::Url;
 
 use crate::{
     args::{ArgParse, Parser},
@@ -82,18 +81,18 @@ impl Agent {
         })
     }
 
-    pub fn get(&self, url: &Url) -> Result<TextRequest> {
+    pub fn get(&self, url: &str) -> Result<TextRequest> {
         TextRequest::get(Request::new(StringWriter::default(), url, self.clone())?)
     }
 
-    pub fn post(&self, url: &Url, data: &str) -> Result<TextRequest> {
+    pub fn post(&self, url: &str, data: &str) -> Result<TextRequest> {
         TextRequest::post(
             Request::new(StringWriter::default(), url, self.clone())?,
             data,
         )
     }
 
-    pub fn writer<T: Write>(&self, writer: T, url: &Url) -> Result<WriterRequest<T>> {
+    pub fn writer<T: Write>(&self, writer: T, url: &str) -> Result<WriterRequest<T>> {
         let request = WriterRequest::new(Request::new(writer, url, self.clone())?)?;
 
         //Currently this is the last time certs are used so they can be freed here
@@ -125,6 +124,10 @@ impl TextRequest {
         Ok(mem::take(&mut self.request.get_mut().0))
     }
 
+    pub fn encode(&mut self, data: &str) -> String {
+        self.request.handle.url_encode(data.as_bytes())
+    }
+
     fn get(mut request: Request<StringWriter>) -> Result<Self> {
         request.handle.get(true)?;
         Ok(Self { request })
@@ -146,7 +149,7 @@ where
 }
 
 impl<T: Write> WriterRequest<T> {
-    pub fn call(&mut self, url: &Url) -> Result<()> {
+    pub fn call(&mut self, url: &str) -> Result<()> {
         self.request.url(url)?;
         self.request.perform()
     }
@@ -160,7 +163,7 @@ impl<T: Write> WriterRequest<T> {
 }
 
 #[derive(Default)]
-struct StringWriter(pub String);
+struct StringWriter(String);
 
 impl Write for StringWriter {
     fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
@@ -186,7 +189,7 @@ where
 }
 
 impl<T: Write> Request<T> {
-    fn new(writer: T, url: &Url, agent: Agent) -> Result<Self> {
+    fn new(writer: T, url: &str, agent: Agent) -> Result<Self> {
         let mut request = Self {
             handle: Easy2::new(RequestHandler {
                 writer,
@@ -257,15 +260,15 @@ impl<T: Write> Request<T> {
         }
     }
 
-    fn url(&mut self, url: &Url) -> Result<()> {
+    fn url(&mut self, url: &str) -> Result<()> {
         if self.args.force_https {
             ensure!(
-                url.scheme() == "https",
+                url.starts_with("https"),
                 "URL protocol is not HTTPS and --force-https is enabled: {url}"
             );
         }
 
-        self.handle.url(url.as_ref())?;
+        self.handle.url(url)?;
         Ok(())
     }
 }
@@ -312,12 +315,7 @@ mod tests {
         })
         .unwrap();
 
-        assert!(agent
-            .get(&"http://not-https.invalid".parse().unwrap())
-            .is_err());
-
-        assert!(agent
-            .get(&"https://is-https.invalid".parse().unwrap())
-            .is_ok());
+        assert!(agent.get("http://not-https.invalid").is_err());
+        assert!(agent.get("https://is-https.invalid").is_ok());
     }
 }

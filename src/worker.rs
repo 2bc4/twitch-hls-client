@@ -5,12 +5,11 @@ use std::{
 
 use anyhow::{ensure, Context, Result};
 use log::debug;
-use url::Url;
 
 use crate::{http::Agent, player::Player};
 
 struct ChannelMessage {
-    url: Url,
+    url: String,
     should_sync: bool,
 }
 
@@ -23,7 +22,7 @@ pub struct Worker {
 }
 
 impl Worker {
-    pub fn spawn(player: Player, header_url: Option<Url>, agent: Agent) -> Result<Self> {
+    pub fn spawn(player: Player, header_url: Option<String>, agent: Agent) -> Result<Self> {
         let (url_tx, url_rx): (Sender<ChannelMessage>, Receiver<ChannelMessage>) = mpsc::channel();
         let (sync_tx, sync_rx): (SyncSender<()>, Receiver<()>) = mpsc::sync_channel(1);
 
@@ -70,15 +69,15 @@ impl Worker {
         })
     }
 
-    pub fn sync_url(&mut self, url: Url) -> Result<()> {
+    pub fn sync_url(&mut self, url: String) -> Result<()> {
         self.send(url, true)
     }
 
-    pub fn url(&mut self, url: Url) -> Result<()> {
+    pub fn url(&mut self, url: String) -> Result<()> {
         self.send(url, false)
     }
 
-    pub fn send(&mut self, url: Url, should_sync: bool) -> Result<()> {
+    pub fn send(&mut self, url: String, should_sync: bool) -> Result<()> {
         self.join_if_dead()?;
 
         debug!("Sending URL to worker: {url}");

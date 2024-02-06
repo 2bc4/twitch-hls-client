@@ -5,7 +5,6 @@ use std::{
 
 use anyhow::{ensure, Context, Result};
 use log::{debug, error, info};
-use url::Url;
 
 use crate::args::{ArgParse, Parser};
 
@@ -97,7 +96,7 @@ impl Player {
         })
     }
 
-    pub fn passthrough(pargs: &mut Args, url: &Url) -> Result<()> {
+    pub fn passthrough(pargs: &mut Args, url: &str) -> Result<()> {
         info!("Passing through playlist URL to player");
         if pargs.args.split_whitespace().any(|a| a == "-") {
             pargs.args = pargs

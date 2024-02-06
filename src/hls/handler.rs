@@ -3,8 +3,11 @@ use std::{ops::ControlFlow, time::Instant};
 use anyhow::Result;
 use log::{debug, info};
 
-use super::Error;
-use super::{playlist::MediaPlaylist, segment::PrefetchSegmentKind};
+use super::{
+    playlist::MediaPlaylist,
+    segment::{PrefetchSegmentKind, Segment},
+    Error,
+};
 
 use crate::worker::Worker;
 
@@ -17,7 +20,7 @@ pub trait SegmentHandler {
 pub struct LowLatency {
     playlist: MediaPlaylist,
     worker: Worker,
-    prev_url: String,
+    prev_segment: Segment,
     prefetch_kind: PrefetchSegmentKind,
     was_unchanged: bool,
     init: bool,
@@ -29,7 +32,7 @@ impl SegmentHandler for LowLatency {
         Self {
             playlist,
             worker,
-            prev_url: String::default(),
+            prev_segment: Segment::default(),
             prefetch_kind: PrefetchSegmentKind::Newest,
             was_unchanged: bool::default(),
             init: true,
@@ -51,7 +54,7 @@ impl SegmentHandler for LowLatency {
 impl LowLatency {
     pub fn downgrade(self) -> NormalLatency {
         let mut handler = NormalLatency::new(self.playlist, self.worker);
-        handler.prev_url = self.prev_url;
+        handler.prev_segment = self.prev_segment;
         handler.should_sync = false;
 
         handler
@@ -59,20 +62,19 @@ impl LowLatency {
 
     fn handle_segment(&mut self, time: Instant) -> Result<()> {
         match self.playlist.prefetch_segment(self.prefetch_kind) {
-            Ok(segment) if self.prev_url == segment.url.as_str() => {
+            Ok(segment) if self.prev_segment == segment => {
                 if self.was_unchanged {
                     info!("Playlist unchanged, retrying...");
                     segment.duration.sleep_half(time.elapsed());
                 } else {
                     //already have the next segment, send it
                     info!("Playlist unchanged, fetching next segment...");
-                    let url = self
+                    let segment = self
                         .playlist
-                        .prefetch_segment(PrefetchSegmentKind::Newest)?
-                        .url;
+                        .prefetch_segment(PrefetchSegmentKind::Newest)?;
 
-                    self.prev_url = url.to_string();
-                    self.worker.sync_url(url)?;
+                    self.prev_segment = segment.clone();
+                    self.worker.sync_url(segment.url)?;
 
                     self.was_unchanged = true;
                 }
@@ -80,13 +82,13 @@ impl LowLatency {
                 Ok(())
             }
             Ok(mut segment) => {
-                let (next, reached_end) = self.playlist.next_segment(&self.prev_url)?;
+                let (next, reached_end) = self.playlist.next_segment(&self.prev_segment)?;
                 match next {
                     Some(next) => {
                         //no longer using prefetch urls
                         info!("Downgrading to normal latency handler");
 
-                        self.prev_url = next.url.to_string();
+                        self.prev_segment = next.clone();
                         self.worker.url(next.url)?;
                         next.duration.sleep(time.elapsed());
 
@@ -109,7 +111,7 @@ impl LowLatency {
                     }
                 };
                 self.was_unchanged = false;
-                self.prev_url = segment.url.to_string();
+                self.prev_segment = segment.clone();
 
                 match self.prefetch_kind {
                     PrefetchSegmentKind::Newest => {
@@ -131,7 +133,7 @@ impl LowLatency {
 pub struct NormalLatency {
     playlist: MediaPlaylist,
     worker: Worker,
-    prev_url: String,
+    prev_segment: Segment,
     should_sync: bool,
 }
 
@@ -140,7 +142,7 @@ impl SegmentHandler for NormalLatency {
         Self {
             playlist,
             worker,
-            prev_url: String::default(),
+            prev_segment: Segment::default(),
             should_sync: true,
         }
     }
@@ -159,9 +161,9 @@ impl SegmentHandler for NormalLatency {
 
 impl NormalLatency {
     fn handle_segment(&mut self, time: Instant) -> Result<()> {
-        let segment = match self.playlist.next_segment(&self.prev_url)? {
+        let segment = match self.playlist.next_segment(&self.prev_segment)? {
             (Some(segment), _) => {
-                if self.prev_url == segment.url.as_str() {
+                if self.prev_segment == segment {
                     info!("Playlist unchanged, retrying...");
                     segment.duration.sleep_half(time.elapsed());
 
@@ -179,7 +181,7 @@ impl NormalLatency {
             }
         };
 
-        self.prev_url = segment.url.to_string();
+        self.prev_segment = segment.clone();
         self.worker.send(segment.url, self.should_sync)?;
         if self.should_sync {
             self.should_sync = false;

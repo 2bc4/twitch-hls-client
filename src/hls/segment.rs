@@ -2,11 +2,10 @@ use std::{str::FromStr, thread, time::Duration as StdDuration};
 
 use anyhow::{Context, Result};
 use log::debug;
-use url::Url;
 
 use super::Error;
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Default, Clone, PartialEq, Debug)]
 pub struct Duration(StdDuration);
 
 impl FromStr for Duration {
@@ -45,7 +44,7 @@ impl Duration {
 }
 
 //Used for av1/hevc streams
-pub struct Header(pub Option<Url>);
+pub struct Header(pub Option<String>);
 
 impl FromStr for Header {
     type Err = anyhow::Error;
@@ -58,28 +57,30 @@ impl FromStr for Header {
             .map(|s| s.1.replace('"', ""));
 
         if let Some(header_url) = header_url {
-            return Ok(Self(Some(
-                header_url
-                    .parse()
-                    .context("Failed to parse segment header URL")?,
-            )));
+            return Ok(Self(Some(header_url)));
         }
 
         Ok(Self(None))
     }
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(Default, Clone, Debug)]
 pub struct Segment {
     pub duration: Duration,
-    pub url: Url,
+    pub url: String,
+}
+
+impl PartialEq for Segment {
+    fn eq(&self, other: &Self) -> bool {
+        self.url == other.url
+    }
 }
 
 impl Segment {
     pub fn new(extinf: &str, url: &str) -> Result<Self> {
         Ok(Self {
             duration: extinf.parse()?,
-            url: url.parse()?,
+            url: url.to_owned(),
         })
     }
 }
@@ -118,7 +119,7 @@ mod tests {
     fn parse_header() {
         assert_eq!(
             PLAYLIST.parse::<Header>().unwrap().0,
-            Some(Url::parse("http://header.invalid").unwrap())
+            Some("http://header.invalid".to_string()),
         );
     }
 
@@ -131,7 +132,7 @@ mod tests {
                 .unwrap(),
             Segment {
                 duration: Duration(StdDuration::from_secs_f32(0.978)),
-                url: Url::parse("http://newest-prefetch-url.invalid").unwrap(),
+                url: "http://newest-prefetch-url.invalid".to_string(),
             },
         );
 
@@ -141,7 +142,7 @@ mod tests {
                 .unwrap(),
             Segment {
                 duration: Duration(StdDuration::from_secs_f32(0.978)),
-                url: Url::parse("http://next-prefetch-url.invalid").unwrap(),
+                url: "http://next-prefetch-url.invalid".to_string(),
             },
         );
     }

@@ -2,7 +2,6 @@ use std::{iter, ops::ControlFlow, time::Instant};
 
 use anyhow::{Context, Result};
 use log::{debug, error, info};
-use url::Url;
 
 use super::{
     segment::{Duration, Header, PrefetchSegmentKind, Segment},
@@ -15,7 +14,7 @@ use crate::{
 };
 
 pub struct MasterPlaylist {
-    pub url: Url,
+    pub url: String,
     pub low_latency: bool,
 }
 
@@ -57,37 +56,39 @@ impl MasterPlaylist {
     ) -> Result<Self> {
         info!("Fetching playlist for channel {channel}");
         let access_token = PlaybackAccessToken::new(client_id, auth_token, channel, agent)?;
-        let url = Url::parse_with_params(
-            &format!("{}{}.m3u8", constants::TWITCH_HLS_BASE, channel),
-            &[
-                ("acmb", "e30="),
-                ("allow_source", "true"),
-                ("allow_audio_only", "true"),
-                ("cdm", "wv"),
-                ("fast_bread", &low_latency.to_string()),
-                ("playlist_include_framerate", "true"),
-                ("player_backend", "mediaplayer"),
-                ("reassignments_supported", "true"),
-                ("supported_codecs", &codecs),
-                ("transcode_mode", "cbr_v1"),
-                ("p", &fastrand::u32(0..=9_999_999).to_string()),
-                ("play_session_id", &access_token.play_session_id),
-                ("sig", &access_token.signature),
-                ("token", &access_token.token),
-                ("player_version", "1.24.0-rc.1.3"),
-                ("warp", &low_latency.to_string()),
-                ("browser_family", "firefox"),
-                (
-                    "browser_version",
+        let url = &format!(
+            "{}{channel}.m3u8{}",
+            constants::TWITCH_HLS_BASE,
+            [
+                "?acmb=e30%3D",
+                "&allow_source=true",
+                "&allow_audio_only=true",
+                "&cdm=wv",
+                &format!("&fast_bread={}", &low_latency.to_string()),
+                "&playlist_include_framerate=true",
+                "&player_backend=mediaplayer",
+                "&reassignments_supported=true",
+                &format!("&supported_codecs={codecs}"),
+                "&transcode_mode=cbr_v1",
+                &format!("&p={}", &fastrand::u32(0..=9_999_999).to_string()),
+                &format!("&play_session_id={}", &access_token.play_session_id),
+                &format!("&sig={}", &access_token.signature),
+                &format!("&token={}", &access_token.token),
+                "&player_version=1.24.0-rc.1.3",
+                &format!("&warp={}", &low_latency.to_string()),
+                "&browser_family=firefox",
+                &format!(
+                    "&browser_version={}",
                     &constants::USER_AGENT[(constants::USER_AGENT.len() - 5)..],
                 ),
-                ("os_name", "Windows"),
-                ("os_version", "NT 10.0"),
-                ("platform", "web"),
-            ],
-        )?;
+                "&os_name=Windows",
+                "&os_version=NT+10.0",
+                "&platform=web",
+            ]
+            .join(""),
+        );
 
-        Self::parse_variant_playlist(&agent.get(&url)?.text().map_err(map_if_offline)?, quality)
+        Self::parse_variant_playlist(&agent.get(url)?.text().map_err(map_if_offline)?, quality)
     }
 
     fn fetch_proxy_playlist(
@@ -99,34 +100,32 @@ impl MasterPlaylist {
         agent: &Agent,
     ) -> Result<Self> {
         info!("Fetching playlist for channel {channel} (proxy)");
-        let servers = servers
-            .iter()
-            .map(|s| {
-                Url::parse_with_params(
-                    &s.replace("[channel]", channel),
-                    &[
-                        ("allow_source", "true"),
-                        ("allow_audio_only", "true"),
-                        ("fast_bread", &low_latency.to_string()),
-                        ("warp", &low_latency.to_string()),
-                        ("supported_codecs", &codecs),
-                        ("platform", "web"),
-                    ],
-                )
-            })
-            .collect::<Result<Vec<Url>, _>>()
-            .context("Invalid server URL")?;
-
         let playlist = servers
             .iter()
             .find_map(|s| {
                 info!(
                     "Using server {}://{}",
-                    s.scheme(),
-                    s.host_str().unwrap_or("<unknown>")
+                    s.split(':').next().unwrap_or("<unknown>"),
+                    s.split('/')
+                        .nth(2)
+                        .unwrap_or_else(|| s.split('?').next().unwrap_or("<unknown>")),
                 );
 
-                let mut request = match agent.get(s) {
+                let url = format!(
+                    "{}{}",
+                    &s.replace("[channel]", channel),
+                    [
+                        "?allow_source=true",
+                        "&allow_audio_only=true",
+                        &format!("&fast_bread={}", &low_latency.to_string()),
+                        &format!("&warp={}", &low_latency.to_string()),
+                        &format!("&supported_codecs={codecs}"),
+                        "&platform=web",
+                    ]
+                    .join(""),
+                );
+
+                let mut request = match agent.get(&url) {
                     Ok(request) => request,
                     Err(e) => {
                         error!("{e}");
@@ -206,7 +205,7 @@ impl MediaPlaylist {
         Ok(())
     }
 
-    pub fn header(&self) -> Result<Option<Url>> {
+    pub fn header(&self) -> Result<Option<String>> {
         Ok(self.playlist.parse::<Header>()?.0)
     }
 
@@ -214,9 +213,9 @@ impl MediaPlaylist {
         kind.to_segment(self.last_duration()?, &self.playlist)
     }
 
-    pub fn next_segment(&self, prev_url: &str) -> Result<(Option<Segment>, bool)> {
+    pub fn next_segment(&self, prev: &Segment) -> Result<(Option<Segment>, bool)> {
         let segments = self.segments()?;
-        if let Some(idx) = segments.iter().position(|s| prev_url == s.url.as_str()) {
+        if let Some(idx) = segments.iter().position(|s| prev == s) {
             if idx + 1 == segments.len() {
                 return Ok((None, true));
             }
@@ -315,7 +314,7 @@ impl PlaybackAccessToken {
             "}",
         "}").replace("{channel}", channel);
 
-        let mut request = agent.post(&constants::TWITCH_GQL_ENDPOINT.parse()?, &gql)?;
+        let mut request = agent.post(constants::TWITCH_GQL_ENDPOINT, &gql)?;
         request.header("Content-Type: text/plain;charset=UTF-8")?;
         request.header(&format!("X-Device-ID: {}", &Self::gen_id()))?;
         request.header(&format!(
@@ -335,7 +334,7 @@ impl PlaybackAccessToken {
                 let start = response.find(r#"{\"adblock\""#).ok_or(Error::Offline)?;
                 let end = response.find(r#"","signature""#).ok_or(Error::Offline)?;
 
-                response[start..end].replace('\\', "")
+                request.encode(&response[start..end].replace('\\', ""))
             },
             signature: response
                 .split_once(r#""signature":""#)
@@ -357,7 +356,7 @@ impl PlaybackAccessToken {
         let client_id = if let Some(client_id) = client_id {
             client_id.to_owned()
         } else if let Some(auth_token) = auth_token {
-            let mut request = agent.get(&constants::TWITCH_OAUTH_ENDPOINT.parse()?)?;
+            let mut request = agent.get(constants::TWITCH_OAUTH_ENDPOINT)?;
             request.header(&format!("Authorization: OAuth {auth_token}"))?;
 
             request
@@ -425,7 +424,7 @@ http://audio-only.invalid"#;
             playlist: PLAYLIST.to_owned(),
             request: Agent::new(&http::Args::default())
                 .unwrap()
-                .get(&"http://playlist.invalid".parse().unwrap())
+                .get("http://playlist.invalid")
                 .unwrap(),
         }
     }
@@ -449,7 +448,7 @@ http://audio-only.invalid"#;
                 MasterPlaylist::parse_variant_playlist(MASTER_PLAYLIST, quality)
                     .unwrap()
                     .url,
-                Url::parse(&format!("http://{}.invalid", host.unwrap_or(quality))).unwrap()
+                format!("http://{}.invalid", host.unwrap_or(quality)),
             );
         }
     }
