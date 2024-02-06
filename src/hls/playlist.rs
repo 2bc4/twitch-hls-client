@@ -243,7 +243,7 @@ impl MediaPlaylist {
             .playlist
             .lines()
             .rev()
-            .find(|l| l.starts_with("#EXTINF") && l.contains("Amazon"))
+            .find(|l| l.starts_with("#EXTINF") && l.contains('|'))
             .map(|_| self.last_duration())
             .transpose()?;
 
@@ -262,7 +262,7 @@ impl MediaPlaylist {
 
         let mut segments = Vec::new();
         while let Some(extinf) = lines.next() {
-            if extinf.starts_with("#EXTINF") && !extinf.contains("Amazon") {
+            if extinf.starts_with("#EXTINF") && !extinf.contains('|') {
                 if let Some(url) = lines.next() {
                     segments.push(Segment::new(extinf, url)?);
                 }
