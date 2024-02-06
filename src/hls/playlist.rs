@@ -239,15 +239,8 @@ impl MediaPlaylist {
     }
 
     pub fn filter_if_ad(&self, time: &Instant) -> Result<ControlFlow<()>> {
-        let duration = self
-            .playlist
-            .lines()
-            .rev()
-            .find(|l| l.starts_with("#EXTINF") && l.contains('|'))
-            .map(|_| self.last_duration())
-            .transpose()?;
-
-        if let Some(duration) = duration {
+        let duration = self.last_duration()?;
+        if duration.is_ad {
             info!("Filtering ad segment...");
             duration.sleep(time.elapsed());
 
@@ -262,9 +255,12 @@ impl MediaPlaylist {
 
         let mut segments = Vec::new();
         while let Some(extinf) = lines.next() {
-            if extinf.starts_with("#EXTINF") && !extinf.contains('|') {
-                if let Some(url) = lines.next() {
-                    segments.push(Segment::new(extinf, url)?);
+            if extinf.starts_with("#EXTINF") {
+                let duration = extinf.parse::<Duration>()?;
+                if !duration.is_ad {
+                    if let Some(url) = lines.next() {
+                        segments.push(Segment::new(duration, url)?);
+                    }
                 }
             }
         }
