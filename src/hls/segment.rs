@@ -135,7 +135,10 @@ mod tests {
                 .prefetch_segment(PrefetchSegmentKind::Newest)
                 .unwrap(),
             Segment {
-                duration: Duration(StdDuration::from_secs_f32(0.978)),
+                duration: Duration {
+                    duration: StdDuration::from_secs_f32(0.978),
+                    is_ad: false,
+                },
                 url: "http://newest-prefetch-url.invalid".to_string(),
             },
         );
@@ -145,7 +148,10 @@ mod tests {
                 .prefetch_segment(PrefetchSegmentKind::Next)
                 .unwrap(),
             Segment {
-                duration: Duration(StdDuration::from_secs_f32(0.978)),
+                duration: Duration {
+                    duration: StdDuration::from_secs_f32(0.978),
+                    is_ad: false,
+                },
                 url: "http://next-prefetch-url.invalid".to_string(),
             },
         );
