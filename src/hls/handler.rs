@@ -1,11 +1,11 @@
 use std::{ops::ControlFlow, time::Instant};
 
 use anyhow::{Context, Result};
-use log::{debug, info};
+use log::info;
 
 use super::{
-    playlist::{MediaPlaylist, NextSegment, PrefetchSegmentKind},
-    segment::Segment,
+    playlist::MediaPlaylist,
+    segment::{NextSegment, Segment},
     Error,
 };
 
@@ -21,8 +21,6 @@ pub struct LowLatency {
     playlist: MediaPlaylist,
     worker: Worker,
     prev_segment: Segment,
-    prefetch_kind: PrefetchSegmentKind,
-    was_unchanged: bool,
     init: bool,
 }
 
@@ -33,8 +31,6 @@ impl SegmentHandler for LowLatency {
             playlist,
             worker,
             prev_segment: Segment::default(),
-            prefetch_kind: PrefetchSegmentKind::Newest,
-            was_unchanged: bool::default(),
             init: true,
         }
     }
@@ -61,65 +57,53 @@ impl LowLatency {
     }
 
     fn handle_segment(&mut self, time: Instant) -> Result<()> {
-        match self.playlist.prefetch_segment(self.prefetch_kind) {
-            Ok(segment) if self.prev_segment == segment => {
-                if self.was_unchanged {
-                    playlist_unchanged(&segment, time);
-                } else {
-                    //already have the next segment, send it
-                    debug!("Playlist unchanged, fetching next segment...");
-                    let segment = self
-                        .playlist
-                        .prefetch_segment(PrefetchSegmentKind::Newest)?;
-
-                    self.prev_segment = segment.clone();
-                    self.worker.sync_url(segment.url)?;
-
-                    self.was_unchanged = true;
-                }
-
-                Ok(())
-            }
-            Ok(mut segment) => {
-                match self.playlist.next_segment(&self.prev_segment)? {
-                    NextSegment::Found(next) => {
+        let segments = self.playlist.segments()?;
+        match self.prev_segment.find_next(&segments)? {
+            NextSegment::Found(segment) => {
+                self.prev_segment = segment.clone();
+                match segment {
+                    Segment::Normal(duration, url) => {
                         //no longer using prefetch urls
 
-                        self.prev_segment = next.clone();
-                        self.worker.url(next.url)?;
-                        next.duration.sleep(time.elapsed());
+                        self.worker.url(url)?;
+                        duration.sleep(time.elapsed());
 
                         self.reload()?;
                         return Err(Error::Downgrade.into());
                     }
-                    NextSegment::Current => debug!("Next segment is next prefetch segment"),
-                    NextSegment::Unknown => {
-                        if self.init {
-                            self.init = false;
-                        } else {
-                            info!("Failed to find next segment, jumping to newest...");
-                        }
-
-                        self.prefetch_kind = PrefetchSegmentKind::Newest;
-                        segment = self.playlist.prefetch_segment(self.prefetch_kind)?;
+                    Segment::NextPrefetch(duration, url) => {
+                        self.worker.url(url)?;
+                        duration.sleep(time.elapsed());
                     }
-                };
-                self.was_unchanged = false;
-                self.prev_segment = segment.clone();
+                    Segment::NewestPrefetch(url) => self.worker.sync_url(url)?,
+                    Segment::Unknown => unreachable!(),
+                }
 
-                match self.prefetch_kind {
-                    PrefetchSegmentKind::Newest => {
-                        self.worker.sync_url(segment.url)?;
-                        self.prefetch_kind = PrefetchSegmentKind::Next;
-                        return Ok(());
-                    }
-                    PrefetchSegmentKind::Next => self.worker.url(segment.url)?,
-                };
-
-                segment.duration.sleep(time.elapsed());
                 Ok(())
             }
-            Err(e) => Err(e),
+            NextSegment::Current => {
+                playlist_unchanged(&self.prev_segment, time)?;
+                Ok(())
+            }
+            NextSegment::Unknown => {
+                if self.init {
+                    self.init = false;
+                } else {
+                    info!("Failed to find next segment, jumping to newest...");
+                }
+
+                let segment = segments
+                    .into_iter()
+                    .last()
+                    .context("Failed to find newest segment")?;
+
+                self.prev_segment = segment.clone();
+
+                let (_, url) = segment.destructure();
+                self.worker.sync_url(url)?;
+
+                Ok(())
+            }
         }
     }
 }
@@ -155,38 +139,63 @@ impl SegmentHandler for NormalLatency {
 
 impl NormalLatency {
     fn handle_segment(&mut self, time: Instant) -> Result<()> {
-        let segment = match self.playlist.next_segment(&self.prev_segment)? {
-            NextSegment::Found(segment) => segment,
+        let segments = self.playlist.segments()?;
+        match self.prev_segment.find_next(&segments)? {
+            NextSegment::Found(segment) => {
+                self.prev_segment = segment.clone();
+                match segment {
+                    Segment::Normal(duration, url) => {
+                        self.worker.send(url, self.should_sync)?;
+                        duration.sleep(time.elapsed());
+                    }
+                    Segment::NextPrefetch(_, _) | Segment::NewestPrefetch(_) => {
+                        playlist_unchanged(&self.prev_segment, time)?; //downgraded from LL handler
+                    }
+                    Segment::Unknown => unreachable!(),
+                };
+
+                Ok(())
+            }
             NextSegment::Current => {
-                playlist_unchanged(&self.prev_segment, time);
-                return Ok(());
+                playlist_unchanged(&self.prev_segment, time)?; //not downgraded
+                Ok(())
             }
             NextSegment::Unknown => {
                 if !self.should_sync {
-                    info!("Failed to find next segment, jumping to newest");
+                    info!("Failed to find next segment, jumping to newest...");
                 }
 
-                self.playlist
-                    .segments()?
+                let segment = segments
                     .into_iter()
-                    .last()
-                    .context("Failed to get last segment")?
+                    .rev()
+                    .find(|s| matches!(s, Segment::Normal(_, _)))
+                    .context("Failed to find last segment")?;
+
+                self.prev_segment = segment.clone();
+                let (duration, url) = segment.destructure();
+
+                self.worker.send(url, self.should_sync)?;
+                if self.should_sync {
+                    self.should_sync = false;
+                    return Ok(());
+                }
+
+                duration
+                    .context("Invalid duration in segment")?
+                    .sleep(time.elapsed());
+
+                Ok(())
             }
-        };
-
-        self.prev_segment = segment.clone();
-        self.worker.send(segment.url, self.should_sync)?;
-        if self.should_sync {
-            self.should_sync = false;
-            return Ok(());
         }
-
-        segment.duration.sleep(time.elapsed());
-        Ok(())
     }
 }
 
-fn playlist_unchanged(segment: &Segment, time: Instant) {
+fn playlist_unchanged(segment: &Segment, time: Instant) -> Result<()> {
     info!("Playlist unchanged, retrying...");
-    segment.duration.sleep_half(time.elapsed());
+    let (duration, _) = segment.destructure_ref();
+    duration
+        .context("Failed to get duration from segment while retrying")?
+        .sleep_half(time.elapsed());
+
+    Ok(())
 }

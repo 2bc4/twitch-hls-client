@@ -67,20 +67,74 @@ impl Duration {
 }
 
 #[derive(Default, Clone, Debug)]
-pub struct Segment {
-    pub duration: Duration,
-    pub url: String,
+pub enum Segment {
+    Normal(Duration, String),
+    NextPrefetch(Duration, String),
+    NewestPrefetch(String),
+
+    #[default]
+    Unknown,
 }
 
 impl PartialEq for Segment {
     fn eq(&self, other: &Self) -> bool {
-        self.url == other.url
+        let (_, self_url) = self.destructure_ref();
+        let (_, other_url) = other.destructure_ref();
+
+        self_url == other_url
     }
+}
+
+impl Segment {
+    pub fn find_next(&self, segments: &[Segment]) -> Result<NextSegment> {
+        debug!("Previous: {self:?}\n");
+        if let Some(idx) = segments.iter().position(|s| self == s) {
+            let idx = idx + 1;
+            if idx == segments.len() {
+                return Ok(NextSegment::Current);
+            }
+
+            return Ok(NextSegment::Found(
+                segments
+                    .get(idx)
+                    .context("Failed to get next segment")?
+                    .clone(),
+            ));
+        }
+
+        Ok(NextSegment::Unknown)
+    }
+
+    pub fn destructure(self) -> (Option<Duration>, String) {
+        match self {
+            Self::Normal(duration, url) | Self::NextPrefetch(duration, url) => {
+                (Some(duration), url)
+            }
+            Self::NewestPrefetch(url) => (None, url),
+            Self::Unknown => (None, String::default()),
+        }
+    }
+
+    pub fn destructure_ref(&self) -> (Option<&Duration>, Option<&String>) {
+        match self {
+            Self::Normal(duration, url) | Self::NextPrefetch(duration, url) => {
+                (Some(duration), Some(url))
+            }
+            Self::NewestPrefetch(url) => (None, Some(url)),
+            Self::Unknown => (None, None),
+        }
+    }
+}
+
+pub enum NextSegment {
+    Found(Segment),
+    Current,
+    Unknown,
 }
 
 #[cfg(test)]
 mod tests {
-    use super::super::playlist::{tests::create_playlist, PrefetchSegmentKind};
+    use super::super::playlist::tests::create_playlist;
     use super::super::tests::PLAYLIST;
     use super::*;
 
@@ -95,30 +149,23 @@ mod tests {
     #[test]
     fn parse_prefetch_segments() {
         let playlist = create_playlist();
+
+        let segments = playlist.segments().unwrap();
         assert_eq!(
-            playlist
-                .prefetch_segment(PrefetchSegmentKind::Newest)
-                .unwrap(),
-            Segment {
-                duration: Duration {
-                    duration: StdDuration::from_secs_f32(0.978),
-                    is_ad: false,
-                },
-                url: "http://newest-prefetch-url.invalid".to_string(),
-            },
+            segments.into_iter().last().unwrap(),
+            Segment::NewestPrefetch("http://newest-prefetch-url.invalid".to_string()),
         );
 
+        let segments = playlist.segments().unwrap();
         assert_eq!(
-            playlist
-                .prefetch_segment(PrefetchSegmentKind::Next)
-                .unwrap(),
-            Segment {
-                duration: Duration {
+            segments[segments.len() - 2],
+            Segment::NextPrefetch(
+                Duration {
                     duration: StdDuration::from_secs_f32(0.978),
                     is_ad: false,
                 },
-                url: "http://next-prefetch-url.invalid".to_string(),
-            },
+                "http://next-prefetch-url.invalid".to_string(),
+            ),
         );
     }
 }
