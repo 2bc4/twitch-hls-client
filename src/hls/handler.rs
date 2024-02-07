@@ -1,7 +1,7 @@
 use std::{ops::ControlFlow, time::Instant};
 
 use anyhow::{Context, Result};
-use log::info;
+use log::{debug, info};
 
 use super::{
     playlist::MediaPlaylist,
@@ -40,30 +40,19 @@ impl SegmentHandler for LowLatency {
     }
 
     fn process(&mut self, time: Instant) -> Result<()> {
-        match self.playlist.filter_if_ad(&time)? {
-            ControlFlow::Continue(()) => self.handle_segment(time),
-            ControlFlow::Break(()) => Ok(()),
-        }
-    }
-}
-
-impl LowLatency {
-    pub fn downgrade(self) -> NormalLatency {
-        let mut handler = NormalLatency::new(self.playlist, self.worker);
-        handler.prev_segment = self.prev_segment;
-        handler.should_sync = false;
-
-        handler
-    }
-
-    fn handle_segment(&mut self, time: Instant) -> Result<()> {
         let segments = self.playlist.segments()?;
+        match filter_if_ad(&segments, &time) {
+            ControlFlow::Continue(()) => (),
+            ControlFlow::Break(()) => return Ok(()),
+        }
+
         match self.prev_segment.find_next(&segments)? {
             NextSegment::Found(segment) => {
                 self.prev_segment = segment.clone();
                 match segment {
                     Segment::Normal(duration, url) => {
                         //no longer using prefetch urls
+                        debug!("Downgrading to normal latency handler");
 
                         self.worker.url(url)?;
                         duration.sleep(time.elapsed());
@@ -108,6 +97,16 @@ impl LowLatency {
     }
 }
 
+impl LowLatency {
+    pub fn downgrade(self) -> NormalLatency {
+        let mut handler = NormalLatency::new(self.playlist, self.worker);
+        handler.prev_segment = self.prev_segment;
+        handler.should_sync = false;
+
+        handler
+    }
+}
+
 pub struct NormalLatency {
     playlist: MediaPlaylist,
     worker: Worker,
@@ -130,29 +129,25 @@ impl SegmentHandler for NormalLatency {
     }
 
     fn process(&mut self, time: Instant) -> Result<()> {
-        match self.playlist.filter_if_ad(&time)? {
-            ControlFlow::Continue(()) => self.handle_segment(time),
-            ControlFlow::Break(()) => Ok(()),
-        }
-    }
-}
-
-impl NormalLatency {
-    fn handle_segment(&mut self, time: Instant) -> Result<()> {
         let segments = self.playlist.segments()?;
+        match filter_if_ad(&segments, &time) {
+            ControlFlow::Continue(()) => (),
+            ControlFlow::Break(()) => return Ok(()),
+        }
+
         match self.prev_segment.find_next(&segments)? {
             NextSegment::Found(segment) => {
                 self.prev_segment = segment.clone();
                 match segment {
                     Segment::Normal(duration, url) => {
-                        self.worker.send(url, self.should_sync)?;
+                        self.worker.url(url)?;
                         duration.sleep(time.elapsed());
                     }
                     Segment::NextPrefetch(_, _) | Segment::NewestPrefetch(_) => {
                         playlist_unchanged(&self.prev_segment, time)?; //downgraded from LL handler
                     }
                     Segment::Unknown => unreachable!(),
-                };
+                }
 
                 Ok(())
             }
@@ -169,7 +164,7 @@ impl NormalLatency {
                     .into_iter()
                     .rev()
                     .find(|s| matches!(s, Segment::Normal(_, _)))
-                    .context("Failed to find last segment")?;
+                    .context("Failed to find newest segment")?;
 
                 self.prev_segment = segment.clone();
                 let (duration, url) = segment.destructure();
@@ -181,7 +176,7 @@ impl NormalLatency {
                 }
 
                 duration
-                    .context("Invalid duration in segment")?
+                    .context("Failed to find segment duration")?
                     .sleep(time.elapsed());
 
                 Ok(())
@@ -194,8 +189,26 @@ fn playlist_unchanged(segment: &Segment, time: Instant) -> Result<()> {
     info!("Playlist unchanged, retrying...");
     let (duration, _) = segment.destructure_ref();
     duration
-        .context("Failed to get duration from segment while retrying")?
+        .context("Failed to find segment duration from segment while retrying")?
         .sleep_half(time.elapsed());
 
     Ok(())
+}
+
+fn filter_if_ad(segments: &[Segment], time: &Instant) -> ControlFlow<()> {
+    let duration = segments.iter().rev().find_map(|s| match s {
+        Segment::Normal(duration, _) => Some(duration),
+        _ => None,
+    });
+
+    if let Some(duration) = duration {
+        if duration.is_ad {
+            info!("Filtering ad segment...");
+            duration.sleep(time.elapsed());
+
+            return ControlFlow::Break(());
+        }
+    }
+
+    ControlFlow::Continue(())
 }

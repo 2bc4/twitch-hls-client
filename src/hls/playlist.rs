@@ -1,10 +1,10 @@
-use std::{iter, ops::ControlFlow, time::Instant};
+use std::iter;
 
 use anyhow::{Context, Result};
 use log::{debug, error, info};
 
 use super::{
-    segment::{Duration, Header, Segment},
+    segment::{Header, Segment},
     Args, Error,
 };
 
@@ -215,15 +215,17 @@ impl MediaPlaylist {
         let mut segments = Vec::new();
         while let Some(line) = lines.next() {
             if line.starts_with("#EXTINF") {
-                let duration = line.parse::<Duration>()?;
-                if !duration.is_ad {
-                    if let Some(url) = lines.next() {
-                        segments.push(Segment::Normal(duration, url.to_owned()));
-                    }
+                if let Some(url) = lines.next() {
+                    segments.push(Segment::Normal(line.parse()?, url.to_owned()));
                 }
             } else if Self::is_prefetch_segment(line) {
                 segments.push(Segment::NextPrefetch(
-                    self.last_duration()?,
+                    self.playlist
+                        .lines()
+                        .rev()
+                        .find(|l| l.starts_with("#EXTINF"))
+                        .context("Failed to find prefetch segment duration")?
+                        .parse()?,
                     line.split_once(':')
                         .context("Failed to parse next prefetch URL")?
                         .1
@@ -244,27 +246,6 @@ impl MediaPlaylist {
         }
 
         Ok(segments)
-    }
-
-    pub fn filter_if_ad(&self, time: &Instant) -> Result<ControlFlow<()>> {
-        let duration = self.last_duration()?;
-        if duration.is_ad {
-            info!("Filtering ad segment...");
-            duration.sleep(time.elapsed());
-
-            return Ok(ControlFlow::Break(()));
-        }
-
-        Ok(ControlFlow::Continue(()))
-    }
-
-    fn last_duration(&self) -> Result<Duration> {
-        self.playlist
-            .lines()
-            .rev()
-            .find(|l| l.starts_with("#EXTINF"))
-            .context("Failed to get prefetch segment duration")?
-            .parse()
     }
 
     fn is_prefetch_segment(line: &str) -> bool {
