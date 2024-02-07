@@ -231,20 +231,12 @@ impl MediaPlaylist {
                         .find(|l| l.starts_with("#EXTINF"))
                         .context("Failed to find prefetch segment duration")?
                         .parse()?,
-                    line.split_once(':')
-                        .context("Failed to parse next prefetch URL")?
-                        .1
-                        .to_owned(),
+                    Self::split_prefetch_url(line)?,
                 ));
 
                 if let Some(line) = lines.next() {
                     if Self::is_prefetch_segment(line) {
-                        segments.push(Segment::NewestPrefetch(
-                            line.split_once(':')
-                                .context("Failed to parse newest prefetch URL")?
-                                .1
-                                .to_owned(),
-                        ));
+                        segments.push(Segment::NewestPrefetch(Self::split_prefetch_url(line)?));
                     }
                 }
             }
@@ -255,6 +247,14 @@ impl MediaPlaylist {
 
     fn is_prefetch_segment(line: &str) -> bool {
         line.starts_with("#EXT-X-TWITCH-PREFETCH")
+    }
+
+    fn split_prefetch_url(line: &str) -> Result<String> {
+        Ok(line
+            .split_once(':')
+            .context("Failed to parse prefetch URL")?
+            .1
+            .to_owned())
     }
 }
 
