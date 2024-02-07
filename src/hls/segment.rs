@@ -1,4 +1,4 @@
-use std::{str::FromStr, thread, time::Duration as StdDuration};
+use std::{mem, str::FromStr, thread, time::Duration as StdDuration};
 
 use anyhow::{Context, Result};
 use log::debug;
@@ -86,7 +86,7 @@ impl PartialEq for Segment {
 }
 
 impl Segment {
-    pub fn find_next(&self, segments: &[Segment]) -> Result<NextSegment> {
+    pub fn find_next(&self, segments: &mut [Segment]) -> Result<NextSegment> {
         debug!("Previous: {self:?}\n");
         if let Some(idx) = segments.iter().position(|s| self == s) {
             let idx = idx + 1;
@@ -95,10 +95,7 @@ impl Segment {
             }
 
             return Ok(NextSegment::Found(
-                segments
-                    .get(idx)
-                    .context("Failed to get next segment")?
-                    .clone(),
+                mem::take(&mut segments[idx]), //shouldn't panic, already did bounds check
             ));
         }
 

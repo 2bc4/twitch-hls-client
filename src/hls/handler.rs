@@ -40,13 +40,13 @@ impl SegmentHandler for LowLatency {
     }
 
     fn process(&mut self, time: Instant) -> Result<()> {
-        let segments = self.playlist.segments()?;
+        let mut segments = self.playlist.segments()?;
         match filter_if_ad(&segments, &time) {
             ControlFlow::Continue(()) => (),
             ControlFlow::Break(()) => return Ok(()),
         }
 
-        match self.prev_segment.find_next(&segments)? {
+        match self.prev_segment.find_next(segments.as_mut_slice())? {
             NextSegment::Found(segment) => {
                 self.prev_segment = segment.clone();
                 match segment {
@@ -129,17 +129,18 @@ impl SegmentHandler for NormalLatency {
     }
 
     fn process(&mut self, time: Instant) -> Result<()> {
-        let segments = self.playlist.segments()?;
+        let mut segments = self.playlist.segments()?;
         match filter_if_ad(&segments, &time) {
             ControlFlow::Continue(()) => (),
             ControlFlow::Break(()) => return Ok(()),
         }
 
-        match self.prev_segment.find_next(&segments)? {
+        match self.prev_segment.find_next(segments.as_mut_slice())? {
             NextSegment::Found(segment) => {
-                self.prev_segment = segment.clone();
                 match segment {
                     Segment::Normal(duration, url) => {
+                        self.prev_segment = Segment::Normal(duration.clone(), url.clone());
+
                         self.worker.url(url)?;
                         duration.sleep(time.elapsed());
                     }
@@ -189,7 +190,7 @@ fn playlist_unchanged(segment: &Segment, time: Instant) -> Result<()> {
     info!("Playlist unchanged, retrying...");
     let (duration, _) = segment.destructure_ref();
     duration
-        .context("Failed to find segment duration from segment while retrying")?
+        .context("Failed to get segment duration while retrying")?
         .sleep_half(time.elapsed());
 
     Ok(())
