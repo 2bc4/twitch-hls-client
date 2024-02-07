@@ -233,7 +233,7 @@ impl<T: Write> Request<T> {
                     return Err(io_error.into());
                 }
                 Err(e) if retries < self.args.retries => {
-                    error!("{e}");
+                    error!("http: {e}");
                     retries += 1;
                 }
                 Err(e) => return Err(e.into()),
