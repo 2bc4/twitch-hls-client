@@ -77,7 +77,7 @@ impl Worker {
         self.send(url, false)
     }
 
-    pub fn send(&mut self, url: String, should_sync: bool) -> Result<()> {
+    fn send(&mut self, url: String, should_sync: bool) -> Result<()> {
         self.join_if_dead()?;
 
         debug!("Sending URL to worker: {url}");
