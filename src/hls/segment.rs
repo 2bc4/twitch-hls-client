@@ -86,20 +86,19 @@ impl PartialEq for Segment {
 }
 
 impl Segment {
-    pub fn find_next(&self, segments: &mut [Segment]) -> Result<NextSegment> {
+    pub fn find_next(&self, segments: &mut [Segment]) -> Option<Segment> {
         debug!("Previous: {self:?}\n");
         if let Some(idx) = segments.iter().position(|s| self == s) {
             let idx = idx + 1;
             if idx == segments.len() {
-                return Ok(NextSegment::Current);
+                return None;
             }
 
-            return Ok(NextSegment::Found(
-                mem::take(&mut segments[idx]), //shouldn't panic, already did bounds check
-            ));
+            //shouldn't panic, already did bounds check
+            return Some(mem::take(&mut segments[idx]));
         }
 
-        Ok(NextSegment::Unknown)
+        Some(Segment::Unknown)
     }
 
     pub fn destructure(self) -> (Option<Duration>, String) {
@@ -121,12 +120,6 @@ impl Segment {
             Self::Unknown => (None, None),
         }
     }
-}
-
-pub enum NextSegment {
-    Found(Segment),
-    Current,
-    Unknown,
 }
 
 #[cfg(test)]
