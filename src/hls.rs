@@ -1,6 +1,5 @@
 #![allow(clippy::unnecessary_wraps)] //function pointers
 
-pub mod handler;
 pub mod playlist;
 pub mod segment;
 
@@ -11,7 +10,6 @@ use std::fmt;
 #[derive(Debug)]
 pub enum Error {
     Offline,
-    Downgrade,
 }
 
 impl std::error::Error for Error {}
@@ -20,12 +18,6 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Offline => write!(f, "Stream is offline or unavailable"),
-            Self::Downgrade => {
-                write!(
-                    f,
-                    "Unhandled attempt to downgrade to normal latency handler"
-                )
-            }
         }
     }
 }
@@ -37,7 +29,7 @@ pub struct Args {
     pub auth_token: Option<String>,
     pub never_proxy: Option<Vec<String>>,
     pub codecs: String,
-    pub low_latency: bool,
+    pub no_low_latency: bool,
     pub channel: String,
     pub quality: String,
 }
@@ -46,7 +38,7 @@ impl Default for Args {
     fn default() -> Self {
         Self {
             codecs: "av1,h265,h264".to_owned(),
-            low_latency: true,
+            no_low_latency: bool::default(),
             servers: Option::default(),
             client_id: Option::default(),
             auth_token: Option::default(),
@@ -64,10 +56,7 @@ impl ArgParse for Args {
         parser.parse_fn(&mut self.auth_token, "--auth-token", Self::parse_optstring)?;
         parser.parse(&mut self.codecs, "--codecs")?;
         parser.parse_fn(&mut self.never_proxy, "--never-proxy", Self::split_comma)?;
-
-        let mut no_low_latency = bool::default();
-        parser.parse_switch(&mut no_low_latency, "--no-low-latency")?;
-        self.low_latency = !no_low_latency;
+        parser.parse_switch(&mut self.no_low_latency, "--no-low-latency")?;
 
         self.channel = parser
             .parse_free_required::<String>()

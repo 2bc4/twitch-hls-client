@@ -16,15 +16,15 @@ use log::{debug, info};
 
 use args::Args;
 use hls::{
-    handler::{LowLatency, NormalLatency, SegmentHandler},
     playlist::{MasterPlaylist, MediaPlaylist},
+    segment::Handler,
 };
 use http::Agent;
 use logger::Logger;
 use player::Player;
 use worker::Worker;
 
-fn main_loop(handler: &mut impl SegmentHandler) -> Result<()> {
+fn main_loop(mut handler: Handler) -> Result<()> {
     handler.process(Instant::now())?;
     loop {
         let time = Instant::now();
@@ -35,7 +35,7 @@ fn main_loop(handler: &mut impl SegmentHandler) -> Result<()> {
 }
 
 fn main() -> Result<()> {
-    let (playlist, worker, low_latency) = {
+    let handler = {
         let mut args = Args::new()?;
 
         Logger::init(args.debug)?;
@@ -63,23 +63,10 @@ fn main() -> Result<()> {
             agent.clone(),
         )?;
 
-        (playlist, worker, master_playlist.low_latency)
+        Handler::new(playlist, worker)
     };
 
-    let result = if low_latency {
-        let mut handler = LowLatency::new(playlist, worker);
-        match main_loop(&mut handler) {
-            Ok(()) => Ok(()),
-            Err(e) => match e.downcast_ref::<hls::Error>() {
-                Some(hls::Error::Downgrade) => main_loop(&mut handler.downgrade()),
-                _ => Err(e),
-            },
-        }
-    } else {
-        main_loop(&mut NormalLatency::new(playlist, worker))
-    };
-
-    match result {
+    match main_loop(handler) {
         Ok(()) => Ok(()),
         Err(e) => {
             if matches!(e.downcast_ref::<hls::Error>(), Some(hls::Error::Offline)) {

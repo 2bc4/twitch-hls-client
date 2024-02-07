@@ -20,9 +20,10 @@ pub struct MasterPlaylist {
 
 impl MasterPlaylist {
     pub fn new(args: &Args, agent: &Agent) -> Result<Self> {
+        let low_latency = !args.no_low_latency;
         let mut master_playlist = if let Some(ref servers) = args.servers {
             Self::fetch_proxy_playlist(
-                args.low_latency,
+                low_latency,
                 servers,
                 &args.codecs,
                 &args.channel,
@@ -31,7 +32,7 @@ impl MasterPlaylist {
             )?
         } else {
             Self::fetch_twitch_playlist(
-                args.low_latency,
+                low_latency,
                 &args.client_id,
                 &args.auth_token,
                 &args.codecs,
@@ -41,7 +42,11 @@ impl MasterPlaylist {
             )?
         };
 
-        master_playlist.low_latency = master_playlist.low_latency && args.low_latency;
+        master_playlist.low_latency = master_playlist.low_latency && low_latency;
+        if master_playlist.low_latency {
+            info!("Low latency streaming");
+        }
+
         Ok(master_playlist)
     }
 

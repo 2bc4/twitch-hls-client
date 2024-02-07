@@ -1,7 +1,10 @@
-use std::{mem, str::FromStr, thread, time::Duration as StdDuration};
+use std::{mem, str::FromStr, thread, time::Duration as StdDuration, time::Instant};
 
 use anyhow::{Context, Result};
-use log::debug;
+use log::{debug, info};
+
+use super::playlist::MediaPlaylist;
+use crate::worker::Worker;
 
 //Used for av1/hevc streams
 pub struct Header(pub Option<String>);
@@ -119,6 +122,81 @@ impl Segment {
             Self::NewestPrefetch(url) => (None, Some(url)),
             Self::Unknown => (None, None),
         }
+    }
+}
+
+pub struct Handler {
+    playlist: MediaPlaylist,
+    worker: Worker,
+    prev_segment: Segment,
+    init: bool,
+}
+
+impl Handler {
+    pub fn new(playlist: MediaPlaylist, worker: Worker) -> Self {
+        Self {
+            playlist,
+            worker,
+            prev_segment: Segment::default(),
+            init: true,
+        }
+    }
+
+    pub fn reload(&mut self) -> Result<()> {
+        self.playlist.reload()
+    }
+
+    pub fn process(&mut self, time: Instant) -> Result<()> {
+        let mut segments = self.playlist.segments()?;
+        let duration = segments.iter().rev().find_map(|s| match s {
+            Segment::Normal(duration, _) => Some(duration),
+            _ => None,
+        });
+
+        if let Some(duration) = duration {
+            if duration.is_ad {
+                info!("Filtering ad segment...");
+                duration.sleep(time.elapsed());
+
+                return Ok(());
+            }
+        }
+
+        if let Some(segment) = self.prev_segment.find_next(segments.as_mut_slice()) {
+            self.prev_segment = segment.clone();
+            match segment {
+                Segment::Normal(duration, url) | Segment::NextPrefetch(duration, url) => {
+                    self.worker.url(url)?;
+                    duration.sleep(time.elapsed());
+                }
+                Segment::NewestPrefetch(url) => self.worker.sync_url(url)?,
+                Segment::Unknown => {
+                    if self.init {
+                        self.init = false;
+                    } else {
+                        info!("Failed to find next segment, jumping to newest...");
+                    }
+
+                    let segment = segments
+                        .into_iter()
+                        .last()
+                        .context("Failed to find newest segment")?;
+
+                    self.prev_segment = segment.clone();
+                    let (_, url) = segment.destructure();
+
+                    self.worker.sync_url(url)?;
+                }
+            }
+        } else {
+            info!("Playlist unchanged, retrying...");
+            let (duration, _) = self.prev_segment.destructure_ref();
+            duration
+                .context("Failed to get segment duration while retrying")?
+                .sleep_half(time.elapsed());
+        }
+
+        Ok(())
     }
 }
 
