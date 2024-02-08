@@ -30,41 +30,44 @@ impl FromStr for Header {
 #[derive(Default, Clone, PartialEq, Debug)]
 pub struct Duration {
     pub is_ad: bool,
-    duration: StdDuration,
+    pub was_capped: bool,
+    inner: StdDuration,
 }
 
 impl FromStr for Duration {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        //can't wait too long or the server will close the socket
-        const MAX_DURATION: StdDuration = StdDuration::from_secs(3);
-        let duration = StdDuration::try_from_secs_f32(
-            s.split_once(':')
-                .and_then(|s| s.1.split_once(','))
-                .map(|s| s.0.parse())
-                .context("Invalid segment duration")??,
-        )
-        .context("Failed to parse segment duration")?;
-
         Ok(Self {
-            duration: if duration < MAX_DURATION {
-                duration
-            } else {
-                MAX_DURATION
-            },
             is_ad: s.contains('|'),
+            was_capped: bool::default(),
+            inner: StdDuration::try_from_secs_f32(
+                s.split_once(':')
+                    .and_then(|s| s.1.split_once(','))
+                    .map(|s| s.0.parse())
+                    .context("Invalid segment duration")??,
+            )
+            .context("Failed to parse segment duration")?,
         })
     }
 }
 
 impl Duration {
-    pub fn sleep(&self, elapsed: StdDuration) {
-        Self::sleep_thread(self.duration, elapsed);
+    pub fn sleep(&mut self, elapsed: StdDuration) {
+        //can't wait too long or the server will close the socket
+        const MAX_DURATION: StdDuration = StdDuration::from_secs(3);
+        if self.inner >= MAX_DURATION || self.was_capped {
+            self.sleep_half(elapsed);
+
+            self.was_capped = true;
+            return;
+        }
+
+        Self::sleep_thread(self.inner, elapsed);
     }
 
     pub fn sleep_half(&self, elapsed: StdDuration) {
-        if let Some(half) = self.duration.checked_div(2) {
+        if let Some(half) = self.inner.checked_div(2) {
             Self::sleep_thread(half, elapsed);
         }
     }
@@ -156,7 +159,7 @@ impl Handler {
 
     pub fn process(&mut self, time: Instant) -> Result<()> {
         let mut segments = self.playlist.segments()?;
-        let duration = segments.iter().rev().find_map(|s| match s {
+        let duration = segments.iter_mut().rev().find_map(|s| match s {
             Segment::Normal(duration, _) => Some(duration),
             _ => None,
         });
@@ -170,20 +173,19 @@ impl Handler {
             }
         }
 
-        if let Some(segment) = self.prev_segment.find_next(segments.as_mut_slice()) {
-            self.prev_segment = segment.clone();
+        if let Some(mut segment) = self.prev_segment.find_next(segments.as_mut_slice()) {
             match segment {
-                Segment::Normal(duration, url) | Segment::NextPrefetch(duration, url) => {
-                    self.worker.url(url)?;
+                Segment::Normal(ref mut duration, ref url)
+                | Segment::NextPrefetch(ref mut duration, ref url) => {
+                    self.worker.url(url.clone())?;
                     duration.sleep(time.elapsed());
                 }
-                Segment::NewestPrefetch(url) => self.worker.sync_url(url)?,
+                Segment::NewestPrefetch(ref url) => self.worker.sync_url(url.clone())?,
                 Segment::Unknown => {
-                    if self.init {
-                        self.init = false;
-                    } else {
+                    if !self.init {
                         info!("Failed to find next segment, jumping to newest...");
                     }
+                    self.init = false;
 
                     let segment = segments
                         .into_iter()
@@ -191,17 +193,23 @@ impl Handler {
                         .context("Failed to find newest segment")?;
 
                     self.prev_segment = segment.clone();
-                    let (_, url) = segment.destructure();
 
+                    let (_, url) = segment.destructure();
                     self.worker.sync_url(url)?;
+
+                    return Ok(());
                 }
             }
+
+            self.prev_segment = segment;
         } else {
-            info!("Playlist unchanged, retrying...");
             let (duration, _) = self.prev_segment.destructure_ref();
-            duration
-                .context("Failed to get segment duration while retrying")?
-                .sleep_half(time.elapsed());
+            let duration = duration.context("Failed to get segment duration while retrying")?;
+            if !duration.was_capped {
+                info!("Playlist unchanged, retrying...");
+            }
+
+            duration.sleep_half(time.elapsed());
         }
 
         Ok(())
