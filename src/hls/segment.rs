@@ -204,6 +204,7 @@ impl Handler {
             self.prev_segment = segment;
         } else {
             let (duration, _) = self.prev_segment.destructure_ref();
+
             let duration = duration.context("Failed to get segment duration while retrying")?;
             if !duration.was_capped {
                 info!("Playlist unchanged, retrying...");
@@ -245,8 +246,9 @@ mod tests {
             segments[segments.len() - 2],
             Segment::NextPrefetch(
                 Duration {
-                    duration: StdDuration::from_secs_f32(0.978),
                     is_ad: false,
+                    was_capped: false,
+                    inner: StdDuration::from_secs_f32(0.978),
                 },
                 "http://next-prefetch-url.invalid".to_string(),
             ),
