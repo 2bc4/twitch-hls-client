@@ -81,6 +81,14 @@ impl Display for Url {
 }
 
 impl Url {
+    pub fn take(&mut self) -> Url {
+        //replace self.inner with String::default but leave hash for PartialEq
+        Url {
+            hash: self.hash,
+            inner: mem::take(&mut self.inner),
+        }
+    }
+
     fn hash(url: &str) -> u64 {
         let mut hasher = DefaultHasher::new();
         hasher.write(url.as_bytes());

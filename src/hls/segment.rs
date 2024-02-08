@@ -13,13 +13,13 @@ impl FromStr for Header {
     type Err = anyhow::Error;
 
     fn from_str(playlist: &str) -> Result<Self, Self::Err> {
-        let header_url = playlist
-            .lines()
-            .find(|s| s.starts_with("#EXT-X-MAP"))
-            .and_then(|s| s.split_once('='))
-            .map(|s| s.1.replace('"', "").into());
-
-        Ok(Self(header_url))
+        Ok(Self(
+            playlist
+                .lines()
+                .find(|s| s.starts_with("#EXT-X-MAP"))
+                .and_then(|s| s.split_once('='))
+                .map(|s| s.1.replace('"', "").into()),
+        ))
     }
 }
 
@@ -110,22 +110,22 @@ impl Segment {
         Some(Segment::Unknown)
     }
 
-    pub fn destructure(self) -> (Option<Duration>, Url) {
-        match self {
-            Self::Normal(duration, url) | Self::NextPrefetch(duration, url) => {
-                (Some(duration), url)
-            }
-            Self::NewestPrefetch(url) => (None, url),
-            Self::Unknown => (None, Url::default()),
-        }
-    }
-
     pub fn destructure_ref(&self) -> (Option<&Duration>, Option<&Url>) {
         match self {
             Self::Normal(duration, url) | Self::NextPrefetch(duration, url) => {
                 (Some(duration), Some(url))
             }
             Self::NewestPrefetch(url) => (None, Some(url)),
+            Self::Unknown => (None, None),
+        }
+    }
+
+    pub fn destructure_mut(&mut self) -> (Option<&mut Duration>, Option<&mut Url>) {
+        match self {
+            Self::Normal(ref mut duration, ref mut url)
+            | Self::NextPrefetch(ref mut duration, ref mut url) => (Some(duration), Some(url)),
+
+            Self::NewestPrefetch(ref mut url) => (None, Some(url)),
             Self::Unknown => (None, None),
         }
     }
@@ -173,28 +173,30 @@ impl Handler {
             debug!("Next:\n{segment:?}\n");
 
             match segment {
-                Segment::Normal(ref mut duration, ref url)
-                | Segment::NextPrefetch(ref mut duration, ref url) => {
-                    self.worker.url(url.clone())?;
+                Segment::Normal(ref mut duration, ref mut url)
+                | Segment::NextPrefetch(ref mut duration, ref mut url) => {
+                    self.worker.url(url.take())?;
                     duration.sleep(time.elapsed());
                 }
-                Segment::NewestPrefetch(ref url) => self.worker.sync_url(url.clone())?,
+                Segment::NewestPrefetch(ref mut url) => self.worker.sync_url(url.take())?,
                 Segment::Unknown => {
                     if !self.init {
-                        info!("Failed to find next segment, jumping to newest...");
+                        info!("Failed to find next segment, skipping to newest...");
                     }
                     self.init = false;
 
-                    let segment = segments
+                    let mut last_segment = segments
                         .into_iter()
                         .last()
                         .context("Failed to find newest segment")?;
 
-                    self.prev_segment = segment.clone();
+                    let (_, url) = last_segment.destructure_mut();
+                    self.worker.sync_url(
+                        url.context("Failed to get last segment URL while skipping to newest")?
+                            .take(),
+                    )?;
 
-                    let (_, url) = segment.destructure();
-                    self.worker.sync_url(url)?;
-
+                    self.prev_segment = last_segment;
                     return Ok(());
                 }
             }
