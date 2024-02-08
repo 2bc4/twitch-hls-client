@@ -1,7 +1,6 @@
 use std::{
-    collections::hash_map::DefaultHasher,
     fmt::{self, Display, Formatter},
-    hash::Hasher,
+    hash::{DefaultHasher, Hasher},
     io::{self, Write},
     mem,
     ops::Deref,
