@@ -228,7 +228,7 @@ impl<T: Write> Request<T> {
         loop {
             match self.handle.perform() {
                 Ok(()) => break,
-                Err(e) if e.is_write_error() => {
+                Err(e) if self.handle.get_ref().error.is_some() => {
                     let io_error = self.handle.get_mut().error.take().ok_or(e)?;
                     return Err(io_error.into());
                 }
