@@ -1,4 +1,4 @@
-use std::iter;
+use std::{env, iter};
 
 use anyhow::{Context, Result};
 use log::{debug, error, info};
@@ -178,6 +178,8 @@ impl MasterPlaylist {
 pub struct MediaPlaylist {
     playlist: String,
     request: TextRequest,
+
+    playlist_debug: bool,
 }
 
 impl MediaPlaylist {
@@ -185,6 +187,7 @@ impl MediaPlaylist {
         let mut playlist = Self {
             playlist: String::default(),
             request: agent.get(&master_playlist.url)?,
+            playlist_debug: env::var_os("DEBUG_NO_PLAYLIST").is_none(),
         };
 
         playlist.reload()?;
@@ -195,7 +198,9 @@ impl MediaPlaylist {
         debug!("----------RELOADING----------");
 
         self.playlist = self.request.text().map_err(map_if_offline)?;
-        debug!("Playlist:\n{}", self.playlist);
+        if self.playlist_debug {
+            debug!("Playlist:\n{}", self.playlist);
+        }
 
         if self
             .playlist
@@ -402,6 +407,7 @@ http://audio-only.invalid"#;
                 .unwrap()
                 .get("http://playlist.invalid")
                 .unwrap(),
+            playlist_debug: true,
         }
     }
 
