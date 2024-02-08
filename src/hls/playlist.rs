@@ -10,11 +10,11 @@ use super::{
 
 use crate::{
     constants,
-    http::{self, Agent, TextRequest},
+    http::{self, Agent, TextRequest, Url},
 };
 
 pub struct MasterPlaylist {
-    pub url: String,
+    pub url: Url,
     pub low_latency: bool,
 }
 
@@ -61,7 +61,7 @@ impl MasterPlaylist {
     ) -> Result<Self> {
         info!("Fetching playlist for channel {channel}");
         let access_token = PlaybackAccessToken::new(client_id, auth_token, channel, agent)?;
-        let url = &format!(
+        let url = format!(
             "{}{channel}.m3u8{}",
             constants::TWITCH_HLS_BASE,
             [
@@ -93,7 +93,10 @@ impl MasterPlaylist {
             .join(""),
         );
 
-        Self::parse_variant_playlist(&agent.get(url)?.text().map_err(map_if_offline)?, quality)
+        Self::parse_variant_playlist(
+            &agent.get(&url.into())?.text().map_err(map_if_offline)?,
+            quality,
+        )
     }
 
     fn fetch_proxy_playlist(
@@ -130,7 +133,7 @@ impl MasterPlaylist {
                     .join(""),
                 );
 
-                let mut request = match agent.get(&url) {
+                let mut request = match agent.get(&url.into()) {
                     Ok(request) => request,
                     Err(e) => {
                         error!("{e}");
@@ -169,7 +172,7 @@ impl MasterPlaylist {
                 })
                 .nth(2)
                 .context("Invalid quality or malformed master playlist")?
-                .parse()?,
+                .into(),
             low_latency: playlist.contains("FUTURE=\"true\""),
         })
     }
@@ -215,7 +218,7 @@ impl MediaPlaylist {
         Ok(())
     }
 
-    pub fn header(&self) -> Result<Option<String>> {
+    pub fn header(&self) -> Result<Option<Url>> {
         Ok(self.playlist.parse::<Header>()?.0)
     }
 
@@ -226,7 +229,7 @@ impl MediaPlaylist {
         while let Some(line) = lines.next() {
             if line.starts_with("#EXTINF") {
                 if let Some(url) = lines.next() {
-                    segments.push(Segment::Normal(line.parse()?, url.to_owned()));
+                    segments.push(Segment::Normal(line.parse()?, url.into()));
                 }
             } else if Self::is_prefetch_segment(line) {
                 segments.push(Segment::NextPrefetch(
@@ -254,12 +257,12 @@ impl MediaPlaylist {
         line.starts_with("#EXT-X-TWITCH-PREFETCH")
     }
 
-    fn split_prefetch_url(line: &str) -> Result<String> {
+    fn split_prefetch_url(line: &str) -> Result<Url> {
         Ok(line
             .split_once(':')
             .context("Failed to parse prefetch URL")?
             .1
-            .to_owned())
+            .into())
     }
 }
 
@@ -295,7 +298,7 @@ impl PlaybackAccessToken {
             "}",
         "}").replace("{channel}", channel);
 
-        let mut request = agent.post(constants::TWITCH_GQL_ENDPOINT, &gql)?;
+        let mut request = agent.post(&constants::TWITCH_GQL_ENDPOINT.into(), &gql)?;
         request.header("Content-Type: text/plain;charset=UTF-8")?;
         request.header(&format!("X-Device-ID: {}", &Self::gen_id()))?;
         request.header(&format!(
@@ -337,7 +340,7 @@ impl PlaybackAccessToken {
         let client_id = if let Some(client_id) = client_id {
             client_id.to_owned()
         } else if let Some(auth_token) = auth_token {
-            let mut request = agent.get(constants::TWITCH_OAUTH_ENDPOINT)?;
+            let mut request = agent.get(&constants::TWITCH_OAUTH_ENDPOINT.into())?;
             request.header(&format!("Authorization: OAuth {auth_token}"))?;
 
             request
@@ -405,7 +408,7 @@ http://audio-only.invalid"#;
             playlist: PLAYLIST.to_owned(),
             request: Agent::new(&http::Args::default())
                 .unwrap()
-                .get("http://playlist.invalid")
+                .get(&"http://playlist.invalid".into())
                 .unwrap(),
             playlist_debug: true,
         }
@@ -430,7 +433,7 @@ http://audio-only.invalid"#;
                 MasterPlaylist::parse_variant_playlist(MASTER_PLAYLIST, quality)
                     .unwrap()
                     .url,
-                format!("http://{}.invalid", host.unwrap_or(quality)),
+                format!("http://{}.invalid", host.unwrap_or(quality)).into(),
             );
         }
     }

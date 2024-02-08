@@ -4,10 +4,10 @@ use anyhow::{Context, Result};
 use log::{debug, info};
 
 use super::playlist::MediaPlaylist;
-use crate::worker::Worker;
+use crate::{http::Url, worker::Worker};
 
 //Used for av1/hevc streams
-pub struct Header(pub Option<String>);
+pub struct Header(pub Option<Url>);
 
 impl FromStr for Header {
     type Err = anyhow::Error;
@@ -17,13 +17,9 @@ impl FromStr for Header {
             .lines()
             .find(|s| s.starts_with("#EXT-X-MAP"))
             .and_then(|s| s.split_once('='))
-            .map(|s| s.1.replace('"', ""));
+            .map(|s| s.1.replace('"', "").into());
 
-        if let Some(header_url) = header_url {
-            return Ok(Self(Some(header_url)));
-        }
-
-        Ok(Self(None))
+        Ok(Self(header_url))
     }
 }
 
@@ -82,9 +78,9 @@ impl Duration {
 
 #[derive(Default, Clone, Debug)]
 pub enum Segment {
-    Normal(Duration, String),
-    NextPrefetch(Duration, String),
-    NewestPrefetch(String),
+    Normal(Duration, Url),
+    NextPrefetch(Duration, Url),
+    NewestPrefetch(Url),
 
     #[default]
     Unknown,
@@ -114,17 +110,17 @@ impl Segment {
         Some(Segment::Unknown)
     }
 
-    pub fn destructure(self) -> (Option<Duration>, String) {
+    pub fn destructure(self) -> (Option<Duration>, Url) {
         match self {
             Self::Normal(duration, url) | Self::NextPrefetch(duration, url) => {
                 (Some(duration), url)
             }
             Self::NewestPrefetch(url) => (None, url),
-            Self::Unknown => (None, String::default()),
+            Self::Unknown => (None, Url::default()),
         }
     }
 
-    pub fn destructure_ref(&self) -> (Option<&Duration>, Option<&String>) {
+    pub fn destructure_ref(&self) -> (Option<&Duration>, Option<&Url>) {
         match self {
             Self::Normal(duration, url) | Self::NextPrefetch(duration, url) => {
                 (Some(duration), Some(url))
@@ -229,7 +225,7 @@ mod tests {
     fn parse_header() {
         assert_eq!(
             PLAYLIST.parse::<Header>().unwrap().0,
-            Some("http://header.invalid".to_string()),
+            Some("http://header.invalid".into()),
         );
     }
 
@@ -240,7 +236,7 @@ mod tests {
         let segments = playlist.segments().unwrap();
         assert_eq!(
             segments.into_iter().last().unwrap(),
-            Segment::NewestPrefetch("http://newest-prefetch-url.invalid".to_string()),
+            Segment::NewestPrefetch("http://newest-prefetch-url.invalid".into()),
         );
 
         let segments = playlist.segments().unwrap();
@@ -252,7 +248,7 @@ mod tests {
                     was_capped: false,
                     inner: StdDuration::from_secs_f32(0.978),
                 },
-                "http://next-prefetch-url.invalid".to_string(),
+                "http://next-prefetch-url.invalid".into(),
             ),
         );
     }
