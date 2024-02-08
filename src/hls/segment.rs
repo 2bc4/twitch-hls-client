@@ -37,14 +37,22 @@ impl FromStr for Duration {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        //can't wait too long or the server will close the socket
+        const MAX_DURATION: StdDuration = StdDuration::from_secs(3);
+        let duration = StdDuration::try_from_secs_f32(
+            s.split_once(':')
+                .and_then(|s| s.1.split_once(','))
+                .map(|s| s.0.parse())
+                .context("Invalid segment duration")??,
+        )
+        .context("Failed to parse segment duration")?;
+
         Ok(Self {
-            duration: StdDuration::try_from_secs_f32(
-                s.split_once(':')
-                    .and_then(|s| s.1.split_once(','))
-                    .map(|s| s.0.parse())
-                    .context("Invalid segment duration")??,
-            )
-            .context("Failed to parse segment duration")?,
+            duration: if duration < MAX_DURATION {
+                duration
+            } else {
+                MAX_DURATION
+            },
             is_ad: s.contains('|'),
         })
     }
