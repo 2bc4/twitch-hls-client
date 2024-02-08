@@ -80,9 +80,7 @@ impl Worker {
     fn send(&mut self, url: String, should_sync: bool) -> Result<()> {
         self.join_if_dead()?;
 
-        debug!("Sending URL to worker: {url}");
         self.url_tx.send(ChannelMessage { url, should_sync })?;
-
         if should_sync {
             self.sync_rx.recv().or_else(|_| self.join_if_dead())?;
         }

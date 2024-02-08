@@ -101,7 +101,6 @@ impl PartialEq for Segment {
 
 impl Segment {
     pub fn find_next(&self, segments: &mut [Segment]) -> Option<Segment> {
-        debug!("Previous: {self:?}\n");
         if let Some(idx) = segments.iter().position(|s| self == s) {
             let idx = idx + 1;
             if idx == segments.len() {
@@ -174,6 +173,9 @@ impl Handler {
         }
 
         if let Some(mut segment) = self.prev_segment.find_next(segments.as_mut_slice()) {
+            debug!("Previous:\n{:?}", self.prev_segment);
+            debug!("Next:\n{segment:?}\n");
+
             match segment {
                 Segment::Normal(ref mut duration, ref url)
                 | Segment::NextPrefetch(ref mut duration, ref url) => {
