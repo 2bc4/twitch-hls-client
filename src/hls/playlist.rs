@@ -1,10 +1,13 @@
-use std::{env, iter};
+use std::{
+    collections::{vec_deque::Iter, VecDeque},
+    env, iter,
+};
 
 use anyhow::{Context, Result};
 use log::{debug, error, info};
 
 use super::{
-    segment::{Header, Segment},
+    segment::{Duration, Segment},
     Args, Error,
 };
 
@@ -69,7 +72,7 @@ impl MasterPlaylist {
                 "&allow_source=true",
                 "&allow_audio_only=true",
                 "&cdm=wv",
-                &format!("&fast_bread={}", &low_latency.to_string()),
+                &format!("&fast_bread={low_latency}"),
                 "&playlist_include_framerate=true",
                 "&player_backend=mediaplayer",
                 "&reassignments_supported=true",
@@ -80,7 +83,7 @@ impl MasterPlaylist {
                 &format!("&sig={}", &access_token.signature),
                 &format!("&token={}", &access_token.token),
                 "&player_version=1.24.0-rc.1.3",
-                &format!("&warp={}", &low_latency.to_string()),
+                &format!("&warp={low_latency}"),
                 "&browser_family=firefox",
                 &format!(
                     "&browser_version={}",
@@ -126,7 +129,7 @@ impl MasterPlaylist {
                         "?allow_source=true",
                         "&allow_audio_only=true",
                         &format!("&fast_bread={}", &low_latency.to_string()),
-                        &format!("&warp={}", &low_latency.to_string()),
+                        &format!("&warp={low_latency}"),
                         &format!("&supported_codecs={codecs}"),
                         "&platform=web",
                     ]
@@ -179,8 +182,14 @@ impl MasterPlaylist {
 }
 
 pub struct MediaPlaylist {
+    pub header: Option<Url>, //used for av1/hevc streams
+
     playlist: String,
     request: TextRequest,
+
+    segments: VecDeque<Segment>,
+    sequence: usize,
+    added: usize,
 
     playlist_debug: bool,
 }
@@ -188,8 +197,15 @@ pub struct MediaPlaylist {
 impl MediaPlaylist {
     pub fn new(master_playlist: &MasterPlaylist, agent: &Agent) -> Result<Self> {
         let mut playlist = Self {
+            header: Option::default(),
+
             playlist: String::default(),
             request: agent.get(&master_playlist.url)?,
+
+            segments: VecDeque::default(),
+            sequence: usize::default(),
+            added: usize::default(),
+
             playlist_debug: env::var_os("DEBUG_NO_PLAYLIST").is_none(),
         };
 
@@ -215,54 +231,125 @@ impl MediaPlaylist {
             return Err(Error::Offline.into());
         }
 
+        self.process_playlist()?;
         Ok(())
     }
 
-    pub fn header(&self) -> Result<Option<Url>> {
-        Ok(self.playlist.parse::<Header>()?.0)
+    pub fn segments(&self) -> SegmentRange<'_> {
+        if self.added == 0 {
+            SegmentRange::Empty
+        } else if self.added >= self.segments.len() {
+            SegmentRange::Back(self.segments.back())
+        } else {
+            SegmentRange::Partial(self.segments.range(self.segments.len() - self.added..))
+        }
     }
 
-    pub fn segments(&self) -> Result<Vec<Segment>> {
-        let mut lines = self.playlist.lines();
+    pub fn last_duration(&self) -> Option<&Duration> {
+        self.segments.iter().rev().find_map(|s| match s {
+            Segment::Normal(duration, _) => Some(duration),
+            _ => None,
+        })
+    }
 
-        let mut segments = Vec::new();
-        while let Some(line) = lines.next() {
-            if line.starts_with("#EXTINF") {
-                if let Some(url) = lines.next() {
-                    segments.push(Segment::Normal(line.parse()?, url.into()));
-                }
-            } else if Self::is_prefetch_segment(line) {
-                segments.push(Segment::NextPrefetch(
-                    self.playlist
-                        .lines()
-                        .rev()
-                        .find(|l| l.starts_with("#EXTINF"))
-                        .context("Failed to find prefetch segment duration")?
-                        .parse()?,
-                    Self::split_prefetch_url(line)?,
-                ));
-
-                if let Some(line) = lines.next() {
-                    if Self::is_prefetch_segment(line) {
-                        segments.push(Segment::NewestPrefetch(Self::split_prefetch_url(line)?));
+    fn process_playlist(&mut self) -> Result<()> {
+        let mut prefetch_removed = 0;
+        for _ in 0..2 {
+            if let Some(segment) = self.segments.back() {
+                match segment {
+                    Segment::NextPrefetch(_) | Segment::NewestPrefetch(_) => {
+                        self.segments.pop_back();
+                        prefetch_removed += 1;
                     }
+                    Segment::Normal(_, _) => (),
                 }
             }
         }
 
-        Ok(segments)
-    }
+        let mut last_total_segments = self.segments.len();
+        let mut total_segments = 0;
+        let mut lines = self.playlist.lines().peekable();
+        while let Some(line) = lines.next() {
+            match Category::categorize(line.split_once(':').unwrap_or((line, line))) {
+                Category::MediaSequence(sequence) => {
+                    let sequence = sequence.parse()?;
+                    if sequence > 0 {
+                        let removed = sequence - self.sequence;
+                        if removed < self.segments.len() {
+                            self.segments.drain(..removed);
+                            last_total_segments = self.segments.len();
 
-    fn is_prefetch_segment(line: &str) -> bool {
-        line.starts_with("#EXT-X-TWITCH-PREFETCH")
-    }
+                            debug!("Removed segments: {removed}");
+                        }
+                    }
 
-    fn split_prefetch_url(line: &str) -> Result<Url> {
-        Ok(line
-            .split_once(':')
-            .context("Failed to parse prefetch URL")?
-            .1
-            .into())
+                    self.sequence = sequence;
+                }
+                Category::Map(split) => {
+                    if self.header.is_none() {
+                        self.header = Some(
+                            split
+                                .split_once('=')
+                                .context("Failed to parse segment header")?
+                                .1
+                                .replace('"', "")
+                                .into(),
+                        );
+                    }
+                }
+                Category::ExtInf(duration) => {
+                    total_segments += 1;
+                    if total_segments > last_total_segments {
+                        if let Some(line) = lines.next() {
+                            self.segments
+                                .push_back(Segment::Normal(duration.parse()?, line.into()));
+                        }
+                    }
+                }
+                Category::Prefetch(url) => {
+                    total_segments += 1;
+                    if total_segments > last_total_segments {
+                        if lines.peek().is_some() {
+                            self.segments.push_back(Segment::NextPrefetch(url.into()));
+                        } else {
+                            self.segments.push_back(Segment::NewestPrefetch(url.into()));
+                        }
+                    }
+                }
+                Category::Unknown => continue,
+            }
+        }
+
+        self.added = total_segments - (last_total_segments + prefetch_removed);
+        debug!("New segments: {}", self.added);
+
+        Ok(())
+    }
+}
+
+pub enum SegmentRange<'a> {
+    Partial(Iter<'a, Segment>),
+    Back(Option<&'a Segment>),
+    Empty,
+}
+
+enum Category<'a> {
+    MediaSequence(&'a str),
+    Map(&'a str),
+    ExtInf(&'a str),
+    Prefetch(&'a str),
+    Unknown,
+}
+
+impl<'a> Category<'a> {
+    fn categorize(split: (&'a str, &'a str)) -> Self {
+        match split.0 {
+            "#EXT-X-MEDIA-SEQUENCE" => Self::MediaSequence(split.1),
+            "#EXT-X-MAP" => Self::Map(split.1),
+            "#EXTINF" => Self::ExtInf(split.1),
+            "#EXT-X-TWITCH-PREFETCH" => Self::Prefetch(split.1),
+            _ => Self::Unknown,
+        }
     }
 }
 
@@ -375,11 +462,10 @@ fn map_if_offline(error: anyhow::Error) -> anyhow::Error {
 }
 
 #[cfg(test)]
-pub mod tests {
-    use super::super::tests::PLAYLIST;
+mod tests {
     use super::*;
 
-    pub const MASTER_PLAYLIST: &'static str = r#"#EXT3MU
+    const MASTER_PLAYLIST: &'static str = r#"#EXT3MU
 #EXT-X-TWITCH-INFO:NODE="...FUTURE="true"..."
 #EXT-X-MEDIA:TYPE=VIDEO,GROUP-ID="chunked",NAME="1080p60 (source)",AUTOSELECT=YES,DEFAULT=YES
 #EXT-X-STREAM-INF:BANDWIDTH=0,RESOLUTION=1920x1080,CODECS="avc1.64002A,mp4a.40.2",VIDEO="chunked",FRAME-RATE=60.000
@@ -402,17 +488,6 @@ http://160p.invalid
 #EXT-X-MEDIA:TYPE=VIDEO,GROUP-ID="audio_only",NAME="audio_only",AUTOSELECT=NO,DEFAULT=NO
 #EXT-X-STREAM-INF:BANDWIDTH=0,CODECS="mp4a.40.2",VIDEO="audio_only"
 http://audio-only.invalid"#;
-
-    pub fn create_playlist() -> MediaPlaylist {
-        MediaPlaylist {
-            playlist: PLAYLIST.to_owned(),
-            request: Agent::new(&http::Args::default())
-                .unwrap()
-                .get(&"http://playlist.invalid".into())
-                .unwrap(),
-            playlist_debug: true,
-        }
-    }
 
     #[test]
     fn parse_variant_playlist() {

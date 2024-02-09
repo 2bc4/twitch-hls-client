@@ -37,7 +37,9 @@ impl fmt::Display for Error {
 
 #[derive(Default, Clone, Debug)]
 pub struct Url {
+    #[allow(dead_code)] //used for debug logging
     hash: u64,
+
     inner: String,
 }
 
@@ -61,7 +63,7 @@ impl From<String> for Url {
 
 impl PartialEq for Url {
     fn eq(&self, other: &Self) -> bool {
-        self.hash == other.hash
+        self.inner == other.inner
     }
 }
 
@@ -80,19 +82,15 @@ impl Display for Url {
 }
 
 impl Url {
-    pub fn take(&mut self) -> Url {
-        //replace self.inner with String::default but leave hash for PartialEq
-        Url {
-            hash: self.hash,
-            inner: mem::take(&mut self.inner),
-        }
-    }
-
     fn hash(url: &str) -> u64 {
-        let mut hasher = DefaultHasher::new();
-        hasher.write(url.as_bytes());
+        if log::max_level() == LevelFilter::Debug {
+            let mut hasher = DefaultHasher::new();
+            hasher.write(url.as_bytes());
 
-        hasher.finish()
+            hasher.finish()
+        } else {
+            u64::default()
+        }
     }
 }
 

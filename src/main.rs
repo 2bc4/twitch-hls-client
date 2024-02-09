@@ -29,7 +29,7 @@ fn main_loop(mut handler: Handler) -> Result<()> {
     loop {
         let time = Instant::now();
 
-        handler.reload()?;
+        handler.playlist.reload()?;
         handler.process(time)?;
     }
 }
@@ -56,10 +56,10 @@ fn main() -> Result<()> {
             },
         };
 
-        let playlist = MediaPlaylist::new(&master_playlist, &agent)?;
+        let mut playlist = MediaPlaylist::new(&master_playlist, &agent)?;
         let worker = Worker::spawn(
             Player::spawn(&args.player)?,
-            playlist.header()?,
+            playlist.header.take(),
             agent.clone(),
         )?;
 

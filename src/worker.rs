@@ -38,19 +38,23 @@ impl Worker {
                         debug!("Exiting before initial url");
                         return Ok(());
                     };
-                    assert!(initial_msg.should_sync);
 
-                    if let Some(header_url) = header_url {
+                    let request = if let Some(header_url) = header_url {
                         let mut request = agent.writer(player, &header_url)?;
                         request.call(&initial_msg.url)?;
 
                         request
                     } else {
                         agent.writer(player, &initial_msg.url)?
+                    };
+
+                    if initial_msg.should_sync {
+                        sync_tx.send(())?;
                     }
+
+                    request
                 };
 
-                sync_tx.send(())?;
                 loop {
                     let Ok(msg) = url_rx.recv() else {
                         debug!("Exiting");

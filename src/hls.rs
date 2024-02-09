@@ -86,31 +86,3 @@ impl Args {
         Ok(Some(arg.to_owned()))
     }
 }
-
-#[cfg(test)]
-mod tests {
-    pub const PLAYLIST: &'static str = r#"#EXT3MU
-#EXT-X-TARGETDURATION:6
-#EXT-X-MEDIA-SEQUENCE:00000
-#EXT-X-TWITCH-LIVE-SEQUENCE:00000
-#EXT-X-TWITCH-ELAPSED-SECS:00000.000
-#EXT-X-TWITCH-TOTAL-SECS:00000.000
-#EXT-X-MAP:URI=http://header.invalid
-#EXT-X-PROGRAM-DATE-TIME:1970-01-01T00:00:00.000Z
-#EXTINF:5.020,live
-http://segment1.invalid
-#EXT-X-PROGRAM-DATE-TIME:1970-01-01T00:00:00.000Z
-#EXTINF:4.910,live
-http://segment2.invalid
-#EXT-X-PROGRAM-DATE-TIME:1970-01-01T00:00:00.000Z
-#EXTINF:2.002,Amazon
-http://ad-segment.invalid
-#EXT-X-PROGRAM-DATE-TIME:1970-01-01T00:00:00.000Z
-#EXTINF:2.000,live
-http://segment3.invalid
-#EXT-X-PROGRAM-DATE-TIME:1970-01-01T00:00:00.000Z
-#EXTINF:0.978,live
-http://segment4.invalid
-#EXT-X-TWITCH-PREFETCH:http://next-prefetch-url.invalid
-#EXT-X-TWITCH-PREFETCH:http://newest-prefetch-url.invalid"#;
-}

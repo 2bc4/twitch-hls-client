@@ -17,6 +17,7 @@ pedantic = "deny"
 module-name-repetitions = "allow"
 
 [profile.release]
+overflow-checks = true
 codegen-units = 1
 lto = true
 panic = "abort"
