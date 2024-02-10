@@ -59,20 +59,20 @@ checksum = "06ea2b9bc92be3c2baa9334a323ebca2d6f074ff852cd1d7b11064035cd3868f"
 
 [[package]]
 name = "curl"
-version = "0.4.44"
-source = "git+https://github.com/2bc4/curl-rust.git#8ce9759648e3a56a0be186fcc5d256815ffb3dd0"
+version = "0.4.45"
+source = "git+https://github.com/2bc4/curl-rust.git#64a4d8f1cbf5efab44ca97cb1dc05123f3ae8baa"
 dependencies = [
  "curl-sys",
  "libc",
  "schannel",
  "socket2",
- "windows-sys 0.48.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
 name = "curl-sys"
 version = "0.4.72+curl-8.6.1"
-source = "git+https://github.com/2bc4/curl-rust.git#8ce9759648e3a56a0be186fcc5d256815ffb3dd0"
+source = "git+https://github.com/2bc4/curl-rust.git#64a4d8f1cbf5efab44ca97cb1dc05123f3ae8baa"
 dependencies = [
  "cc",
  "libc",
@@ -81,7 +81,7 @@ dependencies = [
  "pkg-config",
  "rustls-ffi",
  "vcpkg",
- "windows-sys 0.48.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -348,7 +348,7 @@ dependencies = [
 
 [[package]]
 name = "twitch-hls-client"
-version = "1.1.3"
+version = "1.2.0"
 dependencies = [
  "anyhow",
  "curl",
