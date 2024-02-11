@@ -14,6 +14,7 @@ use super::{
 use crate::{
     constants,
     http::{self, Agent, TextRequest, Url},
+    logger,
 };
 
 pub struct MasterPlaylist {
@@ -204,7 +205,7 @@ impl MediaPlaylist {
 
             request: agent.get(&master_playlist.url)?,
 
-            debug_log_playlist: env::var_os("DEBUG_NO_PLAYLIST").is_none(),
+            debug_log_playlist: logger::is_debug() && env::var_os("DEBUG_NO_PLAYLIST").is_none(),
         };
 
         playlist.reload()?;
