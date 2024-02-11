@@ -3,7 +3,7 @@ use std::{
     env, iter,
 };
 
-use anyhow::{Context, Result};
+use anyhow::{ensure, Context, Result};
 use log::{debug, error, info};
 
 use super::{
@@ -274,6 +274,8 @@ impl MediaPlaylist {
             match split.0 {
                 "#EXT-X-MEDIA-SEQUENCE" => {
                     let sequence = split.1.parse()?;
+                    ensure!(sequence >= self.sequence, "Sequence went backwards");
+
                     if sequence > 0 {
                         let removed = sequence - self.sequence;
                         if removed < self.segments.len() {
