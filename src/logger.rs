@@ -68,6 +68,10 @@ impl Logger {
     }
 }
 
+pub fn is_debug() -> bool {
+    log::max_level() == LevelFilter::Debug
+}
+
 fn level_tag_no_color(level: Level) -> &'static str {
     match level {
         Level::Error => "[ERROR]",

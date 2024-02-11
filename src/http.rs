@@ -10,11 +10,11 @@ use std::{
 
 use anyhow::{ensure, Result};
 use curl::easy::{Easy, Easy2, Handler, InfoType, IpResolve, List, WriteError};
-use log::{debug, error, LevelFilter};
+use log::{debug, error};
 
 use crate::{
     args::{ArgParse, Parser},
-    constants,
+    constants, logger,
 };
 
 #[derive(Debug)]
@@ -82,7 +82,7 @@ impl Display for Url {
 
 impl Url {
     fn hash(url: &str) -> u64 {
-        if log::max_level() == LevelFilter::Debug {
+        if logger::is_debug() {
             let mut hasher = DefaultHasher::new();
             hasher.write(url.as_bytes());
 
@@ -262,10 +262,7 @@ impl<T: Write> Request<T> {
             args: agent.args,
         };
 
-        request
-            .handle
-            .verbose(log::max_level() == LevelFilter::Debug)?;
-
+        request.handle.verbose(logger::is_debug())?;
         request
             .handle
             .ssl_cainfo_blob(&agent.certs.lock().expect("Failed to lock certs mutex"))?;
