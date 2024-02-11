@@ -264,6 +264,7 @@ impl MediaPlaylist {
                         } else {
                             self.segments.clear();
                             prev_segment_count = 0;
+                            prefetch_removed = 0;
 
                             debug!("All segments removed");
                         }
@@ -309,7 +310,7 @@ impl MediaPlaylist {
             }
         }
 
-        self.added = total_segments.saturating_sub(prev_segment_count + prefetch_removed);
+        self.added = total_segments - (prev_segment_count + prefetch_removed);
         debug!("Segments added: {}", self.added);
 
         Ok(())
