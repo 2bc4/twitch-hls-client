@@ -2,7 +2,6 @@ use std::{
     fmt::{self, Display, Formatter},
     hash::{DefaultHasher, Hasher},
     io::{self, Write},
-    mem,
     ops::Deref,
     str,
     sync::{Arc, Mutex},
@@ -10,7 +9,7 @@ use std::{
 };
 
 use anyhow::{ensure, Result};
-use curl::easy::{Easy2, Handler, InfoType, IpResolve, List, WriteError};
+use curl::easy::{Easy, Easy2, Handler, InfoType, IpResolve, List, WriteError};
 use log::{debug, error, LevelFilter};
 
 use crate::{
@@ -181,13 +180,11 @@ impl TextRequest {
         Ok(())
     }
 
-    pub fn text(&mut self) -> Result<String> {
+    pub fn text(&mut self) -> Result<&str> {
+        self.request.get_mut().0.clear();
         self.request.perform()?;
-        Ok(mem::take(&mut self.request.get_mut().0))
-    }
 
-    pub fn encode(&mut self, data: &str) -> String {
-        self.request.handle.url_encode(data.as_bytes())
+        Ok(&self.request.get_mut().0)
     }
 
     fn get(mut request: Request<StringWriter>) -> Result<Self> {
@@ -222,6 +219,11 @@ impl<T: Write> WriterRequest<T> {
 
         Ok(Self { request })
     }
+}
+
+pub fn url_encode(text: &str) -> String {
+    //Why is this tied to a handle??
+    Easy::new().url_encode(text.as_bytes())
 }
 
 #[derive(Default)]

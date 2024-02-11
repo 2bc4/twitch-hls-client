@@ -81,7 +81,7 @@ impl MasterPlaylist {
                 &format!("&p={}", &fastrand::u32(0..=9_999_999).to_string()),
                 &format!("&play_session_id={}", &access_token.play_session_id),
                 &format!("&sig={}", &access_token.signature),
-                &format!("&token={}", &access_token.token),
+                &format!("&token={}", &http::url_encode(&access_token.token)),
                 "&player_version=1.24.0-rc.1.3",
                 &format!("&warp={low_latency}"),
                 "&browser_family=firefox",
@@ -97,7 +97,7 @@ impl MasterPlaylist {
         );
 
         Self::parse_variant_playlist(
-            &agent.get(&url.into())?.text().map_err(map_if_offline)?,
+            agent.get(&url.into())?.text().map_err(map_if_offline)?,
             quality,
         )
     }
@@ -145,7 +145,7 @@ impl MasterPlaylist {
                 };
 
                 match request.text() {
-                    Ok(playlist_url) => Some(playlist_url),
+                    Ok(playlist_url) => Some(playlist_url.to_owned()),
                     Err(e) => {
                         if matches!(
                             e.downcast_ref::<http::Error>(),
@@ -184,14 +184,13 @@ impl MasterPlaylist {
 pub struct MediaPlaylist {
     pub header: Option<Url>, //used for av1/hevc streams
 
-    playlist: String,
-    request: TextRequest,
-
     segments: VecDeque<Segment>,
     sequence: usize,
     added: usize,
 
-    playlist_debug: bool,
+    request: TextRequest,
+
+    debug_log_playlist: bool,
 }
 
 impl MediaPlaylist {
@@ -199,14 +198,13 @@ impl MediaPlaylist {
         let mut playlist = Self {
             header: Option::default(),
 
-            playlist: String::default(),
-            request: agent.get(&master_playlist.url)?,
-
             segments: VecDeque::default(),
             sequence: usize::default(),
             added: usize::default(),
 
-            playlist_debug: env::var_os("DEBUG_NO_PLAYLIST").is_none(),
+            request: agent.get(&master_playlist.url)?,
+
+            debug_log_playlist: env::var_os("DEBUG_NO_PLAYLIST").is_none(),
         };
 
         playlist.reload()?;
@@ -215,14 +213,12 @@ impl MediaPlaylist {
 
     pub fn reload(&mut self) -> Result<()> {
         debug!("----------RELOADING----------");
-
-        self.playlist = self.request.text().map_err(map_if_offline)?;
-        if self.playlist_debug {
-            debug!("Playlist:\n{}", self.playlist);
+        let playlist = self.request.text().map_err(map_if_offline)?;
+        if self.debug_log_playlist {
+            debug!("Playlist:\n{playlist}");
         }
 
-        if self
-            .playlist
+        if playlist
             .lines()
             .next_back()
             .is_some_and(|l| l.starts_with("#EXT-X-ENDLIST"))
@@ -230,28 +226,6 @@ impl MediaPlaylist {
             return Err(Error::Offline.into());
         }
 
-        self.process_playlist()?;
-        Ok(())
-    }
-
-    pub fn segments(&self) -> SegmentRange<'_> {
-        if self.added == 0 {
-            SegmentRange::Empty
-        } else if self.added >= self.segments.len() {
-            SegmentRange::Back(self.segments.back())
-        } else {
-            SegmentRange::Partial(self.segments.range(self.segments.len() - self.added..))
-        }
-    }
-
-    pub fn last_duration(&self) -> Option<&Duration> {
-        self.segments.iter().rev().find_map(|s| match s {
-            Segment::Normal(duration, _) => Some(duration),
-            _ => None,
-        })
-    }
-
-    fn process_playlist(&mut self) -> Result<()> {
         let mut prefetch_removed = 0;
         for _ in 0..2 {
             if let Some(segment) = self.segments.back() {
@@ -267,7 +241,7 @@ impl MediaPlaylist {
 
         let mut prev_segment_count = self.segments.len();
         let mut total_segments = 0;
-        let mut lines = self.playlist.lines().peekable();
+        let mut lines = playlist.lines().peekable();
         while let Some(line) = lines.next() {
             let Some(split) = line.split_once(':') else {
                 continue;
@@ -338,6 +312,23 @@ impl MediaPlaylist {
 
         Ok(())
     }
+
+    pub fn segments(&self) -> SegmentRange<'_> {
+        if self.added == 0 {
+            SegmentRange::Empty
+        } else if self.added >= self.segments.len() {
+            SegmentRange::Back(self.segments.back())
+        } else {
+            SegmentRange::Partial(self.segments.range(self.segments.len() - self.added..))
+        }
+    }
+
+    pub fn last_duration(&self) -> Option<&Duration> {
+        self.segments.iter().rev().find_map(|s| match s {
+            Segment::Normal(duration, _) => Some(duration),
+            _ => None,
+        })
+    }
 }
 
 pub enum SegmentRange<'a> {
@@ -398,7 +389,7 @@ impl PlaybackAccessToken {
                 let start = response.find(r#"{\"adblock\""#).ok_or(Error::Offline)?;
                 let end = response.find(r#"","signature""#).ok_or(Error::Offline)?;
 
-                request.encode(&response[start..end].replace('\\', ""))
+                response[start..end].replace('\\', "")
             },
             signature: response
                 .split_once(r#""signature":""#)
