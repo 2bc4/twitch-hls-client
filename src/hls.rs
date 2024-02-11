@@ -3,9 +3,13 @@
 pub mod playlist;
 pub mod segment;
 
-use crate::args::{ArgParse, Parser};
 use anyhow::{ensure, Context, Result};
 use std::fmt;
+
+use crate::{
+    args::{ArgParse, Parser},
+    http::Url,
+};
 
 #[derive(Debug)]
 pub enum Error {
@@ -24,14 +28,14 @@ impl fmt::Display for Error {
 
 #[derive(Debug)]
 pub struct Args {
-    pub servers: Option<Vec<String>>,
-    pub client_id: Option<String>,
-    pub auth_token: Option<String>,
-    pub never_proxy: Option<Vec<String>>,
-    pub codecs: String,
-    pub no_low_latency: bool,
-    pub channel: String,
-    pub quality: String,
+    servers: Option<Vec<Url>>,
+    client_id: Option<String>,
+    auth_token: Option<String>,
+    never_proxy: Option<Vec<String>>,
+    codecs: String,
+    no_low_latency: bool,
+    channel: String,
+    quality: String,
 }
 
 impl Default for Args {
@@ -78,8 +82,8 @@ impl ArgParse for Args {
 }
 
 impl Args {
-    fn split_comma(arg: &str) -> Result<Option<Vec<String>>> {
-        Ok(Some(arg.split(',').map(String::from).collect()))
+    fn split_comma<T: for<'a> From<&'a str>>(arg: &str) -> Result<Option<Vec<T>>> {
+        Ok(Some(arg.split(',').map(T::from).collect()))
     }
 
     fn parse_optstring(arg: &str) -> Result<Option<String>> {

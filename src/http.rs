@@ -95,11 +95,11 @@ impl Url {
 
 #[derive(Debug, Clone)]
 pub struct Args {
-    pub force_https: bool,
-    pub force_ipv4: bool,
-    pub retries: u64,
-    pub timeout: Duration,
-    pub user_agent: String,
+    force_https: bool,
+    force_ipv4: bool,
+    retries: u64,
+    timeout: Duration,
+    user_agent: String,
 }
 
 impl Default for Args {
@@ -324,7 +324,7 @@ impl<T: Write> Request<T> {
     fn url(&mut self, url: &Url) -> Result<()> {
         if self.args.force_https {
             ensure!(
-                url.starts_with("https"),
+                url.starts_with("https://"),
                 "URL protocol is not HTTPS and --force-https is enabled: {url}"
             );
         }

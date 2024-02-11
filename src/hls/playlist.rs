@@ -48,10 +48,6 @@ impl MasterPlaylist {
         };
 
         master_playlist.low_latency = master_playlist.low_latency && low_latency;
-        if master_playlist.low_latency {
-            info!("Low latency streaming");
-        }
-
         Ok(master_playlist)
     }
 
@@ -106,7 +102,7 @@ impl MasterPlaylist {
 
     fn fetch_proxy_playlist(
         low_latency: bool,
-        servers: &[String],
+        servers: &[Url],
         codecs: &str,
         channel: &str,
         quality: &str,
@@ -119,9 +115,7 @@ impl MasterPlaylist {
                 info!(
                     "Using server {}://{}",
                     s.split(':').next().unwrap_or("<unknown>"),
-                    s.split('/')
-                        .nth(2)
-                        .unwrap_or_else(|| s.split('?').next().unwrap_or("<unknown>")),
+                    s.split('/').nth(2).unwrap_or("<unknown>"),
                 );
 
                 let url = format!(
@@ -209,6 +203,10 @@ impl MediaPlaylist {
             debug_log_playlist: logger::is_debug() && env::var_os("DEBUG_NO_PLAYLIST").is_none(),
         };
 
+        if master_playlist.low_latency {
+            info!("Low latency streaming");
+        }
+
         playlist.reload()?;
         Ok(playlist)
     }
@@ -272,18 +270,16 @@ impl MediaPlaylist {
 
                     self.sequence = sequence;
                 }
-                "#EXT-X-MAP" => {
-                    if self.header.is_none() {
-                        self.header = Some(
-                            split
-                                .1
-                                .split_once('=')
-                                .context("Failed to parse segment header")?
-                                .1
-                                .replace('"', "")
-                                .into(),
-                        );
-                    }
+                "#EXT-X-MAP" if self.header.is_none() => {
+                    self.header = Some(
+                        split
+                            .1
+                            .split_once('=')
+                            .context("Failed to parse segment header")?
+                            .1
+                            .replace('"', "")
+                            .into(),
+                    );
                 }
                 "#EXTINF" => {
                     total_segments += 1;

@@ -11,10 +11,10 @@ use crate::args::{ArgParse, Parser};
 #[derive(Clone, Debug)]
 #[allow(clippy::struct_field_names)] //.args
 pub struct Args {
-    pub path: String,
-    pub args: String,
-    pub quiet: bool,
-    pub no_kill: bool,
+    path: String,
+    args: String,
+    quiet: bool,
+    no_kill: bool,
 }
 
 impl Default for Args {
