@@ -270,9 +270,10 @@ impl MediaPlaylist {
         let mut total_segments = 0;
         let mut lines = self.playlist.lines().peekable();
         while let Some(line) = lines.next() {
-            match Category::categorize(line.split_once(':').unwrap_or((line, line))) {
-                Category::MediaSequence(sequence) => {
-                    let sequence = sequence.parse()?;
+            let split = line.split_once(':').unwrap_or((line, line));
+            match split.0 {
+                "#EXT-X-MEDIA-SEQUENCE" => {
+                    let sequence = split.1.parse()?;
                     if sequence > 0 {
                         let removed = sequence - self.sequence;
                         if removed < self.segments.len() {
@@ -285,10 +286,11 @@ impl MediaPlaylist {
 
                     self.sequence = sequence;
                 }
-                Category::Map(split) => {
+                "#EXT-X-MAP" => {
                     if self.header.is_none() {
                         self.header = Some(
                             split
+                                .1
                                 .split_once('=')
                                 .context("Failed to parse segment header")?
                                 .1
@@ -297,26 +299,28 @@ impl MediaPlaylist {
                         );
                     }
                 }
-                Category::ExtInf(duration) => {
+                "#EXTINF" => {
                     total_segments += 1;
                     if total_segments > last_total_segments {
-                        if let Some(line) = lines.next() {
+                        if let Some(url) = lines.next() {
                             self.segments
-                                .push_back(Segment::Normal(duration.parse()?, line.into()));
+                                .push_back(Segment::Normal(split.1.parse()?, url.into()));
                         }
                     }
                 }
-                Category::Prefetch(url) => {
+                "#EXT-X-TWITCH-PREFETCH" => {
                     total_segments += 1;
                     if total_segments > last_total_segments {
                         if lines.peek().is_some() {
-                            self.segments.push_back(Segment::NextPrefetch(url.into()));
+                            self.segments
+                                .push_back(Segment::NextPrefetch(split.1.into()));
                         } else {
-                            self.segments.push_back(Segment::NewestPrefetch(url.into()));
+                            self.segments
+                                .push_back(Segment::NewestPrefetch(split.1.into()));
                         }
                     }
                 }
-                Category::Unknown => continue,
+                _ => continue,
             }
         }
 
@@ -331,26 +335,6 @@ pub enum SegmentRange<'a> {
     Partial(Iter<'a, Segment>),
     Back(Option<&'a Segment>),
     Empty,
-}
-
-enum Category<'a> {
-    MediaSequence(&'a str),
-    Map(&'a str),
-    ExtInf(&'a str),
-    Prefetch(&'a str),
-    Unknown,
-}
-
-impl<'a> Category<'a> {
-    fn categorize(split: (&'a str, &'a str)) -> Self {
-        match split.0 {
-            "#EXT-X-MEDIA-SEQUENCE" => Self::MediaSequence(split.1),
-            "#EXT-X-MAP" => Self::Map(split.1),
-            "#EXTINF" => Self::ExtInf(split.1),
-            "#EXT-X-TWITCH-PREFETCH" => Self::Prefetch(split.1),
-            _ => Self::Unknown,
-        }
-    }
 }
 
 struct PlaybackAccessToken {
