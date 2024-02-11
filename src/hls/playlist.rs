@@ -128,7 +128,7 @@ impl MasterPlaylist {
                     [
                         "?allow_source=true",
                         "&allow_audio_only=true",
-                        &format!("&fast_bread={}", &low_latency.to_string()),
+                        &format!("&fast_bread={low_latency}"),
                         &format!("&warp={low_latency}"),
                         &format!("&supported_codecs={codecs}"),
                         "&platform=web",
@@ -225,8 +225,7 @@ impl MediaPlaylist {
             .playlist
             .lines()
             .next_back()
-            .unwrap_or_default()
-            .starts_with("#EXT-X-ENDLIST")
+            .is_some_and(|l| l.starts_with("#EXT-X-ENDLIST"))
         {
             return Err(Error::Offline.into());
         }
