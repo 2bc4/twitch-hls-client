@@ -1,6 +1,7 @@
 use std::{
     collections::{vec_deque::Iter, VecDeque},
     env, iter,
+    sync::Arc,
 };
 
 use anyhow::{ensure, Context, Result};
@@ -288,7 +289,7 @@ impl MediaPlaylist {
                     if total_segments > prev_segment_count {
                         if let Some(url) = lines.next() {
                             self.segments
-                                .push_back(Segment::Normal(split.1.parse()?, url.into()));
+                                .push_back(Segment::Normal(split.1.parse()?, Arc::new(url.into())));
                         }
                     }
                 }
@@ -297,10 +298,10 @@ impl MediaPlaylist {
                     if total_segments > prev_segment_count {
                         if lines.peek().is_some() {
                             self.segments
-                                .push_back(Segment::NextPrefetch(split.1.into()));
+                                .push_back(Segment::NextPrefetch(Arc::new(split.1.into())));
                         } else {
                             self.segments
-                                .push_back(Segment::NewestPrefetch(split.1.into()));
+                                .push_back(Segment::NewestPrefetch(Arc::new(split.1.into())));
                         }
                     }
                 }
