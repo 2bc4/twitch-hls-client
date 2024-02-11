@@ -266,7 +266,7 @@ impl MediaPlaylist {
             }
         }
 
-        let mut last_total_segments = self.segments.len();
+        let mut prev_segment_count = self.segments.len();
         let mut total_segments = 0;
         let mut lines = self.playlist.lines().peekable();
         while let Some(line) = lines.next() {
@@ -278,9 +278,14 @@ impl MediaPlaylist {
                         let removed = sequence - self.sequence;
                         if removed < self.segments.len() {
                             self.segments.drain(..removed);
-                            last_total_segments = self.segments.len();
+                            prev_segment_count = self.segments.len();
 
-                            debug!("Removed segments: {removed}");
+                            debug!("Segments removed: {removed}");
+                        } else {
+                            self.segments.clear();
+                            prev_segment_count = 0;
+
+                            debug!("All segments removed");
                         }
                     }
 
@@ -301,7 +306,7 @@ impl MediaPlaylist {
                 }
                 "#EXTINF" => {
                     total_segments += 1;
-                    if total_segments > last_total_segments {
+                    if total_segments > prev_segment_count {
                         if let Some(url) = lines.next() {
                             self.segments
                                 .push_back(Segment::Normal(split.1.parse()?, url.into()));
@@ -310,7 +315,7 @@ impl MediaPlaylist {
                 }
                 "#EXT-X-TWITCH-PREFETCH" => {
                     total_segments += 1;
-                    if total_segments > last_total_segments {
+                    if total_segments > prev_segment_count {
                         if lines.peek().is_some() {
                             self.segments
                                 .push_back(Segment::NextPrefetch(split.1.into()));
@@ -324,8 +329,8 @@ impl MediaPlaylist {
             }
         }
 
-        self.added = total_segments - (last_total_segments + prefetch_removed);
-        debug!("New segments: {}", self.added);
+        self.added = total_segments - (prev_segment_count + prefetch_removed);
+        debug!("Segments added: {}", self.added);
 
         Ok(())
     }
