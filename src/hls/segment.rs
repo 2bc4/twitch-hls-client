@@ -110,7 +110,7 @@ impl Handler {
         match self.playlist.segments() {
             SegmentRange::Partial(segments) => {
                 for segment in segments {
-                    debug!("Sending segment to worker:\n{:?}", segment);
+                    debug!("Sending segment to worker:\n{segment:?}");
                     match segment {
                         Segment::Normal(_, url)
                         | Segment::NextPrefetch(url)
@@ -128,7 +128,10 @@ impl Handler {
                 }
                 self.init = false;
 
-                match newest.context("Failed to find newest segment")? {
+                let newest = newest.context("Failed to find newest segment")?;
+                debug!("Sending newest segment to worker:\n{newest:?}");
+
+                match newest {
                     Segment::Normal(duration, url) => {
                         self.worker.url(url.clone())?;
                         duration.sleep(time.elapsed());

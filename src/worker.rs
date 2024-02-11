@@ -80,7 +80,7 @@ impl Worker {
     }
 
     pub fn sync_url(&mut self, url: Arc<Url>) -> Result<()> {
-        self.send(url, false)
+        self.send(url, true)
     }
 
     pub fn url(&mut self, url: Arc<Url>) -> Result<()> {
