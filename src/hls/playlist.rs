@@ -308,7 +308,7 @@ impl MediaPlaylist {
             }
         }
 
-        self.added = total_segments - (prev_segment_count + prefetch_removed);
+        self.added = total_segments.saturating_sub(prev_segment_count + prefetch_removed);
         debug!("Segments added: {}", self.added);
 
         Ok(())
