@@ -270,7 +270,10 @@ impl MediaPlaylist {
         let mut total_segments = 0;
         let mut lines = self.playlist.lines().peekable();
         while let Some(line) = lines.next() {
-            let split = line.split_once(':').unwrap_or((line, line));
+            let Some(split) = line.split_once(':') else {
+                continue;
+            };
+
             match split.0 {
                 "#EXT-X-MEDIA-SEQUENCE" => {
                     let sequence = split.1.parse()?;
