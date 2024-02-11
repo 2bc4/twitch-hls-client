@@ -356,7 +356,12 @@ impl<T: Write> Handler for RequestHandler<T> {
     fn debug(&mut self, kind: InfoType, data: &[u8]) {
         if matches!(kind, InfoType::Text) {
             let text = String::from_utf8_lossy(data);
-            if text.starts_with("Found bundle") || text.starts_with("Can not multiplex") {
+            if text.starts_with("Found bundle")
+                || text.starts_with("Can not multiplex")
+                || text.starts_with("Re-using")
+                || text.starts_with("Leftovers")
+                || text.ends_with("left intact\n")
+            {
                 return;
             }
 
