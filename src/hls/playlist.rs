@@ -63,35 +63,34 @@ impl MasterPlaylist {
         info!("Fetching playlist for channel {channel}");
         let access_token = PlaybackAccessToken::new(client_id, auth_token, channel, agent)?;
         let url = format!(
-            "{}{channel}.m3u8{}",
-            constants::TWITCH_HLS_BASE,
-            [
-                "?acmb=e30%3D",
-                "&allow_source=true",
-                "&allow_audio_only=true",
-                "&cdm=wv",
-                &format!("&fast_bread={low_latency}"),
-                "&playlist_include_framerate=true",
-                "&player_backend=mediaplayer",
-                "&reassignments_supported=true",
-                &format!("&supported_codecs={codecs}"),
-                "&transcode_mode=cbr_v1",
-                &format!("&p={}", &fastrand::u32(0..=9_999_999).to_string()),
-                &format!("&play_session_id={}", &access_token.play_session_id),
-                &format!("&sig={}", &access_token.signature),
-                &format!("&token={}", &http::url_encode(&access_token.token)),
-                "&player_version=1.24.0-rc.1.3",
-                &format!("&warp={low_latency}"),
-                "&browser_family=firefox",
-                &format!(
-                    "&browser_version={}",
-                    &constants::USER_AGENT[(constants::USER_AGENT.len() - 5)..],
-                ),
-                "&os_name=Windows",
-                "&os_version=NT+10.0",
-                "&platform=web",
-            ]
-            .join(""),
+            "{base_url}{channel}.m3u8\
+            ?acmb=e30%3D\
+            &allow_source=true\
+            &allow_audio_only=true\
+            &cdm=wv\
+            &fast_bread={low_latency}\
+            &playlist_include_framerate=true\
+            &player_backend=mediaplayer\
+            &reassignments_supported=true\
+            &supported_codecs={codecs}\
+            &transcode_mode=cbr_v1\
+            &p={p}\
+            &play_session_id={play_session_id}\
+            &sig={sig}\
+            &token={token}\
+            &player_version=1.24.0-rc.1.3\
+            &warp={low_latency}\
+            &browser_family=firefox\
+            &browser_version={browser_version}\
+            &os_name=Windows\
+            &os_version=NT+10.0\
+            &platform=web",
+            base_url = constants::TWITCH_HLS_BASE,
+            p = fastrand::u32(0..=9_999_999),
+            play_session_id = &access_token.play_session_id,
+            sig = access_token.signature,
+            token = http::url_encode(&access_token.token),
+            browser_version = &constants::USER_AGENT[(constants::USER_AGENT.len() - 5)..],
         );
 
         Self::parse_variant_playlist(
@@ -119,17 +118,13 @@ impl MasterPlaylist {
                 );
 
                 let url = format!(
-                    "{}{}",
+                    "{}?allow_source=true\
+                    &allow_audio_only=true\
+                    &fast_bread={low_latency}\
+                    &warp={low_latency}\
+                    &supported_codecs={codecs}\
+                    &platform=web",
                     &s.replace("[channel]", channel),
-                    [
-                        "?allow_source=true",
-                        "&allow_audio_only=true",
-                        &format!("&fast_bread={low_latency}"),
-                        &format!("&warp={low_latency}"),
-                        &format!("&supported_codecs={codecs}"),
-                        "&platform=web",
-                    ]
-                    .join(""),
                 );
 
                 let mut request = match agent.get(&url.into()) {
