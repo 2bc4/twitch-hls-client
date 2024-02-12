@@ -24,7 +24,7 @@ AO: [pipewire] 48000Hz stereo 2ch floatp
 AV: 03:57:23 / 03:57:23 (100%) A-V:  0.000 Cache: 0.7s/482KB
 ```
 
-That is the bare minimum, but there are many more options which can be viewed [here](https://github.com/2bc4/twitch-hls-client/blob/master/src/usage) or by passing `--help`.
+That is the bare minimum, but there are many more options which can be viewed [here](src/usage) or by passing `--help`.
 
 ### Config file
 Almost every option can also be set via config file. Example config file with all possible values set (values are made up):
