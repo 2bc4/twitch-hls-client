@@ -71,3 +71,6 @@ cargo install --locked --git https://github.com/2bc4/twitch-hls-client.git
 - `colors` - Enable terminal colors
 - `http2` - Enable HTTP/2 support
 - `debug-logging` - Enable debug logging support (disabling saves some CPU cycles and binary size)
+
+### License
+Distributed under the terms of the [GNU General Public License v3](https://www.gnu.org/licenses/gpl-3.0.txt), see [LICENSE](LICENSE) for more information.
