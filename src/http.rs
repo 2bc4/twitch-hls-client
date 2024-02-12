@@ -10,7 +10,7 @@ use std::{
 
 use anyhow::{ensure, Result};
 use curl::easy::{Easy, Easy2, Handler, InfoType, IpResolve, List, WriteError};
-use log::{debug, error};
+use log::{debug, error, info};
 
 use crate::{
     args::{ArgParse, Parser},
@@ -143,18 +143,23 @@ impl Agent {
     }
 
     pub fn get(&self, url: &Url) -> Result<TextRequest> {
-        TextRequest::get(Request::new(StringWriter::default(), url, self.clone())?)
+        TextRequest::get(Request::new(
+            StringWriter::default(),
+            url,
+            false,
+            self.clone(),
+        )?)
     }
 
     pub fn post(&self, url: &Url, data: &str) -> Result<TextRequest> {
         TextRequest::post(
-            Request::new(StringWriter::default(), url, self.clone())?,
+            Request::new(StringWriter::default(), url, false, self.clone())?,
             data,
         )
     }
 
     pub fn writer<T: Write>(&self, writer: T, url: &Url) -> Result<WriterRequest<T>> {
-        let request = WriterRequest::new(Request::new(writer, url, self.clone())?)?;
+        let request = WriterRequest::new(Request::new(writer, url, true, self.clone())?)?;
 
         //Currently this is the last time certs are used so they can be freed here
         let mut certs = self
@@ -250,16 +255,19 @@ where
 {
     handle: Easy2<RequestHandler<T>>,
     args: Arc<Args>,
+    should_resume: bool,
 }
 
 impl<T: Write> Request<T> {
-    fn new(writer: T, url: &Url, agent: Agent) -> Result<Self> {
+    fn new(writer: T, url: &Url, should_resume: bool, agent: Agent) -> Result<Self> {
         let mut request = Self {
             handle: Easy2::new(RequestHandler {
                 writer,
                 error: Option::default(),
+                written: usize::default(),
             }),
             args: agent.args,
+            should_resume,
         };
 
         request.handle.verbose(logger::is_debug())?;
@@ -294,17 +302,34 @@ impl<T: Write> Request<T> {
                     return Err(io_error.into());
                 }
                 Err(e) if retries < self.args.retries => {
-                    error!("http: {e}");
                     retries += 1;
+                    error!("http: {e}");
+
+                    if self.should_resume {
+                        if e.is_range_error() || e.is_recv_error() {
+                            self.handle.resume_from(0)?;
+                            self.should_resume = false;
+
+                            continue;
+                        }
+
+                        let written = self.handle.get_ref().written;
+                        if written > 0 {
+                            info!("Resuming from offset: {written} bytes");
+                            self.handle.resume_from(written as u64)?;
+                        }
+                    }
                 }
                 Err(e) => return Err(e.into()),
             }
         }
 
         self.get_mut().flush()?; //signal that the request is done
+        self.handle.get_mut().written = 0;
+        self.handle.resume_from(0)?;
 
         let code = self.handle.response_code()?;
-        if code == 200 {
+        if code == 200 || code == 206 {
             Ok(())
         } else {
             let url = self
@@ -340,6 +365,7 @@ where
 {
     writer: T,
     error: Option<io::Error>,
+    written: usize,
 }
 
 impl<T: Write> Handler for RequestHandler<T> {
@@ -349,6 +375,7 @@ impl<T: Write> Handler for RequestHandler<T> {
             return Ok(0);
         }
 
+        self.written += data.len();
         Ok(data.len())
     }
 
