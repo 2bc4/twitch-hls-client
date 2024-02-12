@@ -62,7 +62,7 @@ Depending on your platform this will look for the config file at the following l
 ### Installing
 There are standalone binaries built by GitHub for Linux and Windows [here](https://github.com/2bc4/twitch-hls-client/releases/latest).
 
-Optionally, you can build it yourself by installing the [Rust toolchain](https://rustup.rs) and then running:
+Alternatively, you can build it yourself by installing the [Rust toolchain](https://rustup.rs) and then running:
 ```
 cargo install --locked --git https://github.com/2bc4/twitch-hls-client.git
 ```
