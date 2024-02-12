@@ -30,9 +30,9 @@ That is the bare minimum, but there are many more options which can be viewed [h
 Almost every option can also be set via config file. Example config file with all possible values set (values are made up):
 ```
 # This is a comment
-servers=https://eu.luminous.dev/live/[channel],https://lb-eu.cdn-perfprod.com/live/[channel]
 player=../mpv/mpv
 player-args=- --profile=low-latency
+servers=https://eu.luminous.dev/live/[channel],https://lb-eu.cdn-perfprod.com/live/[channel]
 debug=true
 quiet=true
 passthrough=false
