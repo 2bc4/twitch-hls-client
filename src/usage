@@ -4,18 +4,20 @@ Arguments:
   <CHANNEL>
           Twitch channel to watch (can also be twitch.tv/channel)
   <QUALITY>
-          Stream quality/variant playlist to fetch (best, 1080p, 720p, 360p, 160p, audio_only, etc.)
+          Stream quality/variant playlist to stream (best, 1080p, 720p, 360p, 160p, audio_only, etc.)
 
 Options:
-  -s <URL1,URL2>
-          Ad blocking playlist proxy server to fetch the master playlist from.
-          If not specified will fetch the master playlist directly from Twitch.
-          Can be multiple comma separated servers, will try each in order until successful.
-          If URL includes "[channel]" it will be replaced with the channel argument at runtime.
   -p <PATH>
           Path to player
   -a <ARGUMENTS>
           Arguments to pass to the player [default: -]
+  -s <URL1,URL2>
+          Ad blocking playlist proxy server to fetch the master playlist from.
+          If not specified will fetch the master playlist directly from Twitch.
+
+          Can be multiple comma separated servers, will try each in order until successful.
+          If URL includes the keyword "[channel]" it will be replaced with the channel argument at runtime.
+          Note: This does not support standard HTTP proxies (ie. proxies using the CONNECT request)
   -c <PATH>
           Path to config file
   -d, --debug
@@ -46,7 +48,7 @@ Options:
       --codecs <CODEC1,CODEC2>
           Comma separated list of supported codecs [default: av1,h265,h264]
       --user-agent <USERAGENT>
-          Set user agent used in HTTP requests [default: a recent version of Firefox]
+          User agent used in HTTP requests [default: a recent version of Firefox on Windows 10]
       --http-retries <COUNT>
           Retry HTTP requests <COUNT> times before giving up [default: 3]
       --http-timeout <SECONDS>
