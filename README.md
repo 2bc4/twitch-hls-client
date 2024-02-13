@@ -40,11 +40,11 @@ These servers can be used to block ads with `-s`. They work by requesting the ma
 [TTV-LOL-PRO](https://github.com/younesaassila/ttv-lol-pro/discussions/37#discussioncomment-5426032) v1 servers:
 - `https://lb-eu.cdn-perfprod.com/live/[channel]` (Europe)
 - `https://lb-eu2.cdn-perfprod.com/live/[channel]` (Europe 2)
-- `https://lb-eu3.cdn-perfprod.com/live/[channel]` (Europe 3)
 - `https://lb-eu4.cdn-perfprod.com/live/[channel]` (Europe 4)
 - `https://lb-eu5.cdn-perfprod.com/live/[channel]` (Europe 5)
 - `https://lb-na.cdn-perfprod.com/live/[channel]` (NA)
 - `https://lb-as.cdn-perfprod.com/live/[channel]` (Asia)
+- `https://lb-sa.cdn-perfprod.com/live/[channel]` (SA)
 
 [luminous-ttv](https://github.com/AlyoshaVasilieva/luminous-ttv) servers:
 - `https://eu.luminous.dev/live/[channel]` (Europe)
