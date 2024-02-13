@@ -5,7 +5,7 @@ use std::{
 use anyhow::{bail, Context, Result};
 use log::{debug, info};
 
-use super::playlist::{MediaPlaylist, SegmentRange};
+use super::playlist::{MediaPlaylist, QueueRange};
 use crate::{http::Url, worker::Worker};
 
 #[derive(Default, Clone, Debug)]
@@ -108,7 +108,7 @@ impl Handler {
         }
 
         match self.playlist.segments() {
-            SegmentRange::Partial(segments) => {
+            QueueRange::Partial(segments) => {
                 for segment in segments {
                     debug!("Sending segment to worker:\n{segment:?}");
                     match segment {
@@ -122,7 +122,7 @@ impl Handler {
 
                 last_duration.sleep(time.elapsed());
             }
-            SegmentRange::Back(newest) => {
+            QueueRange::Back(newest) => {
                 if !self.init {
                     info!("Failed to find next segment, skipping to newest...");
                 }
@@ -140,7 +140,7 @@ impl Handler {
                     Segment::NextPrefetch(_) => bail!("Failed to resolve newest segment"),
                 }
             }
-            SegmentRange::Empty => {
+            QueueRange::Empty => {
                 if *last_duration < Duration::MAX {
                     info!("Playlist unchanged, retrying...");
                 }

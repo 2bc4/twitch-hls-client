@@ -218,7 +218,7 @@ impl MediaPlaylist {
         let mut playlist = Self {
             header: Option::default(),
 
-            segments: VecDeque::default(),
+            segments: VecDeque::with_capacity(16),
             sequence: usize::default(),
             added: usize::default(),
 
@@ -332,13 +332,13 @@ impl MediaPlaylist {
         Ok(())
     }
 
-    pub fn segments(&self) -> SegmentRange<'_> {
+    pub fn segments(&self) -> QueueRange<'_> {
         if self.added == 0 {
-            SegmentRange::Empty
+            QueueRange::Empty
         } else if self.added == self.segments.len() {
-            SegmentRange::Back(self.segments.back())
+            QueueRange::Back(self.segments.back())
         } else {
-            SegmentRange::Partial(self.segments.range(self.segments.len() - self.added..))
+            QueueRange::Partial(self.segments.range(self.segments.len() - self.added..))
         }
     }
 
@@ -350,7 +350,7 @@ impl MediaPlaylist {
     }
 }
 
-pub enum SegmentRange<'a> {
+pub enum QueueRange<'a> {
     Partial(Iter<'a, Segment>),
     Back(Option<&'a Segment>),
     Empty,
