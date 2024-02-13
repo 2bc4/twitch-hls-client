@@ -43,9 +43,6 @@ fn main() -> Result<()> {
 
         let agent = Agent::new(&args.http)?;
         let master_playlist = match MasterPlaylist::new(&args.hls, &agent) {
-            Ok(playlist) if args.passthrough => {
-                return Player::passthrough(&mut args.player, &playlist.url)
-            }
             Ok(playlist) => playlist,
             Err(e) => match e.downcast_ref::<hls::Error>() {
                 Some(hls::Error::Offline) => {
@@ -56,7 +53,16 @@ fn main() -> Result<()> {
             },
         };
 
-        let mut playlist = MediaPlaylist::new(&master_playlist, &agent)?;
+        let Some(variant_playlist) = args.quality.and_then(|q| master_playlist.find(&q)) else {
+            info!("Available stream qualities: {master_playlist}");
+            return Ok(());
+        };
+
+        if args.passthrough {
+            return Player::passthrough(&mut args.player, &variant_playlist.url);
+        }
+
+        let mut playlist = MediaPlaylist::new(&variant_playlist.url, &agent)?;
         let worker = Worker::spawn(
             Player::spawn(&args.player)?,
             playlist.header.take(),

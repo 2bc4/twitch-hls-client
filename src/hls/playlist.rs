@@ -1,6 +1,8 @@
 use std::{
     collections::{vec_deque::Iter, VecDeque},
-    env, iter,
+    env,
+    fmt::{self, Display, Formatter},
+    iter,
     sync::Arc,
 };
 
@@ -18,23 +20,39 @@ use crate::{
     logger,
 };
 
-pub struct MasterPlaylist {
+pub struct VariantPlaylist {
     pub url: Url,
-    pub low_latency: bool,
+    name: String,
+}
+
+pub struct MasterPlaylist {
+    variant_playlists: Vec<VariantPlaylist>,
+}
+
+impl Display for MasterPlaylist {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        let last_idx = self.variant_playlists.len() - 1;
+        for (idx, playlist) in self.variant_playlists.iter().enumerate() {
+            if idx == 0 {
+                write!(f, "{} (best),", playlist.name)?;
+                continue;
+            }
+
+            write!(f, " {}", playlist.name)?;
+            if idx != last_idx {
+                write!(f, ",")?;
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl MasterPlaylist {
     pub fn new(args: &Args, agent: &Agent) -> Result<Self> {
         let low_latency = !args.no_low_latency;
-        let mut master_playlist = if let Some(ref servers) = args.servers {
-            Self::fetch_proxy_playlist(
-                low_latency,
-                servers,
-                &args.codecs,
-                &args.channel,
-                &args.quality,
-                agent,
-            )?
+        let master_playlist = if let Some(ref servers) = args.servers {
+            Self::fetch_proxy_playlist(low_latency, servers, &args.codecs, &args.channel, agent)?
         } else {
             Self::fetch_twitch_playlist(
                 low_latency,
@@ -42,13 +60,19 @@ impl MasterPlaylist {
                 &args.auth_token,
                 &args.codecs,
                 &args.channel,
-                &args.quality,
                 agent,
             )?
         };
 
-        master_playlist.low_latency = master_playlist.low_latency && low_latency;
         Ok(master_playlist)
+    }
+
+    pub fn find(&self, name: &str) -> Option<&VariantPlaylist> {
+        if name == "best" {
+            return self.variant_playlists.first();
+        }
+
+        self.variant_playlists.iter().find(|v| v.name == name)
     }
 
     fn fetch_twitch_playlist(
@@ -57,7 +81,6 @@ impl MasterPlaylist {
         auth_token: &Option<String>,
         codecs: &str,
         channel: &str,
-        quality: &str,
         agent: &Agent,
     ) -> Result<Self> {
         info!("Fetching playlist for channel {channel}");
@@ -93,10 +116,7 @@ impl MasterPlaylist {
             browser_version = &constants::USER_AGENT[(constants::USER_AGENT.len() - 5)..],
         );
 
-        Self::parse_variant_playlist(
-            agent.get(&url.into())?.text().map_err(map_if_offline)?,
-            quality,
-        )
+        Self::parse_variant_playlists(agent.get(&url.into())?.text().map_err(map_if_offline)?)
     }
 
     fn fetch_proxy_playlist(
@@ -104,7 +124,6 @@ impl MasterPlaylist {
         servers: &[Url],
         codecs: &str,
         channel: &str,
-        quality: &str,
         agent: &Agent,
     ) -> Result<Self> {
         info!("Fetching playlist for channel {channel} (proxy)");
@@ -153,21 +172,31 @@ impl MasterPlaylist {
             })
             .ok_or(Error::Offline)?;
 
-        Self::parse_variant_playlist(&playlist, quality)
+        Self::parse_variant_playlists(&playlist)
     }
 
-    fn parse_variant_playlist(playlist: &str, quality: &str) -> Result<Self> {
+    fn parse_variant_playlists(playlist: &str) -> Result<Self> {
         debug!("Master playlist:\n{playlist}");
+        if playlist.contains("FUTURE=\"true\"") {
+            info!("Low latency streaming");
+        }
+
         Ok(Self {
-            url: playlist
+            variant_playlists: playlist
                 .lines()
-                .skip_while(|s| {
-                    !(s.contains("#EXT-X-MEDIA") && (s.contains(quality) || quality == "best"))
+                .filter(|l| l.starts_with("#EXT-X-MEDIA"))
+                .zip(playlist.lines().filter(|l| l.starts_with("http")))
+                .filter_map(|(line, url)| {
+                    Some(VariantPlaylist {
+                        name: line
+                            .split_once("NAME=\"")
+                            .map(|s| s.1.split('"'))
+                            .and_then(|mut s| s.next())
+                            .map(|s| s.replace(" (source)", ""))?,
+                        url: url.into(),
+                    })
                 })
-                .nth(2)
-                .context("Invalid quality or malformed master playlist")?
-                .into(),
-            low_latency: playlist.contains("FUTURE=\"true\""),
+                .collect(),
         })
     }
 }
@@ -185,7 +214,7 @@ pub struct MediaPlaylist {
 }
 
 impl MediaPlaylist {
-    pub fn new(master_playlist: &MasterPlaylist, agent: &Agent) -> Result<Self> {
+    pub fn new(url: &Url, agent: &Agent) -> Result<Self> {
         let mut playlist = Self {
             header: Option::default(),
 
@@ -193,14 +222,10 @@ impl MediaPlaylist {
             sequence: usize::default(),
             added: usize::default(),
 
-            request: agent.get(&master_playlist.url)?,
+            request: agent.get(url)?,
 
             debug_log_playlist: logger::is_debug() && env::var_os("DEBUG_NO_PLAYLIST").is_none(),
         };
-
-        if master_playlist.low_latency {
-            info!("Low latency streaming");
-        }
 
         playlist.reload()?;
         Ok(playlist)
@@ -310,7 +335,7 @@ impl MediaPlaylist {
     pub fn segments(&self) -> SegmentRange<'_> {
         if self.added == 0 {
             SegmentRange::Empty
-        } else if self.added >= self.segments.len() {
+        } else if self.added == self.segments.len() {
             SegmentRange::Back(self.segments.back())
         } else {
             SegmentRange::Partial(self.segments.range(self.segments.len() - self.added..))
@@ -437,57 +462,4 @@ fn map_if_offline(error: anyhow::Error) -> anyhow::Error {
     }
 
     error
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    const MASTER_PLAYLIST: &'static str = r#"#EXT3MU
-#EXT-X-TWITCH-INFO:NODE="...FUTURE="true"..."
-#EXT-X-MEDIA:TYPE=VIDEO,GROUP-ID="chunked",NAME="1080p60 (source)",AUTOSELECT=YES,DEFAULT=YES
-#EXT-X-STREAM-INF:BANDWIDTH=0,RESOLUTION=1920x1080,CODECS="avc1.64002A,mp4a.40.2",VIDEO="chunked",FRAME-RATE=60.000
-http://1080p.invalid
-#EXT-X-MEDIA:TYPE=VIDEO,GROUP-ID="720p60",NAME="720p60",AUTOSELECT=YES,DEFAULT=YES
-#EXT-X-STREAM-INF:BANDWIDTH=0,RESOLUTION=1280x720,CODECS="avc1.4D401F,mp4a.40.2",VIDEO="720p60",FRAME-RATE=60.000
-http://720p60.invalid
-#EXT-X-MEDIA:TYPE=VIDEO,GROUP-ID="720p30",NAME="720p",AUTOSELECT=YES,DEFAULT=YES
-#EXT-X-STREAM-INF:BANDWIDTH=0,RESOLUTION=1280x720,CODECS="avc1.4D401F,mp4a.40.2",VIDEO="720p30",FRAME-RATE=30.000
-http://720p30.invalid
-#EXT-X-MEDIA:TYPE=VIDEO,GROUP-ID="480p30",NAME="480p",AUTOSELECT=YES,DEFAULT=YES
-#EXT-X-STREAM-INF:BANDWIDTH=0,RESOLUTION=852x480,CODECS="avc1.4D401F,mp4a.40.2",VIDEO="480p30",FRAME-RATE=30.000
-http://480p.invalid
-#EXT-X-MEDIA:TYPE=VIDEO,GROUP-ID="360p30",NAME="360p",AUTOSELECT=YES,DEFAULT=YES
-#EXT-X-STREAM-INF:BANDWIDTH=0,RESOLUTION=640x360,CODECS="avc1.4D401F,mp4a.40.2",VIDEO="360p30",FRAME-RATE=30.000
-http://360p.invalid
-#EXT-X-MEDIA:TYPE=VIDEO,GROUP-ID="160p30",NAME="160p",AUTOSELECT=YES,DEFAULT=YES
-#EXT-X-STREAM-INF:BANDWIDTH=0,RESOLUTION=284x160,CODECS="avc1.4D401F,mp4a.40.2",VIDEO="160p30",FRAME-RATE=30.000
-http://160p.invalid
-#EXT-X-MEDIA:TYPE=VIDEO,GROUP-ID="audio_only",NAME="audio_only",AUTOSELECT=NO,DEFAULT=NO
-#EXT-X-STREAM-INF:BANDWIDTH=0,CODECS="mp4a.40.2",VIDEO="audio_only"
-http://audio-only.invalid"#;
-
-    #[test]
-    fn parse_variant_playlist() {
-        let qualities = [
-            ("best", Some("1080p")),
-            ("1080p", None),
-            ("720p60", None),
-            ("720p30", None),
-            ("720p", Some("720p60")),
-            ("480p", None),
-            ("360p", None),
-            ("160p", None),
-            ("audio_only", Some("audio-only")),
-        ];
-
-        for (quality, host) in qualities {
-            assert_eq!(
-                MasterPlaylist::parse_variant_playlist(MASTER_PLAYLIST, quality)
-                    .unwrap()
-                    .url,
-                format!("http://{}.invalid", host.unwrap_or(quality)).into(),
-            );
-        }
-    }
 }

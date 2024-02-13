@@ -5,7 +5,7 @@ use pico_args::Arguments;
 
 use crate::{constants, hls::Args as HlsArgs, http::Args as HttpArgs, player::Args as PlayerArgs};
 
-pub trait ArgParse {
+pub trait ArgParser {
     fn parse(&mut self, parser: &mut Parser) -> Result<()>;
 }
 
@@ -16,9 +16,10 @@ pub struct Args {
     pub hls: HlsArgs,
     pub debug: bool,
     pub passthrough: bool,
+    pub quality: Option<String>,
 }
 
-impl ArgParse for Args {
+impl ArgParser for Args {
     fn parse(&mut self, parser: &mut Parser) -> Result<()> {
         parser.parse_switch_or(&mut self.debug, "-d", "--debug")?;
         parser.parse_switch(&mut self.passthrough, "--passthrough")?;
@@ -26,6 +27,8 @@ impl ArgParse for Args {
         self.http.parse(parser)?;
         self.player.parse(parser)?;
         self.hls.parse(parser)?;
+
+        parser.parse_free(&mut self.quality, "quality")?;
         Ok(())
     }
 }
@@ -67,12 +70,9 @@ impl Parser {
         Ok(self.resolve(dst, arg, cfg_key, T::from_str)?)
     }
 
-    pub fn parse_free<T: FromStr>(&mut self, dst: &mut T, cfg_key: &'static str) -> Result<()>
-    where
-        <T as FromStr>::Err: Display + Send + Sync + Error + 'static,
-    {
-        let arg = self.parser.opt_free_from_str()?;
-        Ok(self.resolve(dst, arg, cfg_key, T::from_str)?)
+    pub fn parse_free(&mut self, dst: &mut Option<String>, cfg_key: &'static str) -> Result<()> {
+        let arg = self.parser.opt_free_from_fn(Self::parse_opt_string)?;
+        self.resolve(dst, arg, cfg_key, Self::parse_opt_string)
     }
 
     pub fn parse_free_required<T: FromStr>(&mut self) -> Result<T>
@@ -116,6 +116,11 @@ impl Parser {
     ) -> Result<()> {
         let arg = self.parser.opt_value_from_fn(key, f)?;
         self.resolve(dst, arg, cfg_key, f)
+    }
+
+    #[allow(clippy::unnecessary_wraps)] //function pointer
+    pub fn parse_opt_string(arg: &str) -> Result<Option<String>> {
+        Ok(Some(arg.to_owned()))
     }
 
     fn resolve<T, E>(

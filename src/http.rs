@@ -13,7 +13,7 @@ use curl::easy::{Easy, Easy2, Handler, InfoType, IpResolve, List, WriteError};
 use log::{debug, error, info};
 
 use crate::{
-    args::{ArgParse, Parser},
+    args::{ArgParser, Parser},
     constants, logger,
 };
 
@@ -114,7 +114,7 @@ impl Default for Args {
     }
 }
 
-impl ArgParse for Args {
+impl ArgParser for Args {
     fn parse(&mut self, parser: &mut Parser) -> Result<()> {
         parser.parse_switch(&mut self.force_https, "--force-https")?;
         parser.parse_switch(&mut self.force_ipv4, "--force-ipv4")?;
