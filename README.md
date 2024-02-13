@@ -26,6 +26,31 @@ AV: 03:57:23 / 03:57:23 (100%) A-V:  0.000 Cache: 0.7s/482KB
 
 That is the bare minimum, but there are many more options which can be viewed [here](src/usage) or by passing `--help`.
 
+### Reducing player latency with mpv
+If your internet connection is fast enough to handle it, adding these values to your mpv config will reduce latency by ~1-2 seconds:
+
+```
+profile=low-latency
+cache=no
+```
+
+### Ad blocking playlist proxies
+These servers can be used to block ads with `-s`. They work by requesting the master playlist from a country where Twitch doesn't serve ads:
+
+[TTV-LOL-PRO](https://github.com/younesaassila/ttv-lol-pro/discussions/37#discussioncomment-5426032) v1 servers:
+- `https://lb-eu.cdn-perfprod.com/live/[channel]` (Europe)
+- `https://lb-eu2.cdn-perfprod.com/live/[channel]` (Europe 2)
+- `https://lb-eu3.cdn-perfprod.com/live/[channel]` (Europe 3)
+- `https://lb-eu4.cdn-perfprod.com/live/[channel]` (Europe 4)
+- `https://lb-eu5.cdn-perfprod.com/live/[channel]` (Europe 5)
+- `https://lb-na.cdn-perfprod.com/live/[channel]` (NA)
+- `https://lb-as.cdn-perfprod.com/live/[channel]` (Asia)
+
+[luminous-ttv](https://github.com/AlyoshaVasilieva/luminous-ttv) servers:
+- `https://eu.luminous.dev/live/[channel]` (Europe)
+- `https://eu2.luminous.dev/live/[channel]` (Europe 2)
+- `https://as.luminous.dev/live/[channel]` (Asia)
+
 ### Config file
 Almost every option can also be set via config file. Example config file with all possible values set (values are made up):
 ```
