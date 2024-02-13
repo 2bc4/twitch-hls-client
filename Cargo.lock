@@ -28,12 +28,9 @@ checksum = "7f30e7476521f6f8af1a1c4c0b8cc94f0bee37d91763d0ca2665f299b6cd8aec"
 
 [[package]]
 name = "cc"
-version = "1.0.83"
+version = "1.0.85"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f1174fb0b6ec23863f8b971027804a42614e347eafb0a95bf0b12cdae21fc4d0"
-dependencies = [
- "libc",
-]
+checksum = "9b918671670962b48bc23753aef0c51d072dca6f52f01f800854ada6ddb7f7d3"
 
 [[package]]
 name = "cfg-if"
@@ -60,7 +57,7 @@ checksum = "06ea2b9bc92be3c2baa9334a323ebca2d6f074ff852cd1d7b11064035cd3868f"
 [[package]]
 name = "curl"
 version = "0.4.45"
-source = "git+https://github.com/2bc4/curl-rust.git#64a4d8f1cbf5efab44ca97cb1dc05123f3ae8baa"
+source = "git+https://github.com/2bc4/curl-rust.git#4d11bd9b5446ab8688a316c181f98d7571aa8e3b"
 dependencies = [
  "curl-sys",
  "libc",
@@ -72,7 +69,7 @@ dependencies = [
 [[package]]
 name = "curl-sys"
 version = "0.4.72+curl-8.6.1"
-source = "git+https://github.com/2bc4/curl-rust.git#64a4d8f1cbf5efab44ca97cb1dc05123f3ae8baa"
+source = "git+https://github.com/2bc4/curl-rust.git#4d11bd9b5446ab8688a316c181f98d7571aa8e3b"
 dependencies = [
  "cc",
  "libc",
@@ -348,7 +345,7 @@ dependencies = [
 
 [[package]]
 name = "twitch-hls-client"
-version = "1.2.1"
+version = "1.2.2"
 dependencies = [
  "anyhow",
  "curl",
