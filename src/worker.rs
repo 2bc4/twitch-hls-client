@@ -1,8 +1,5 @@
 use std::{
-    sync::{
-        mpsc::{self, Receiver, Sender, SyncSender},
-        Arc,
-    },
+    sync::mpsc::{self, Receiver, Sender, SyncSender},
     thread::{self, JoinHandle},
 };
 
@@ -15,7 +12,7 @@ use crate::{
 };
 
 struct ChannelMessage {
-    url: Arc<Url>,
+    url: Url,
     should_sync: bool,
 }
 
@@ -43,12 +40,12 @@ impl Worker {
                     };
 
                     let request = if let Some(header_url) = header_url {
-                        let mut request = agent.writer(player, &header_url)?;
-                        request.call(&initial_msg.url)?;
+                        let mut request = agent.writer(player, header_url)?;
+                        request.call(initial_msg.url)?;
 
                         request
                     } else {
-                        agent.writer(player, &initial_msg.url)?
+                        agent.writer(player, initial_msg.url)?
                     };
 
                     if initial_msg.should_sync {
@@ -64,7 +61,7 @@ impl Worker {
                         return Ok(());
                     };
 
-                    request.call(&msg.url)?;
+                    request.call(msg.url)?;
                     if msg.should_sync {
                         sync_tx.send(())?;
                     }
@@ -79,15 +76,15 @@ impl Worker {
         })
     }
 
-    pub fn sync_url(&mut self, url: Arc<Url>) -> Result<()> {
+    pub fn sync_url(&mut self, url: Url) -> Result<()> {
         self.send(url, true)
     }
 
-    pub fn url(&mut self, url: Arc<Url>) -> Result<()> {
+    pub fn url(&mut self, url: Url) -> Result<()> {
         self.send(url, false)
     }
 
-    fn send(&mut self, url: Arc<Url>, should_sync: bool) -> Result<()> {
+    fn send(&mut self, url: Url, should_sync: bool) -> Result<()> {
         self.join_if_dead()?;
 
         self.url_tx.send(ChannelMessage { url, should_sync })?;

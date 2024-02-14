@@ -2,8 +2,7 @@ use std::{
     collections::{vec_deque::Iter, VecDeque},
     env,
     fmt::{self, Display, Formatter},
-    iter,
-    sync::Arc,
+    iter, mem,
 };
 
 use anyhow::{ensure, Context, Result};
@@ -20,6 +19,7 @@ use crate::{
     logger,
 };
 
+#[derive(Default)]
 pub struct VariantPlaylist {
     pub url: Url,
     name: String,
@@ -67,12 +67,14 @@ impl MasterPlaylist {
         Ok(master_playlist)
     }
 
-    pub fn find(&self, name: &str) -> Option<&VariantPlaylist> {
+    pub fn find(&mut self, name: &str) -> Option<VariantPlaylist> {
         if name == "best" {
-            return self.variant_playlists.first();
+            return Some(mem::take(self.variant_playlists.first_mut()?));
         }
 
-        self.variant_playlists.iter().find(|v| v.name == name)
+        Some(mem::take(
+            self.variant_playlists.iter_mut().find(|v| v.name == name)?,
+        ))
     }
 
     fn fetch_twitch_playlist(
@@ -112,11 +114,11 @@ impl MasterPlaylist {
             p = fastrand::u32(0..=9_999_999),
             play_session_id = &access_token.play_session_id,
             sig = access_token.signature,
-            token = http::url_encode(&access_token.token),
+            token = access_token.token,
             browser_version = &constants::USER_AGENT[(constants::USER_AGENT.len() - 5)..],
         );
 
-        Self::parse_variant_playlists(agent.get(&url.into())?.text().map_err(map_if_offline)?)
+        Self::parse_variant_playlists(agent.get(url.into())?.text().map_err(map_if_offline)?)
     }
 
     fn fetch_proxy_playlist(
@@ -132,8 +134,8 @@ impl MasterPlaylist {
             .find_map(|s| {
                 info!(
                     "Using server {}://{}",
-                    s.split(':').next().unwrap_or("<unknown>"),
-                    s.split('/').nth(2).unwrap_or("<unknown>"),
+                    s.scheme().unwrap_or("<unknown>"),
+                    s.host().unwrap_or("<unknown>"),
                 );
 
                 let url = format!(
@@ -146,7 +148,7 @@ impl MasterPlaylist {
                     &s.replace("[channel]", channel),
                 );
 
-                let mut request = match agent.get(&url.into()) {
+                let mut request = match agent.get(url.into()) {
                     Ok(request) => request,
                     Err(e) => {
                         error!("{e}");
@@ -214,7 +216,7 @@ pub struct MediaPlaylist {
 }
 
 impl MediaPlaylist {
-    pub fn new(url: &Url, agent: &Agent) -> Result<Self> {
+    pub fn new(url: Url, agent: &Agent) -> Result<Self> {
         let mut playlist = Self {
             header: Option::default(),
 
@@ -306,7 +308,7 @@ impl MediaPlaylist {
                     if total_segments > prev_segment_count {
                         if let Some(url) = lines.next() {
                             self.segments
-                                .push_back(Segment::Normal(split.1.parse()?, Arc::new(url.into())));
+                                .push_back(Segment::Normal(split.1.parse()?, url.into()));
                         }
                     }
                 }
@@ -315,10 +317,10 @@ impl MediaPlaylist {
                     if total_segments > prev_segment_count {
                         if lines.peek().is_some() {
                             self.segments
-                                .push_back(Segment::NextPrefetch(Arc::new(split.1.into())));
+                                .push_back(Segment::NextPrefetch(split.1.into()));
                         } else {
                             self.segments
-                                .push_back(Segment::NewestPrefetch(Arc::new(split.1.into())));
+                                .push_back(Segment::NewestPrefetch(split.1.into()));
                         }
                     }
                 }
@@ -388,7 +390,7 @@ impl PlaybackAccessToken {
             "}",
         "}").replace("{channel}", channel);
 
-        let mut request = agent.post(&constants::TWITCH_GQL_ENDPOINT.into(), &gql)?;
+        let mut request = agent.post(constants::TWITCH_GQL_ENDPOINT.into(), gql)?;
         request.header("Content-Type: text/plain;charset=UTF-8")?;
         request.header(&format!("X-Device-ID: {}", &Self::gen_id()))?;
         request.header(&format!(
@@ -430,7 +432,7 @@ impl PlaybackAccessToken {
         let client_id = if let Some(client_id) = client_id {
             client_id.to_owned()
         } else if let Some(auth_token) = auth_token {
-            let mut request = agent.get(&constants::TWITCH_OAUTH_ENDPOINT.into())?;
+            let mut request = agent.get(constants::TWITCH_OAUTH_ENDPOINT.into())?;
             request.header(&format!("Authorization: OAuth {auth_token}"))?;
 
             request

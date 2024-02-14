@@ -188,13 +188,7 @@ impl Parser {
         }
 
         if parser.contains("-V") || parser.contains("--version") {
-            println!(
-                "{} {} (curl {})",
-                env!("CARGO_PKG_NAME"),
-                env!("CARGO_PKG_VERSION"),
-                curl::Version::get().version(),
-            );
-
+            println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"),);
             process::exit(0);
         }
 

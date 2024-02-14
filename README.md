@@ -5,7 +5,7 @@
 - Playback of low latency and normal latency streams
 - Ad blocking with playlist proxies or with a turbo/subscriber token
 - Generally lower latency than the Twitch web player
-- Minimal (uses 5-6MB of memory)
+- Tiny (at most uses 3-4MB of memory)
 
 ### Usage
 Provide a player to output the stream to with `-p`, a channel to watch, and a stream quality.
@@ -94,7 +94,6 @@ cargo install --locked --git https://github.com/2bc4/twitch-hls-client.git
 
 #### Optional build time features
 - `colors` - Enable terminal colors
-- `http2` - Enable HTTP/2 support
 - `debug-logging` - Enable debug logging support (disabling saves some CPU cycles and binary size)
 
 ### License

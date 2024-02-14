@@ -41,8 +41,8 @@ fn main() -> Result<()> {
         Logger::init(args.debug)?;
         debug!("{args:?}");
 
-        let agent = Agent::new(&args.http)?;
-        let master_playlist = match MasterPlaylist::new(&args.hls, &agent) {
+        let agent = Agent::new(&args.http);
+        let mut master_playlist = match MasterPlaylist::new(&args.hls, &agent) {
             Ok(playlist) => playlist,
             Err(e) => match e.downcast_ref::<hls::Error>() {
                 Some(hls::Error::Offline) => {
@@ -62,7 +62,7 @@ fn main() -> Result<()> {
             return Player::passthrough(&mut args.player, &variant_playlist.url);
         }
 
-        let mut playlist = MediaPlaylist::new(&variant_playlist.url, &agent)?;
+        let mut playlist = MediaPlaylist::new(variant_playlist.url, &agent)?;
         let worker = Worker::spawn(
             Player::spawn(&args.player)?,
             playlist.header.take(),

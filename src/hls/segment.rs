@@ -1,6 +1,4 @@
-use std::{
-    cmp::Ordering, str::FromStr, sync::Arc, thread, time::Duration as StdDuration, time::Instant,
-};
+use std::{cmp::Ordering, str::FromStr, thread, time::Duration as StdDuration, time::Instant};
 
 use anyhow::{bail, Context, Result};
 use log::{debug, info};
@@ -74,9 +72,9 @@ impl Duration {
 
 #[derive(Debug)]
 pub enum Segment {
-    Normal(Duration, Arc<Url>),
-    NextPrefetch(Arc<Url>),
-    NewestPrefetch(Arc<Url>),
+    Normal(Duration, Url),
+    NextPrefetch(Url),
+    NewestPrefetch(Url),
 }
 
 pub struct Handler {
