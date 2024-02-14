@@ -26,14 +26,6 @@ AV: 03:57:23 / 03:57:23 (100%) A-V:  0.000 Cache: 0.7s/482KB
 
 That is the bare minimum, but there are many more options which can be viewed [here](src/usage) or by passing `--help`.
 
-### Reducing player latency with mpv
-If your internet connection is fast enough to handle it, adding these values to your mpv config will reduce latency by ~1-2 seconds:
-
-```
-profile=low-latency
-cache=no
-```
-
 ### Ad blocking playlist proxies
 These servers can be used to block ads with `-s`. They work by requesting the master playlist from a country where Twitch doesn't serve ads:
 
@@ -95,6 +87,14 @@ cargo install --locked --git https://github.com/2bc4/twitch-hls-client.git
 #### Optional build time features
 - `colors` - Enable terminal colors
 - `debug-logging` - Enable debug logging support (disabling saves some CPU cycles and binary size)
+
+### Reducing player latency with mpv
+If your internet connection is fast enough to handle it, adding these values to your mpv config will reduce latency by ~1-2 seconds:
+
+```
+profile=low-latency
+cache=no
+```
 
 ### License
 Distributed under the terms of the [GNU General Public License v3](https://www.gnu.org/licenses/gpl-3.0.txt), see [LICENSE](LICENSE) for more information.
