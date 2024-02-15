@@ -28,10 +28,10 @@ impl TextRequest {
     }
 
     pub fn text(&mut self) -> Result<&str> {
-        self.request.get_mut()?.0.clear();
+        self.request.get_mut().0.clear();
         self.request.call()?;
 
-        Ok(&self.request.get_mut()?.0)
+        Ok(&self.request.get_mut().0)
     }
 }
 
@@ -93,8 +93,8 @@ impl<T: Write> Request<T> {
         Ok(request)
     }
 
-    fn get_mut(&mut self) -> Result<&mut T> {
-        self.handler.writer.as_mut().context("Missing writer")
+    fn get_mut(&mut self) -> &mut T {
+        self.handler.writer.as_mut().expect("Missing writer")
     }
 
     fn header(&mut self, header: &str) -> Result<()> {
@@ -118,10 +118,14 @@ impl<T: Write> Request<T> {
 
     fn call(&mut self) -> Result<()> {
         let mut retries = 0;
-        let response = loop {
+        loop {
             match self.do_request() {
-                Ok(response) => break response,
+                Ok(()) => break,
                 Err(e) if retries < self.agent.args.retries => {
+                    if e.downcast_ref::<io::Error>().is_none() {
+                        return Err(e);
+                    }
+
                     error!("http: {e}");
                     retries += 1;
 
@@ -134,9 +138,42 @@ impl<T: Write> Request<T> {
                         self.handler.written = 0;
                     }
                 }
-                Err(e) => return Err(e.into()),
+                Err(e) => return Err(e),
             }
-        };
+        }
+
+        self.handler.written = 0;
+        self.handler
+            .writer
+            .as_mut()
+            .expect("Missing writer")
+            .flush()?;
+
+        Ok(())
+    }
+
+    fn do_request(&mut self) -> Result<()> {
+        //Will break if server sends more than this in headers, but protects against OOM
+        const MAX_HEADERS_SIZE: usize = 2048;
+        //Read only \r\n
+        const HEADERS_END_SIZE: usize = 2;
+
+        debug!("Request:\n{}", self.raw);
+        self.stream.get_mut().write_all(self.raw.as_bytes())?;
+
+        let mut response = Vec::new();
+        let mut consumed = 0;
+        while consumed != HEADERS_END_SIZE {
+            if self.stream.fill_buf()?.is_empty() {
+                return Err(io::Error::from(UnexpectedEof).into());
+            }
+
+            consumed = self
+                .stream
+                .by_ref()
+                .take(MAX_HEADERS_SIZE as u64)
+                .read_until(b'\n', &mut response)?;
+        }
 
         let headers = String::from_utf8_lossy(&response);
         debug!("Response:\n{headers}");
@@ -154,7 +191,6 @@ impl<T: Write> Request<T> {
             _ => return Err(Error::Status(code, self.url.clone()).into()),
         }
 
-        self.handler.written = 0;
         if let Err(e) = io::copy(
             &mut Decoder::new(&mut self.stream, &headers)?,
             &mut self.handler,
@@ -168,36 +204,10 @@ impl<T: Write> Request<T> {
         Ok(())
     }
 
-    fn do_request(&mut self) -> Result<Vec<u8>, io::Error> {
-        //Will break if server sends more than this in headers, but protects against OOM
-        const MAX_HEADERS_SIZE: usize = 2048;
-        //Read only \r\n
-        const HEADERS_END_SIZE: usize = 2;
-
-        debug!("Request:\n{}", self.raw);
-        self.stream.get_mut().write_all(self.raw.as_bytes())?;
-
-        let mut response = Vec::new();
-        let mut consumed = 0;
-        while consumed != HEADERS_END_SIZE {
-            if self.stream.fill_buf()?.is_empty() {
-                return Err(io::Error::from(UnexpectedEof));
-            }
-
-            consumed = self
-                .stream
-                .by_ref()
-                .take(MAX_HEADERS_SIZE as u64)
-                .read_until(b'\n', &mut response)?;
-        }
-
-        Ok(response)
-    }
-
     fn reconnect(&mut self, url: Url) -> Result<()> {
         debug!("Reconnecting...");
         *self = Request::new(
-            self.handler.writer.take().context("Missing writer")?,
+            self.handler.writer.take().expect("Missing writer"),
             self.method,
             url,
             self.data.clone(),
@@ -361,7 +371,7 @@ impl<T: Write> Write for Handler<T> {
 
         self.writer
             .as_mut()
-            .ok_or(io::Error::other("Missing writer"))?
+            .expect("Missing writer")
             .write_all(buf)?;
 
         self.written += buf.len(); //len of the potential trimmed buf reference
