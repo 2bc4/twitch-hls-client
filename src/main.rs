@@ -41,7 +41,7 @@ fn main() -> Result<()> {
         Logger::init(args.debug)?;
         debug!("{args:?}");
 
-        let agent = Agent::new(&args.http);
+        let agent = Agent::new(&args.http)?;
         let mut master_playlist = match MasterPlaylist::new(&args.hls, &agent) {
             Ok(playlist) => playlist,
             Err(e) => match e.downcast_ref::<hls::Error>() {

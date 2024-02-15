@@ -20,7 +20,7 @@ use crate::{
     args::{ArgParser, Parser},
     constants,
 };
-use request::{Method, Request, StringWriter};
+use request::Method;
 
 #[derive(Debug)]
 pub enum Error {
@@ -81,52 +81,34 @@ pub struct Agent {
 }
 
 impl Agent {
-    pub fn new(args: &Args) -> Self {
+    pub fn new(args: &Args) -> Result<Self> {
         let mut roots = RootCertStore::empty();
-        for cert in rustls_native_certs::load_native_certs().unwrap_or_default() {
+        for cert in rustls_native_certs::load_native_certs()? {
             //Ignore parsing errors, OS can have broken certs.
             if let Err(e) = roots.add(cert) {
                 debug!("Invalid certificate: {e}");
             }
         }
 
-        Self {
+        Ok(Self {
             args: Arc::new(args.to_owned()),
             tls_config: Arc::new(
                 ClientConfig::builder()
                     .with_root_certificates(Arc::new(roots))
                     .with_no_client_auth(),
             ),
-        }
+        })
     }
 
     pub fn get(&self, url: Url) -> Result<TextRequest> {
-        Ok(TextRequest::new(Request::new(
-            StringWriter::default(),
-            Method::Get,
-            url,
-            String::default(),
-            self.clone(),
-        )?))
+        TextRequest::new(Method::Get, url, String::default(), self.clone())
     }
 
     pub fn post(&self, url: Url, data: String) -> Result<TextRequest> {
-        Ok(TextRequest::new(Request::new(
-            StringWriter::default(),
-            Method::Post,
-            url,
-            data,
-            self.clone(),
-        )?))
+        TextRequest::new(Method::Post, url, data, self.clone())
     }
 
     pub fn writer<T: Write>(&self, writer: T, url: Url) -> Result<WriterRequest<T>> {
-        WriterRequest::new(Request::new(
-            writer,
-            Method::Get,
-            url,
-            String::default(),
-            self.clone(),
-        )?)
+        WriterRequest::new(writer, url, self.clone())
     }
 }

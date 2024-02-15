@@ -15,23 +15,25 @@ use rustls::{ClientConfig, ClientConnection, StreamOwned};
 use super::{decoder::Decoder, Agent, Error, Url};
 
 pub struct TextRequest {
-    request: Request<StringWriter>,
+    inner: Request<StringWriter>,
 }
 
 impl TextRequest {
-    pub fn new(request: Request<StringWriter>) -> Self {
-        Self { request }
+    pub fn new(method: Method, url: Url, data: String, agent: Agent) -> Result<Self> {
+        Ok(Self {
+            inner: Request::new(StringWriter::default(), method, url, data, agent)?,
+        })
     }
 
     pub fn header(&mut self, header: &str) -> Result<()> {
-        self.request.header(header)
+        self.inner.header(header)
     }
 
     pub fn text(&mut self) -> Result<&str> {
-        self.request.get_mut().0.clear();
-        self.request.call()?;
+        self.inner.get_mut().0.clear();
+        self.inner.call()?;
 
-        Ok(&self.request.get_mut().0)
+        Ok(&self.inner.get_mut().0)
     }
 }
 
@@ -39,22 +41,111 @@ pub struct WriterRequest<T>
 where
     T: Write,
 {
-    request: Request<T>,
+    inner: Request<T>,
 }
 
 impl<T: Write> WriterRequest<T> {
-    pub fn new(mut request: Request<T>) -> Result<Self> {
-        request.call()?;
-        Ok(Self { request })
+    pub fn new(writer: T, url: Url, agent: Agent) -> Result<Self> {
+        let mut request = Self {
+            inner: Request::new(writer, Method::Get, url, String::default(), agent)?,
+        };
+
+        request.inner.call()?;
+        Ok(request)
     }
 
     pub fn call(&mut self, url: Url) -> Result<()> {
-        self.request.url(url)?;
-        self.request.call()
+        self.inner.url(url)?;
+        self.inner.call()
     }
 }
 
-pub struct Request<T>
+#[allow(clippy::large_enum_variant)]
+pub enum Transport {
+    Http(TcpStream),
+    Https(StreamOwned<ClientConnection, TcpStream>),
+}
+
+impl Read for Transport {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self {
+            Self::Http(sock) => sock.read(buf),
+            Self::Https(stream) => stream.read(buf),
+        }
+    }
+}
+
+impl Write for Transport {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        match self {
+            Self::Http(sock) => sock.write(buf),
+            Self::Https(stream) => stream.write(buf),
+        }
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        match self {
+            Self::Http(sock) => sock.flush(),
+            Self::Https(stream) => stream.flush(),
+        }
+    }
+}
+
+impl Transport {
+    fn new(url: &Url, agent: Agent) -> Result<Self> {
+        let scheme = url.scheme()?;
+        let host = url.host()?;
+        let port = url.port()?;
+
+        if agent.args.force_https {
+            ensure!(
+                scheme == "https",
+                "URL protocol is not HTTPS and --force-https is enabled: {url}",
+            );
+        }
+
+        let addr = format!("{host}:{port}");
+        let sock = if agent.args.force_ipv4 {
+            TcpStream::connect(
+                &*addr
+                    .to_socket_addrs()?
+                    .filter(SocketAddr::is_ipv4)
+                    .collect::<Vec<_>>(),
+            )?
+        } else {
+            TcpStream::connect(addr)?
+        };
+
+        sock.set_nodelay(true)?;
+        sock.set_read_timeout(Some(agent.args.timeout))?;
+        sock.set_write_timeout(Some(agent.args.timeout))?;
+
+        match scheme {
+            "http" => Ok(Self::Http(sock)),
+            "https" => Ok(Self::Https(Self::init_tls(host, sock, agent.tls_config)?)),
+            _ => bail!("{scheme} is not supported"),
+        }
+    }
+
+    fn init_tls(
+        host: &str,
+        mut sock: TcpStream,
+        tls_config: Arc<ClientConfig>,
+    ) -> Result<StreamOwned<ClientConnection, TcpStream>> {
+        let mut conn = ClientConnection::new(tls_config, host.to_owned().try_into()?)?;
+        conn.complete_io(&mut sock)?; //handshake
+
+        Ok(StreamOwned::new(conn, sock))
+    }
+}
+
+#[derive(Copy, Clone)]
+pub enum Method {
+    Get,
+    Post,
+}
+
+struct Request<T>
 where
     T: Write,
 {
@@ -71,7 +162,7 @@ where
 }
 
 impl<T: Write> Request<T> {
-    pub fn new(writer: T, method: Method, url: Url, data: String, agent: Agent) -> Result<Self> {
+    fn new(writer: T, method: Method, url: Url, data: String, agent: Agent) -> Result<Self> {
         let mut request = Self {
             stream: BufReader::new(Transport::new(&url, agent.clone())?),
             handler: Handler::new(writer),
@@ -245,93 +336,8 @@ impl<T: Write> Request<T> {
     }
 }
 
-#[derive(Copy, Clone)]
-pub enum Method {
-    Get,
-    Post,
-}
-
-#[allow(clippy::large_enum_variant)]
-pub enum Transport {
-    Http(TcpStream),
-    Https(StreamOwned<ClientConnection, TcpStream>),
-}
-
-impl Read for Transport {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        match self {
-            Self::Http(sock) => sock.read(buf),
-            Self::Https(stream) => stream.read(buf),
-        }
-    }
-}
-
-impl Write for Transport {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        match self {
-            Self::Http(sock) => sock.write(buf),
-            Self::Https(stream) => stream.write(buf),
-        }
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        match self {
-            Self::Http(sock) => sock.flush(),
-            Self::Https(stream) => stream.flush(),
-        }
-    }
-}
-
-impl Transport {
-    pub fn new(url: &Url, agent: Agent) -> Result<Self> {
-        let scheme = url.scheme()?;
-        let host = url.host()?;
-        let port = url.port()?;
-
-        if agent.args.force_https {
-            ensure!(
-                scheme == "https",
-                "URL protocol is not HTTPS and --force-https is enabled: {url}",
-            );
-        }
-
-        let addr = format!("{host}:{port}");
-        let sock = if agent.args.force_ipv4 {
-            TcpStream::connect(
-                &*addr
-                    .to_socket_addrs()?
-                    .filter(SocketAddr::is_ipv4)
-                    .collect::<Vec<_>>(),
-            )?
-        } else {
-            TcpStream::connect(addr)?
-        };
-
-        sock.set_nodelay(true)?;
-        sock.set_read_timeout(Some(agent.args.timeout))?;
-        sock.set_write_timeout(Some(agent.args.timeout))?;
-
-        match scheme {
-            "http" => Ok(Self::Http(sock)),
-            "https" => Ok(Self::Https(Self::init_tls(host, sock, agent.tls_config)?)),
-            _ => bail!("{scheme} is not supported"),
-        }
-    }
-
-    fn init_tls(
-        host: &str,
-        mut sock: TcpStream,
-        tls_config: Arc<ClientConfig>,
-    ) -> Result<StreamOwned<ClientConnection, TcpStream>> {
-        let mut conn = ClientConnection::new(tls_config, host.to_owned().try_into()?)?;
-        conn.complete_io(&mut sock)?; //handshake
-
-        Ok(StreamOwned::new(conn, sock))
-    }
-}
-
 #[derive(Default)]
-pub struct StringWriter(String);
+struct StringWriter(String);
 
 impl Write for StringWriter {
     fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
