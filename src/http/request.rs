@@ -104,16 +104,15 @@ impl Transport {
             );
         }
 
-        let addr = format!("{host}:{port}");
         let sock = if agent.args.force_ipv4 {
             TcpStream::connect(
-                &*addr
+                &*(host, port)
                     .to_socket_addrs()?
                     .filter(SocketAddr::is_ipv4)
                     .collect::<Vec<_>>(),
             )?
         } else {
-            TcpStream::connect(addr)?
+            TcpStream::connect((host, port))?
         };
 
         sock.set_nodelay(true)?;
@@ -219,7 +218,7 @@ impl<T: Write> Request<T> {
                         _ => return Err(e),
                     }
 
-                    error!("http: {e}");
+                    error!("http: {e}, retrying...");
                     retries += 1;
 
                     self.reconnect(self.url.clone())?;
@@ -282,17 +281,15 @@ impl<T: Write> Request<T> {
             _ => return Err(Error::Status(code, self.url.clone()).into()),
         }
 
-        if let Err(e) = io::copy(
+        match io::copy(
             &mut Decoder::new(&mut self.stream, &headers)?,
             &mut self.handler,
         ) {
+            Ok(_) => Ok(()),
             //Chunk decoder returns InvalidInput on some segment servers, can be ignored
-            if !matches!(e.kind(), InvalidInput) {
-                return Err(e.into());
-            }
+            Err(e) if matches!(e.kind(), InvalidInput) => Ok(()),
+            Err(e) => Err(e.into()),
         }
-
-        Ok(())
     }
 
     fn reconnect(&mut self, url: Url) -> Result<()> {
