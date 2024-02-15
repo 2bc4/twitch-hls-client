@@ -154,6 +154,7 @@ impl<T: Write> Request<T> {
             _ => return Err(Error::Status(code, self.url.clone()).into()),
         }
 
+        self.handler.written = 0;
         if let Err(e) = io::copy(
             &mut Decoder::new(&mut self.stream, &headers)?,
             &mut self.handler,
