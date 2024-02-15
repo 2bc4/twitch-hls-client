@@ -223,11 +223,9 @@ impl<T: Write> Request<T> {
                     retries += 1;
 
                     self.reconnect(self.url.clone())?;
-
-                    let written = self.handler.written;
-                    if written > 0 {
-                        info!("Resuming from offset: {written} bytes");
-                        self.handler.resume_target = written;
+                    if self.handler.written > 0 {
+                        info!("Resuming from offset: {} bytes", self.handler.written);
+                        self.handler.resume_target = self.handler.written;
                         self.handler.written = 0;
                     }
                 }
@@ -299,6 +297,8 @@ impl<T: Write> Request<T> {
 
     fn reconnect(&mut self, url: Url) -> Result<()> {
         debug!("Reconnecting...");
+
+        let written = self.handler.written;
         *self = Request::new(
             self.handler.writer.take().expect("Missing writer"),
             self.method,
@@ -307,6 +307,7 @@ impl<T: Write> Request<T> {
             self.agent.clone(),
         )?;
 
+        self.handler.written = written;
         Ok(())
     }
 
