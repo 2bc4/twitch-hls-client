@@ -372,23 +372,23 @@ impl PlaybackAccessToken {
         agent: &Agent,
     ) -> Result<Self> {
         #[rustfmt::skip]
-        let gql = concat!(
-        "{",
-            "\"extensions\":{",
-                "\"persistedQuery\":{",
-                    r#""sha256Hash":"0828119ded1c13477966434e15800ff57ddacf13ba1911c129dc2200705b0712","#,
-                    "\"version\":1",
-                "}",
-            "},",
-            r#""operationName":"PlaybackAccessToken","#,
-            "\"variables\":{",
-                "\"isLive\":true,",
-                "\"isVod\":false,",
-                r#""login":"{channel}","#,
-                r#""playerType": "site","#,
-                r#""vodID":"""#,
-            "}",
-        "}").replace("{channel}", channel);
+        let gql = format!(
+        "{{\
+            \"extensions\":{{\
+                \"persistedQuery\":{{\
+                    \"sha256Hash\":\"0828119ded1c13477966434e15800ff57ddacf13ba1911c129dc2200705b0712\",\
+                    \"version\":1\
+                }}\
+            }},\
+            \"operationName\":\"PlaybackAccessToken\",\
+            \"variables\":{{\
+                \"isLive\":true,\
+                \"isVod\":false,\
+                \"login\":\"{channel}\",\
+                \"playerType\": \"site\",\
+                \"vodID\":\"\"\
+            }}\
+        }}");
 
         let mut request = agent.post(constants::TWITCH_GQL_ENDPOINT.into(), gql)?;
         request.header("Content-Type: text/plain;charset=UTF-8")?;
