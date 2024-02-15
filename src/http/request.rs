@@ -1,7 +1,7 @@
 use std::{
     io::{
         self, BufRead, BufReader,
-        ErrorKind::{InvalidInput, UnexpectedEof},
+        ErrorKind::{InvalidInput, Other, UnexpectedEof},
         Read, Write,
     },
     net::{SocketAddr, TcpStream, ToSocketAddrs},
@@ -122,8 +122,10 @@ impl<T: Write> Request<T> {
             match self.do_request() {
                 Ok(()) => break,
                 Err(e) if retries < self.agent.args.retries => {
-                    if e.downcast_ref::<io::Error>().is_none() {
-                        return Err(e);
+                    match e.downcast_ref::<io::Error>() {
+                        Some(i) if matches!(i.kind(), Other) => return Err(e),
+                        Some(_) => (),
+                        _ => return Err(e),
                     }
 
                     error!("http: {e}");

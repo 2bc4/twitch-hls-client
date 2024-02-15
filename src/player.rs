@@ -1,5 +1,6 @@
 use std::{
-    io::{self, Write},
+    fmt::{self, Display, Formatter},
+    io::{self, ErrorKind::BrokenPipe, Write},
     process::{Child, ChildStdin, Command, Stdio},
 };
 
@@ -7,6 +8,17 @@ use anyhow::{ensure, Context, Result};
 use log::{debug, error, info};
 
 use crate::args::{ArgParser, Parser};
+
+#[derive(Debug)]
+pub struct PipeClosedError;
+
+impl std::error::Error for PipeClosedError {}
+
+impl Display for PipeClosedError {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "Unhandled player closed")
+    }
+}
 
 #[derive(Clone, Debug)]
 #[allow(clippy::struct_field_names)] //.args
@@ -67,7 +79,13 @@ impl Write for Player {
     }
 
     fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
-        self.stdin.write_all(buf)
+        self.stdin.write_all(buf).map_err(|e| {
+            if matches!(e.kind(), BrokenPipe) {
+                return io::Error::other(PipeClosedError);
+            }
+
+            e
+        })
     }
 }
 

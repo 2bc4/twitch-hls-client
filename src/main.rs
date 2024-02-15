@@ -7,7 +7,7 @@ mod player;
 mod worker;
 
 use std::{
-    io::{self, ErrorKind::BrokenPipe},
+    io::{self, ErrorKind::Other},
     time::Instant,
 };
 
@@ -81,7 +81,9 @@ fn main() -> Result<()> {
             }
 
             if let Some(e) = e.downcast_ref::<io::Error>() {
-                if matches!(e.kind(), BrokenPipe) {
+                //Currently the only Other error is thrown when player closed
+                //so no need to check further.
+                if matches!(e.kind(), Other) {
                     info!("Player closed, exiting...");
                     return Ok(());
                 }
