@@ -1,7 +1,7 @@
 use std::{
     io::{
         self, BufRead, BufReader,
-        ErrorKind::{BrokenPipe, ConnectionAborted, ConnectionReset, InvalidInput, UnexpectedEof},
+        ErrorKind::{InvalidInput, UnexpectedEof},
         Read, Write,
     },
     net::{SocketAddr, TcpStream, ToSocketAddrs},
@@ -122,15 +122,10 @@ impl<T: Write> Request<T> {
             match self.do_request() {
                 Ok(response) => break response,
                 Err(e) if retries < self.agent.args.retries => {
-                    match e.kind() {
-                        BrokenPipe | UnexpectedEof | ConnectionAborted | ConnectionReset => {
-                            self.reconnect(self.url.clone())?;
-                        }
-                        _ => {
-                            error!("http: {e}");
-                            retries += 1;
-                        }
-                    }
+                    error!("http: {e}");
+                    retries += 1;
+
+                    self.reconnect(self.url.clone())?;
 
                     let written = self.handler.written;
                     if written > 0 {
