@@ -385,7 +385,7 @@ impl PlaybackAccessToken {
                 \"isLive\":true,\
                 \"isVod\":false,\
                 \"login\":\"{channel}\",\
-                \"playerType\": \"site\",\
+                \"playerType\":\"site\",\
                 \"vodID\":\"\"\
             }}\
         }}");
