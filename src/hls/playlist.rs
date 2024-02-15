@@ -1,5 +1,5 @@
 use std::{
-    collections::{vec_deque::Iter, VecDeque},
+    collections::{vec_deque::IterMut, VecDeque},
     env,
     fmt::{self, Display, Formatter},
     iter, mem,
@@ -334,27 +334,31 @@ impl MediaPlaylist {
         Ok(())
     }
 
-    pub fn segments(&self) -> QueueRange<'_> {
+    pub fn segments(&mut self) -> QueueRange<'_> {
         if self.added == 0 {
             QueueRange::Empty
         } else if self.added == self.segments.len() {
-            QueueRange::Back(self.segments.back())
+            QueueRange::Back(self.segments.back_mut())
         } else {
-            QueueRange::Partial(self.segments.range(self.segments.len() - self.added..))
+            QueueRange::Partial(self.segments.range_mut(self.segments.len() - self.added..))
         }
     }
 
-    pub fn last_duration(&self) -> Option<&Duration> {
-        self.segments.iter().rev().find_map(|s| match s {
-            Segment::Normal(duration, _) => Some(duration),
-            _ => None,
-        })
+    pub fn last_duration(&mut self) -> Option<Duration> {
+        self.segments
+            .iter()
+            .rev()
+            .find_map(|s| match s {
+                Segment::Normal(duration, _) => Some(duration),
+                _ => None,
+            })
+            .copied()
     }
 }
 
 pub enum QueueRange<'a> {
-    Partial(Iter<'a, Segment>),
-    Back(Option<&'a Segment>),
+    Partial(IterMut<'a, Segment>),
+    Back(Option<&'a mut Segment>),
     Empty,
 }
 

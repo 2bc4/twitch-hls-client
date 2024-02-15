@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, str::FromStr, thread, time::Duration as StdDuration, time::Instant};
+use std::{cmp::Ordering, mem, str::FromStr, thread, time::Duration as StdDuration, time::Instant};
 
 use anyhow::{bail, Context, Result};
 use log::{debug, info};
@@ -6,7 +6,7 @@ use log::{debug, info};
 use super::playlist::{MediaPlaylist, QueueRange};
 use crate::{http::Url, worker::Worker};
 
-#[derive(Default, Clone, Debug)]
+#[derive(Default, Copy, Clone, Debug)]
 pub struct Duration {
     pub is_ad: bool,
     inner: StdDuration,
@@ -106,14 +106,14 @@ impl Handler {
         }
 
         match self.playlist.segments() {
-            QueueRange::Partial(segments) => {
+            QueueRange::Partial(ref mut segments) => {
                 for segment in segments {
                     debug!("Sending segment to worker:\n{segment:?}");
                     match segment {
                         Segment::Normal(_, url)
                         | Segment::NextPrefetch(url)
                         | Segment::NewestPrefetch(url) => {
-                            self.worker.url(url.clone())?;
+                            self.worker.url(mem::take(url))?;
                         }
                     }
                 }
@@ -130,16 +130,16 @@ impl Handler {
                 debug!("Sending newest segment to worker:\n{newest:?}");
 
                 match newest {
-                    Segment::Normal(duration, url) => {
-                        self.worker.url(url.clone())?;
+                    Segment::Normal(duration, ref mut url) => {
+                        self.worker.url(mem::take(url))?;
                         duration.sleep(time.elapsed());
                     }
-                    Segment::NewestPrefetch(url) => self.worker.sync_url(url.clone())?,
+                    Segment::NewestPrefetch(ref mut url) => self.worker.sync_url(mem::take(url))?,
                     Segment::NextPrefetch(_) => bail!("Failed to resolve newest segment"),
                 }
             }
             QueueRange::Empty => {
-                if *last_duration < Duration::MAX {
+                if last_duration < Duration::MAX {
                     info!("Playlist unchanged, retrying...");
                 }
 
