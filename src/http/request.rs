@@ -6,6 +6,7 @@ use std::{
     },
     net::{SocketAddr, TcpStream, ToSocketAddrs},
     sync::Arc,
+    time::Duration,
 };
 
 use anyhow::{bail, ensure, Context, Result};
@@ -104,15 +105,11 @@ impl Transport {
             );
         }
 
+        let addrs = (host, port).to_socket_addrs()?;
         let sock = if agent.args.force_ipv4 {
-            TcpStream::connect(
-                &*(host, port)
-                    .to_socket_addrs()?
-                    .filter(SocketAddr::is_ipv4)
-                    .collect::<Vec<_>>(),
-            )?
+            Self::try_connect(addrs.filter(SocketAddr::is_ipv4), agent.args.timeout)?
         } else {
-            TcpStream::connect((host, port))?
+            Self::try_connect(addrs, agent.args.timeout)?
         };
 
         sock.set_nodelay(true)?;
@@ -124,6 +121,21 @@ impl Transport {
             "https" => Ok(Self::Https(Self::init_tls(host, sock, agent.tls_config)?)),
             _ => bail!("{scheme} is not supported"),
         }
+    }
+
+    fn try_connect<T: Iterator<Item = SocketAddr>>(
+        iter: T,
+        timeout: Duration,
+    ) -> Result<TcpStream, io::Error> {
+        let mut io_error = None;
+        for addr in iter {
+            match TcpStream::connect_timeout(&addr, timeout) {
+                Ok(sock) => return Ok(sock),
+                Err(e) => io_error = Some(e),
+            }
+        }
+
+        Err(io_error.expect("Missing io error while connection failed"))
     }
 
     fn init_tls(
