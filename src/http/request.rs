@@ -1,6 +1,6 @@
 use std::{
     io::{
-        self, BufRead, BufReader,
+        self,
         ErrorKind::{InvalidInput, Other, UnexpectedEof},
         Read, Write,
     },
@@ -169,7 +169,7 @@ struct Request<T>
 where
     T: Write,
 {
-    stream: BufReader<Transport>,
+    stream: Transport,
     handler: Handler<T>,
     raw: String,
 
@@ -184,7 +184,7 @@ where
 impl<T: Write> Request<T> {
     fn new(writer: T, method: Method, url: Url, data: String, agent: Agent) -> Result<Self> {
         let mut request = Self {
-            stream: BufReader::new(Transport::new(&url, agent.clone())?),
+            stream: Transport::new(&url, agent.clone())?,
             handler: Handler::new(writer),
             raw: String::default(),
 
@@ -265,27 +265,31 @@ impl<T: Write> Request<T> {
     }
 
     fn do_request(&mut self) -> Result<()> {
-        //Will break if server sends more than this in headers, but protects against OOM
-        const MAX_HEADERS_SIZE: usize = 2048;
-        //Read only \r\n
-        const HEADERS_END_SIZE: usize = 2;
+        const BUF_SIZE: usize = 2048;
 
         debug!("Request:\n{}", self.raw);
-        self.stream.get_mut().write_all(self.raw.as_bytes())?;
+        self.stream.write_all(self.raw.as_bytes())?;
+        self.stream.flush()?;
 
-        let mut headers = String::default();
-        let mut consumed = 0;
-        while consumed != HEADERS_END_SIZE {
-            if self.stream.fill_buf()?.is_empty() {
+        //Read into buf and search for the header terminator string,
+        //then split buf there and feed remaining half into decoder
+        let mut buf = [0u8; BUF_SIZE];
+        let mut written = 0;
+        let (headers, remaining) = loop {
+            let consumed = self.stream.read(&mut buf[written..])?;
+            if consumed == 0 {
                 return Err(io::Error::from(UnexpectedEof).into());
             }
+            written += consumed;
 
-            consumed = self
-                .stream
-                .by_ref()
-                .take(MAX_HEADERS_SIZE as u64)
-                .read_line(&mut headers)?;
-        }
+            if let Some(mut headers_end) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
+                headers_end += 4; //pass \r\n\r\n
+                break (
+                    String::from_utf8_lossy(&buf[..headers_end]),
+                    &buf[headers_end..written],
+                );
+            }
+        };
         debug!("Response:\n{headers}");
 
         let code = headers
@@ -302,12 +306,12 @@ impl<T: Write> Request<T> {
         }
 
         match io::copy(
-            &mut Decoder::new(&mut self.stream, &headers)?,
+            &mut Decoder::new(remaining.chain(&mut self.stream), &headers)?,
             &mut self.handler,
         ) {
             Ok(_) => Ok(()),
             //Chunk decoder returns InvalidInput on some segment servers, can be ignored
-            Err(e) if matches!(e.kind(), InvalidInput) => Ok(()),
+            Err(e) if e.kind() == InvalidInput => Ok(()),
             Err(e) => Err(e.into()),
         }
     }

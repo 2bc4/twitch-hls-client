@@ -1,29 +1,30 @@
-use std::io::{self, BufReader, Read};
+use std::io::{self, Read};
 
 use anyhow::{bail, Result};
 use chunked_transfer::Decoder as ChunkDecoder;
 use flate2::read::GzDecoder;
 use log::debug;
 
-use super::request::Transport;
-
-enum Encoding<'a> {
-    Unencoded(&'a mut BufReader<Transport>, u64),
-    Chunked(ChunkDecoder<&'a mut BufReader<Transport>>),
-    ChunkedGzip(GzDecoder<ChunkDecoder<&'a mut BufReader<Transport>>>),
-    Gzip(GzDecoder<&'a mut BufReader<Transport>>),
+enum Encoding<T>
+where
+    T: Read,
+{
+    Unencoded(T, u64),
+    Chunked(ChunkDecoder<T>),
+    ChunkedGzip(GzDecoder<ChunkDecoder<T>>),
+    Gzip(GzDecoder<T>),
 }
 
-pub struct Decoder<'a> {
-    kind: Encoding<'a>,
+pub struct Decoder<T: Read> {
+    kind: Encoding<T>,
     consumed: u64,
 }
 
-impl Read for Decoder<'_> {
+impl<T: Read> Read for Decoder<T> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match &mut self.kind {
-            Encoding::Unencoded(stream, length) => {
-                let consumed = stream.take(*length - self.consumed).read(buf)?;
+            Encoding::Unencoded(reader, length) => {
+                let consumed = reader.take(*length - self.consumed).read(buf)?;
                 self.consumed += consumed as u64;
 
                 Ok(consumed)
@@ -43,8 +44,8 @@ impl Read for Decoder<'_> {
     }
 }
 
-impl<'a> Decoder<'a> {
-    pub fn new(stream: &'a mut BufReader<Transport>, headers: &str) -> Result<Decoder<'a>> {
+impl<T: Read> Decoder<T> {
+    pub fn new(reader: T, headers: &str) -> Result<Decoder<T>> {
         let headers = headers.to_lowercase();
         let content_length = headers
             .lines()
@@ -58,35 +59,35 @@ impl<'a> Decoder<'a> {
             (true, true) => {
                 debug!("Body is chunked and gzipped");
 
-                return Ok(Self {
-                    kind: Encoding::ChunkedGzip(GzDecoder::new(ChunkDecoder::new(stream))),
+                Ok(Self {
+                    kind: Encoding::ChunkedGzip(GzDecoder::new(ChunkDecoder::new(reader))),
                     consumed: u64::default(),
-                });
+                })
             }
             (true, false) => {
                 debug!("Body is chunked");
 
-                return Ok(Self {
-                    kind: Encoding::Chunked(ChunkDecoder::new(stream)),
+                Ok(Self {
+                    kind: Encoding::Chunked(ChunkDecoder::new(reader)),
                     consumed: u64::default(),
-                });
+                })
             }
             (false, true) => {
                 debug!("Body is gzipped");
 
-                return Ok(Self {
-                    kind: Encoding::Gzip(GzDecoder::new(stream)),
+                Ok(Self {
+                    kind: Encoding::Gzip(GzDecoder::new(reader)),
                     consumed: u64::default(),
-                });
+                })
             }
             _ => match content_length {
                 Some(length) => {
                     debug!("Content length: {length}");
 
-                    return Ok(Self {
-                        kind: Encoding::Unencoded(stream, length),
+                    Ok(Self {
+                        kind: Encoding::Unencoded(reader, length),
                         consumed: u64::default(),
-                    });
+                    })
                 }
                 _ => bail!("Could not resolve encoding of HTTP response"),
             },
