@@ -123,8 +123,8 @@ impl Transport {
         }
     }
 
-    fn try_connect<T: Iterator<Item = SocketAddr>>(
-        iter: T,
+    fn try_connect(
+        iter: impl Iterator<Item = SocketAddr>,
         timeout: Duration,
     ) -> Result<TcpStream, io::Error> {
         let mut io_error = None;
@@ -154,6 +154,15 @@ impl Transport {
 pub enum Method {
     Get,
     Post,
+}
+
+impl Method {
+    fn as_str(self) -> &'static str {
+        match self {
+            Method::Get => "GET",
+            Method::Post => "POST",
+        }
+    }
 }
 
 struct Request<T>
@@ -233,11 +242,12 @@ impl<T: Write> Request<T> {
                     error!("http: {e}, retrying...");
                     retries += 1;
 
+                    let written = self.handler.written;
                     self.reconnect(self.url.clone())?;
-                    if self.handler.written > 0 {
-                        info!("Resuming from offset: {} bytes", self.handler.written);
-                        self.handler.resume_target = self.handler.written;
-                        self.handler.written = 0;
+
+                    if written > 0 {
+                        info!("Resuming from offset: {written} bytes");
+                        self.handler.resume_target = written;
                     }
                 }
                 Err(e) => return Err(e),
@@ -263,7 +273,7 @@ impl<T: Write> Request<T> {
         debug!("Request:\n{}", self.raw);
         self.stream.get_mut().write_all(self.raw.as_bytes())?;
 
-        let mut response = Vec::new();
+        let mut headers = String::default();
         let mut consumed = 0;
         while consumed != HEADERS_END_SIZE {
             if self.stream.fill_buf()?.is_empty() {
@@ -274,10 +284,8 @@ impl<T: Write> Request<T> {
                 .stream
                 .by_ref()
                 .take(MAX_HEADERS_SIZE as u64)
-                .read_until(b'\n', &mut response)?;
+                .read_line(&mut headers)?;
         }
-
-        let headers = String::from_utf8_lossy(&response);
         debug!("Response:\n{headers}");
 
         let code = headers
@@ -306,8 +314,6 @@ impl<T: Write> Request<T> {
 
     fn reconnect(&mut self, url: Url) -> Result<()> {
         debug!("Reconnecting...");
-
-        let written = self.handler.written;
         *self = Request::new(
             self.handler.writer.take().expect("Missing writer"),
             self.method,
@@ -316,17 +322,11 @@ impl<T: Write> Request<T> {
             self.agent.clone(),
         )?;
 
-        self.handler.written = written;
         Ok(())
     }
 
     fn build(&mut self) -> Result<()> {
-        let method = match self.method {
-            Method::Get => "GET",
-            Method::Post => "POST",
-        };
-
-        let headers = format!(
+        self.raw = format!(
             "{method} /{path} HTTP/1.1\r\n\
              Host: {host}\r\n\
              User-Agent: {user_agent}\r\n\
@@ -334,14 +334,16 @@ impl<T: Write> Request<T> {
              Accept-Language: en-US\r\n\
              Accept-Encoding: gzip\r\n\
              Connection: keep-alive\r\n\
-             {headers}",
+             {headers}\r\n\
+             {data}",
+            method = self.method.as_str(),
             path = self.url.path()?,
             host = self.url.host()?,
             user_agent = &self.agent.args.user_agent,
-            headers = self.headers
+            headers = self.headers,
+            data = self.data,
         );
 
-        self.raw = format!("{}\r\n{}", headers, self.data);
         Ok(())
     }
 }
