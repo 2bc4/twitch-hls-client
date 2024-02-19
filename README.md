@@ -90,8 +90,8 @@ cargo install --locked --git https://github.com/2bc4/twitch-hls-client.git
 ```
 
 #### Optional build time features
-- `colors` - Enable terminal colors
-- `debug-logging` - Enable debug logging support (disabling saves some CPU cycles and binary size)
+- `colors` - Enable terminal colors (enabled by default)
+- `debug-logging` - Enable debug logging support
 
 ### Reducing player latency with mpv
 If your internet connection is fast enough to handle it, adding these values to your mpv config will reduce latency by ~1-2 seconds:
