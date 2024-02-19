@@ -4,7 +4,7 @@ use std::{
 };
 
 use anyhow::Result;
-use log::{self, Level, LevelFilter, Log, Metadata, Record};
+use log::{Level, LevelFilter, Log, Metadata, Record};
 
 #[allow(dead_code)] //.enable_debug if debug logging feature disabled
 pub struct Logger {
