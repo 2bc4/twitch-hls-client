@@ -25,6 +25,12 @@ pub struct VariantPlaylist {
     name: String,
 }
 
+impl PartialEq for VariantPlaylist {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
+
 pub struct MasterPlaylist {
     variant_playlists: Vec<VariantPlaylist>,
 }
@@ -52,7 +58,7 @@ impl MasterPlaylist {
     pub fn new(args: &Args, agent: &Agent) -> Result<Self> {
         info!("Fetching playlist for channel {}", args.channel);
         let low_latency = !args.no_low_latency;
-        let master_playlist = if let Some(ref servers) = args.servers {
+        let mut master_playlist = if let Some(ref servers) = args.servers {
             Self::fetch_proxy_playlist(low_latency, servers, &args.codecs, &args.channel, agent)?
         } else {
             Self::fetch_twitch_playlist(
@@ -70,6 +76,7 @@ impl MasterPlaylist {
             "No variant playlists found"
         );
 
+        master_playlist.variant_playlists.dedup();
         Ok(master_playlist)
     }
 
