@@ -68,8 +68,14 @@ impl Logger {
     }
 }
 
+#[cfg(feature = "debug-logging")]
 pub fn is_debug() -> bool {
     log::max_level() == LevelFilter::Debug
+}
+
+#[cfg(not(feature = "debug-logging"))]
+pub fn is_debug() -> bool {
+    false
 }
 
 fn level_tag_no_color(level: Level) -> &'static str {

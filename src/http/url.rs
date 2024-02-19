@@ -1,12 +1,9 @@
 use std::{
     fmt::{self, Display, Formatter},
-    hash::{DefaultHasher, Hasher},
     ops::Deref,
 };
 
 use anyhow::{bail, Context, Result};
-
-use crate::logger;
 
 #[derive(Default, Clone, Debug)]
 pub struct Url {
@@ -95,7 +92,11 @@ impl Url {
         }
     }
 
+    #[cfg(feature = "debug-logging")]
     fn hash(url: &str) -> u64 {
+        use crate::logger;
+        use std::hash::{DefaultHasher, Hasher};
+
         if logger::is_debug() {
             let mut hasher = DefaultHasher::new();
             hasher.write(url.as_bytes());
@@ -104,5 +105,10 @@ impl Url {
         } else {
             u64::default()
         }
+    }
+
+    #[cfg(not(feature = "debug-logging"))]
+    fn hash(_url: &str) -> u64 {
+        u64::default()
     }
 }
