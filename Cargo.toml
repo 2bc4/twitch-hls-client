@@ -23,7 +23,7 @@ panic = "abort"
 strip = true
 
 [features]
-default = ["colors", "debug-logging"]
+default = ["colors"]
 colors = []
 debug-logging = []
 
