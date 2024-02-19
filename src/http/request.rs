@@ -284,10 +284,12 @@ impl<T: Write> Request<T> {
 
             if let Some(mut headers_end) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
                 headers_end += 4; //pass \r\n\r\n
-                break (
-                    String::from_utf8_lossy(&buf[..headers_end]),
-                    &buf[headers_end..written],
-                );
+                match (buf.get(..headers_end), buf.get(headers_end..written)) {
+                    (Some(headers), Some(remaining)) => {
+                        break (String::from_utf8_lossy(headers), remaining);
+                    }
+                    _ => continue, //loop to return UnexpectedEof
+                }
             }
         };
         debug!("Response:\n{headers}");
