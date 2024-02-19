@@ -5,10 +5,7 @@ use chunked_transfer::Decoder as ChunkDecoder;
 use flate2::read::GzDecoder;
 use log::debug;
 
-enum Encoding<T>
-where
-    T: Read,
-{
+enum Encoding<T: Read> {
     Unencoded(T, u64),
     Chunked(ChunkDecoder<T>),
     ChunkedGzip(GzDecoder<ChunkDecoder<T>>),

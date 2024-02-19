@@ -38,10 +38,7 @@ impl TextRequest {
     }
 }
 
-pub struct WriterRequest<T>
-where
-    T: Write,
-{
+pub struct WriterRequest<T: Write> {
     inner: Request<T>,
 }
 
@@ -165,10 +162,7 @@ impl Method {
     }
 }
 
-struct Request<T>
-where
-    T: Write,
-{
+struct Request<T: Write> {
     stream: Transport,
     handler: Handler<T>,
     raw: String,
@@ -372,10 +366,7 @@ impl Write for StringWriter {
     }
 }
 
-struct Handler<T>
-where
-    T: Write,
-{
+struct Handler<T: Write> {
     writer: Option<T>,
 
     written: usize,
