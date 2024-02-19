@@ -65,6 +65,11 @@ impl MasterPlaylist {
             )?
         };
 
+        ensure!(
+            !master_playlist.variant_playlists.is_empty(),
+            "No variant playlists found"
+        );
+
         Ok(master_playlist)
     }
 
