@@ -83,7 +83,7 @@ fn main() -> Result<()> {
             //Currently the only Other error is thrown when player closed
             //so no need to check further.
             if e.downcast_ref::<io::Error>()
-                .is_some_and(|e| matches!(e.kind(), Other))
+                .is_some_and(|e| e.kind() == Other)
             {
                 info!("Player closed, exiting...");
                 return Ok(());

@@ -80,7 +80,7 @@ impl Write for Player {
 
     fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
         self.stdin.write_all(buf).map_err(|e| {
-            if matches!(e.kind(), BrokenPipe) {
+            if e.kind() == BrokenPipe {
                 return io::Error::other(PipeClosedError);
             }
 

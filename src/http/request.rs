@@ -234,7 +234,7 @@ impl<T: Write> Request<T> {
                 Ok(()) => break,
                 Err(e) if retries < self.agent.args.retries => {
                     match e.downcast_ref::<io::Error>() {
-                        Some(i) if matches!(i.kind(), Other) => return Err(e),
+                        Some(i) if i.kind() == Other => return Err(e),
                         Some(_) => (),
                         _ => return Err(e),
                     }
