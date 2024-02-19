@@ -43,6 +43,11 @@ These servers can be used to block ads with `-s`. They work by requesting the ma
 - `https://eu2.luminous.dev/live/[channel]` (Europe 2)
 - `https://as.luminous.dev/live/[channel]` (Asia)
 
+### Using your turbo/subscriber token
+With `--auth-token` you can set an OAuth token to be used when fetching the master playlist. Twitch won't serve ads if the Twitch account associated with the OAuth token is subscribed to turbo or the specific channel you're watching.
+
+To find your token, navigate to the Twitch website in a browser and open your browser's devtools (press F12). Click the `Application` (Chrome) or `Storage` (Firefox) tab and find `https://www.twitch.tv` under `Cookies` on the left. Your token is the string of characters beside the cookie named `auth-token`.
+
 ### Config file
 Almost every option can also be set via config file. Example config file with all possible values set (values are made up):
 ```
