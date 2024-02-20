@@ -1,5 +1,5 @@
 ## twitch-hls-client
-`twitch-hls-client` is a minimal command line client for watching Twitch streams
+`twitch-hls-client` is a minimal command line client for watching/recording Twitch streams
 
 ### Features
 - Playback of low latency and normal latency streams
