@@ -15,6 +15,14 @@ impl Write for CombinedWriter {
     }
 
     fn flush(&mut self) -> io::Result<()> {
+        if let Some(ref mut player) = self.player {
+            player.flush()?;
+        }
+
+        if let Some(ref mut recorder) = self.recorder {
+            recorder.flush()?;
+        }
+
         Ok(())
     }
 
