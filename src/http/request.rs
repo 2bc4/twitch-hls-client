@@ -233,7 +233,10 @@ impl<T: Write> Request<T> {
                         _ => return Err(e),
                     }
 
-                    error!("http: {e}, retrying...");
+                    //Don't log first error
+                    if retries > 0 {
+                        error!("http: {e}, retrying...");
+                    }
                     retries += 1;
 
                     let written = self.handler.written;
