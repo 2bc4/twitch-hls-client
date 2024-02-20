@@ -26,6 +26,8 @@ Options:
           Silence player output
       --passthrough
           Passthrough playlist URL to player and do nothing else
+      --print-streams
+          Print available stream qualities and exit
       --no-low-latency
           Disable low latency streaming
       --no-config

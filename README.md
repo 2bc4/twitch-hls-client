@@ -58,6 +58,7 @@ servers=https://eu.luminous.dev/live/[channel],https://lb-eu.cdn-perfprod.com/li
 debug=true
 quiet=true
 passthrough=false
+print-streams=false
 no-low-latency=false
 no-kill=false
 force-https=true

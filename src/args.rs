@@ -16,6 +16,7 @@ pub struct Args {
     pub hls: HlsArgs,
     pub debug: bool,
     pub passthrough: bool,
+    pub print_streams: bool,
     pub quality: Option<String>,
 }
 
@@ -23,12 +24,16 @@ impl ArgParser for Args {
     fn parse(&mut self, parser: &mut Parser) -> Result<()> {
         parser.parse_switch_or(&mut self.debug, "-d", "--debug")?;
         parser.parse_switch(&mut self.passthrough, "--passthrough")?;
+        parser.parse_switch(&mut self.print_streams, "--print-streams")?;
 
         self.http.parse(parser)?;
         self.player.parse(parser)?;
         self.hls.parse(parser)?;
 
-        parser.parse_free(&mut self.quality, "quality")?;
+        if !self.print_streams {
+            parser.parse_free(&mut self.quality, "quality")?;
+        }
+
         Ok(())
     }
 }
