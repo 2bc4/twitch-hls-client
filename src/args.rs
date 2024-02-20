@@ -3,7 +3,10 @@ use std::{env, error::Error, fmt::Display, fs, path::Path, process, str::FromStr
 use anyhow::{Context, Result};
 use pico_args::Arguments;
 
-use crate::{constants, hls::Args as HlsArgs, http::Args as HttpArgs, player::Args as PlayerArgs};
+use crate::{
+    constants, hls::Args as HlsArgs, http::Args as HttpArgs, player::Args as PlayerArgs,
+    recorder::Args as RecorderArgs,
+};
 
 pub trait ArgParser {
     fn parse(&mut self, parser: &mut Parser) -> Result<()>;
@@ -13,6 +16,7 @@ pub trait ArgParser {
 pub struct Args {
     pub http: HttpArgs,
     pub player: PlayerArgs,
+    pub recorder: RecorderArgs,
     pub hls: HlsArgs,
     pub debug: bool,
     pub passthrough: bool,
@@ -28,6 +32,7 @@ impl ArgParser for Args {
 
         self.http.parse(parser)?;
         self.player.parse(parser)?;
+        self.recorder.parse(parser)?;
         self.hls.parse(parser)?;
 
         if !self.print_streams {

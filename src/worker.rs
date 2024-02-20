@@ -7,8 +7,8 @@ use anyhow::{ensure, Context, Result};
 use log::debug;
 
 use crate::{
+    combinedwriter::CombinedWriter,
     http::{Agent, Url},
-    player::Player,
 };
 
 struct ChannelMessage {
@@ -25,7 +25,7 @@ pub struct Worker {
 }
 
 impl Worker {
-    pub fn spawn(player: Player, header_url: Option<Url>, agent: Agent) -> Result<Self> {
+    pub fn spawn(writer: CombinedWriter, header_url: Option<Url>, agent: Agent) -> Result<Self> {
         let (url_tx, url_rx): (Sender<ChannelMessage>, Receiver<ChannelMessage>) = mpsc::channel();
         let (sync_tx, sync_rx): (SyncSender<()>, Receiver<()>) = mpsc::sync_channel(1);
 
@@ -40,12 +40,12 @@ impl Worker {
                     };
 
                     let request = if let Some(header_url) = header_url {
-                        let mut request = agent.writer(player, header_url)?;
+                        let mut request = agent.writer(writer, header_url)?;
                         request.call(initial_msg.url)?;
 
                         request
                     } else {
-                        agent.writer(player, initial_msg.url)?
+                        agent.writer(writer, initial_msg.url)?
                     };
 
                     if initial_msg.should_sync {

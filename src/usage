@@ -1,4 +1,4 @@
-Usage: twitch-hls-client [OPTIONS] -p <PATH> <CHANNEL> <QUALITY>
+Usage: twitch-hls-client [OPTIONS] [-p <PATH> -r <PATH>] <CHANNEL> <QUALITY>
 
 Arguments:
   <CHANNEL>
@@ -11,6 +11,8 @@ Options:
           Path to player
   -a <ARGUMENTS>
           Arguments to pass to the player [default: -]
+  -r <PATH>
+          Record to <PATH>
   -s <URL1,URL2>
           Ad blocking playlist proxy server to fetch the master playlist from.
           If not specified will fetch the master playlist directly from Twitch.
@@ -28,6 +30,8 @@ Options:
           Passthrough playlist URL to player and do nothing else
       --print-streams
           Print available stream qualities and exit
+      --overwrite
+          Allow overwriting file when recording
       --no-low-latency
           Disable low latency streaming
       --no-config

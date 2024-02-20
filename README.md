@@ -54,11 +54,13 @@ Almost every option can also be set via config file. Example config file with al
 # This is a comment
 player=../mpv/mpv
 player-args=- --profile=low-latency
+record=./recording
 servers=https://eu.luminous.dev/live/[channel],https://lb-eu.cdn-perfprod.com/live/[channel]
 debug=true
 quiet=true
 passthrough=false
 print-streams=false
+overwrite=false
 no-low-latency=false
 no-kill=false
 force-https=true

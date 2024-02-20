@@ -4,7 +4,7 @@ use std::{
     process::{Child, ChildStdin, Command, Stdio},
 };
 
-use anyhow::{ensure, Context, Result};
+use anyhow::{bail, Context, Result};
 use log::{debug, error, info};
 
 use crate::args::{ArgParser, Parser};
@@ -23,7 +23,7 @@ impl Display for PipeClosedError {
 #[derive(Clone, Debug)]
 #[allow(clippy::struct_field_names)] //.args
 pub struct Args {
-    path: String,
+    path: Option<String>,
     args: String,
     quiet: bool,
     no_kill: bool,
@@ -33,7 +33,7 @@ impl Default for Args {
     fn default() -> Self {
         Self {
             args: "-".to_owned(),
-            path: String::default(),
+            path: Option::default(),
             quiet: bool::default(),
             no_kill: bool::default(),
         }
@@ -42,12 +42,11 @@ impl Default for Args {
 
 impl ArgParser for Args {
     fn parse(&mut self, parser: &mut Parser) -> Result<()> {
-        parser.parse_cfg(&mut self.path, "-p", "player")?;
+        parser.parse_fn_cfg(&mut self.path, "-p", "player", Parser::parse_opt_string)?;
         parser.parse_cfg(&mut self.args, "-a", "player-args")?;
         parser.parse_switch_or(&mut self.quiet, "-q", "--quiet")?;
         parser.parse_switch(&mut self.no_kill, "--no-kill")?;
 
-        ensure!(!self.path.is_empty(), "Player must be set");
         Ok(())
     }
 }
@@ -90,9 +89,13 @@ impl Write for Player {
 }
 
 impl Player {
-    pub fn spawn(pargs: &Args) -> Result<Self> {
-        info!("Opening player: {} {}", pargs.path, pargs.args);
-        let mut command = Command::new(&pargs.path);
+    pub fn spawn(pargs: &Args) -> Result<Option<Self>> {
+        let Some(ref path) = pargs.path else {
+            return Ok(None);
+        };
+
+        info!("Opening player: {} {}", path, pargs.args);
+        let mut command = Command::new(path);
         command
             .args(pargs.args.split_whitespace())
             .stdin(Stdio::piped());
@@ -107,11 +110,11 @@ impl Player {
             .take()
             .context("Failed to open player stdin")?;
 
-        Ok(Self {
+        Ok(Some(Self {
             stdin,
             process,
             no_kill: pargs.no_kill,
-        })
+        }))
     }
 
     pub fn passthrough(pargs: &mut Args, url: &str) -> Result<()> {
@@ -133,7 +136,10 @@ impl Player {
             pargs.args += &format!(" {url}");
         }
 
-        let mut player = Self::spawn(pargs)?;
+        let Some(mut player) = Self::spawn(pargs)? else {
+            bail!("No player set");
+        };
+
         player
             .process
             .wait()
