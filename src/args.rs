@@ -4,8 +4,10 @@ use anyhow::{Context, Result};
 use pico_args::Arguments;
 
 use crate::{
-    constants, hls::Args as HlsArgs, http::Args as HttpArgs, player::Args as PlayerArgs,
-    recorder::Args as RecorderArgs,
+    constants,
+    hls::Args as HlsArgs,
+    http::Args as HttpArgs,
+    output::{PlayerArgs, RecorderArgs},
 };
 
 pub trait ArgParser {

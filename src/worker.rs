@@ -7,8 +7,8 @@ use anyhow::{ensure, Context, Result};
 use log::debug;
 
 use crate::{
-    combinedwriter::CombinedWriter,
     http::{Agent, Url},
+    output::CombinedWriter,
 };
 
 struct ChannelMessage {

@@ -2,7 +2,7 @@ use std::io::{self, Write};
 
 use anyhow::{ensure, Result};
 
-use crate::{player::Player, recorder::Recorder};
+use super::{player::Player, recorder::Recorder};
 
 pub struct CombinedWriter {
     player: Option<Player>,

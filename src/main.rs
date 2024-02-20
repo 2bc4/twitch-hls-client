@@ -1,11 +1,9 @@
 mod args;
-mod combinedwriter;
 mod constants;
 mod hls;
 mod http;
 mod logger;
-mod player;
-mod recorder;
+mod output;
 mod worker;
 
 use std::{
@@ -17,15 +15,13 @@ use anyhow::Result;
 use log::{debug, info};
 
 use args::Args;
-use combinedwriter::CombinedWriter;
 use hls::{
     playlist::{MasterPlaylist, MediaPlaylist},
     segment::Handler,
 };
 use http::Agent;
 use logger::Logger;
-use player::Player;
-use recorder::Recorder;
+use output::{CombinedWriter, Player, Recorder};
 use worker::Worker;
 
 fn main_loop(mut handler: Handler) -> Result<()> {
