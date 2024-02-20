@@ -44,20 +44,19 @@ impl Write for Recorder {
 
 impl Recorder {
     pub fn new(args: &Args) -> Result<Option<Self>> {
-        if let Some(ref path) = args.path {
-            info!("Recording to {path}");
+        let Some(ref path) = args.path else {
+            return Ok(None);
+        };
 
-            if args.overwrite {
-                return Ok(Some(Self {
-                    file: File::create(path)?,
-                }));
-            }
-
+        info!("Recording to {path}");
+        if args.overwrite {
             return Ok(Some(Self {
-                file: File::options().write(true).create_new(true).open(path)?,
+                file: File::create(path)?,
             }));
         }
 
-        Ok(None)
+        Ok(Some(Self {
+            file: File::options().write(true).create_new(true).open(path)?,
+        }))
     }
 }
