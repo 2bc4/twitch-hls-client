@@ -48,7 +48,7 @@ impl Recorder {
             return Ok(None);
         };
 
-        info!("Recording to {path}");
+        info!("Recording to: {path}");
         if args.overwrite {
             return Ok(Some(Self {
                 file: File::create(path)?,
