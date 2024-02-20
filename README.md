@@ -8,6 +8,7 @@
 - Tiny (at most uses 3-4MB of memory)
 
 ### Usage
+#### Watching
 Provide a player to output the stream to with `-p`, a channel to watch, and a stream quality.
 
 Example:
@@ -24,6 +25,18 @@ AO: [pipewire] 48000Hz stereo 2ch floatp
 AV: 03:57:23 / 03:57:23 (100%) A-V:  0.000 Cache: 0.7s/482KB
 ```
 
+#### Recording
+Provide a file path to output the stream to with `-r`, a channel to watch, and a stream quality.
+
+Example:
+```
+$ twitch-hls-client -r recording twitchchannel best
+Fetching playlist for channel twitchchannel
+Low latency streaming
+Recording to: recording
+```
+
+You can also use `-p` and `-r` at the same time.<br/>
 That is the bare minimum, but there are many more options which can be viewed [here](src/usage) or by passing `--help`.
 
 ### Ad blocking playlist proxies
