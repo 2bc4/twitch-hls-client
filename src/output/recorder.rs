@@ -4,7 +4,7 @@ use std::{
 };
 
 use anyhow::Result;
-use log::{debug, info};
+use log::info;
 
 use crate::args::{ArgParser, Parser};
 
@@ -33,8 +33,7 @@ impl Write for Recorder {
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        debug!("Finished writing segment");
-        Ok(())
+        unimplemented!();
     }
 
     fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {

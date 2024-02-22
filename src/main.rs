@@ -21,7 +21,7 @@ use hls::{
 };
 use http::Agent;
 use logger::Logger;
-use output::{CombinedWriter, Player, Recorder};
+use output::{OutputWriter, Player};
 use worker::Worker;
 
 fn main_loop(mut handler: Handler) -> Result<()> {
@@ -59,12 +59,12 @@ fn main() -> Result<()> {
         };
 
         if args.passthrough {
-            return Player::passthrough(&mut args.player, &variant_playlist.url);
+            return Player::passthrough(&mut args.output.player, &variant_playlist.url);
         }
 
         let mut playlist = MediaPlaylist::new(variant_playlist.url, &agent)?;
         let worker = Worker::spawn(
-            CombinedWriter::new(Player::spawn(&args.player)?, Recorder::new(&args.recorder)?)?,
+            OutputWriter::new(&args.output)?,
             playlist.header.take(),
             agent.clone(),
         )?;

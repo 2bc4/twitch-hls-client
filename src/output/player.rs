@@ -5,7 +5,7 @@ use std::{
 };
 
 use anyhow::{bail, Context, Result};
-use log::{debug, error, info};
+use log::{error, info};
 
 use crate::args::{ArgParser, Parser};
 
@@ -73,8 +73,7 @@ impl Write for Player {
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        debug!("Finished writing segment");
-        Ok(())
+        unimplemented!();
     }
 
     fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
