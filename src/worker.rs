@@ -61,14 +61,18 @@ impl Worker {
                         return Ok(());
                     };
 
-                    if let Err(e) = request.call(msg.url) {
-                        if matches!(
-                            e.downcast_ref::<http::Error>(),
-                            Some(http::Error::NotFound(_))
-                        ) {
+                    match request.call(msg.url) {
+                        Ok(()) => (),
+                        Err(e)
+                            if matches!(
+                                e.downcast_ref::<http::Error>(),
+                                Some(http::Error::NotFound(_))
+                            ) =>
+                        {
                             info!("Segment not found, skipping ahead...");
                             for _ in url_rx.try_iter() {} //consume all
                         }
+                        Err(e) => return Err(e),
                     }
 
                     if msg.should_sync {
