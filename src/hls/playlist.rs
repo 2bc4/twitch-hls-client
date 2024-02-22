@@ -10,12 +10,12 @@ use log::{debug, error, info};
 
 use super::{
     segment::{Duration, Segment},
-    Args, Error,
+    Args, OfflineError,
 };
 
 use crate::{
     constants,
-    http::{self, Agent, TextRequest, Url},
+    http::{Agent, StatusError, TextRequest, Url},
     logger,
 };
 
@@ -169,21 +169,17 @@ impl MasterPlaylist {
 
                 match request.text() {
                     Ok(playlist_url) => Some(playlist_url.to_owned()),
+                    Err(e) if StatusError::is_not_found(&e) => {
+                        error!("Playlist not found. Stream offline?");
+                        None
+                    }
                     Err(e) => {
-                        if matches!(
-                            e.downcast_ref::<http::Error>(),
-                            Some(http::Error::NotFound(_))
-                        ) {
-                            error!("Playlist not found. Stream offline?");
-                            return None;
-                        }
-
                         error!("{e}");
                         None
                     }
                 }
             })
-            .ok_or(Error::Offline)?;
+            .ok_or(OfflineError)?;
 
         Self::parse_variant_playlists(&playlist)
     }
@@ -256,7 +252,7 @@ impl MediaPlaylist {
             .next_back()
             .is_some_and(|l| l.starts_with("#EXT-X-ENDLIST"))
         {
-            return Err(Error::Offline.into());
+            return Err(OfflineError.into());
         }
 
         let mut prefetch_removed = 0;
@@ -422,8 +418,8 @@ impl PlaybackAccessToken {
 
         Ok(Self {
             token: {
-                let start = response.find(r#"{\"adblock\""#).ok_or(Error::Offline)?;
-                let end = response.find(r#"","signature""#).ok_or(Error::Offline)?;
+                let start = response.find(r#"{\"adblock\""#).ok_or(OfflineError)?;
+                let end = response.find(r#"","signature""#).ok_or(OfflineError)?;
 
                 response[start..end].replace('\\', "")
             },
@@ -471,11 +467,8 @@ impl PlaybackAccessToken {
 }
 
 fn map_if_offline(error: anyhow::Error) -> anyhow::Error {
-    if matches!(
-        error.downcast_ref::<http::Error>(),
-        Some(http::Error::NotFound(_))
-    ) {
-        return Error::Offline.into();
+    if StatusError::is_not_found(&error) {
+        return OfflineError.into();
     }
 
     error

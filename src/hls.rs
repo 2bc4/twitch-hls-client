@@ -12,17 +12,13 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub enum Error {
-    Offline,
-}
+pub struct OfflineError;
 
-impl std::error::Error for Error {}
+impl std::error::Error for OfflineError {}
 
-impl Display for Error {
+impl Display for OfflineError {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        match self {
-            Self::Offline => write!(f, "Stream is offline or unavailable"),
-        }
+        write!(f, "Stream is offline or unavailable")
     }
 }
 

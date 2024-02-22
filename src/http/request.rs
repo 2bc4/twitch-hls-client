@@ -13,7 +13,7 @@ use anyhow::{bail, ensure, Context, Result};
 use log::{debug, error, info};
 use rustls::{ClientConfig, ClientConnection, StreamOwned};
 
-use super::{decoder::Decoder, Agent, Error, Url};
+use super::{decoder::Decoder, Agent, StatusError, Url};
 
 pub struct TextRequest {
     inner: Request<StringWriter>,
@@ -300,8 +300,7 @@ impl<T: Write> Request<T> {
 
         match code {
             200 => (),
-            404 => return Err(Error::NotFound(self.url.clone()).into()),
-            _ => return Err(Error::Status(code, self.url.clone()).into()),
+            _ => return Err(StatusError(code, self.url.clone()).into()),
         }
 
         match io::copy(

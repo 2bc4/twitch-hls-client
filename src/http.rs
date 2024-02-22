@@ -23,19 +23,25 @@ use crate::{
 use request::Method;
 
 #[derive(Debug)]
-pub enum Error {
-    Status(u16, Url),
-    NotFound(Url),
+pub struct StatusError(u16, Url);
+
+impl std::error::Error for StatusError {}
+
+impl Display for StatusError {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "Status code {} on {}", self.0, self.1)
+    }
 }
 
-impl std::error::Error for Error {}
-
-impl Display for Error {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        match self {
-            Self::Status(code, url) => write!(f, "Status code {code} on {url}"),
-            Self::NotFound(url) => write!(f, "Not found: {url}"),
+impl StatusError {
+    pub fn is_not_found(error: &anyhow::Error) -> bool {
+        if let Some(StatusError(code, _)) = error.downcast_ref::<StatusError>() {
+            if code == &404 {
+                return true;
+            }
         }
+
+        false
     }
 }
 

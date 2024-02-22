@@ -7,7 +7,7 @@ use anyhow::{ensure, Context, Result};
 use log::{debug, info};
 
 use crate::{
-    http::{self, Agent, Url},
+    http::{Agent, StatusError, Url},
     output::OutputWriter,
 };
 
@@ -62,12 +62,7 @@ impl Worker {
 
                     match request.call(msg.url) {
                         Ok(()) => (),
-                        Err(e)
-                            if matches!(
-                                e.downcast_ref::<http::Error>(),
-                                Some(http::Error::NotFound(_))
-                            ) =>
-                        {
+                        Err(e) if StatusError::is_not_found(&e) => {
                             info!("Segment not found, skipping ahead...");
                             for _ in url_rx.try_iter() {} //consume all
                         }
