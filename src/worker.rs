@@ -4,10 +4,10 @@ use std::{
 };
 
 use anyhow::{ensure, Context, Result};
-use log::debug;
+use log::{debug, info};
 
 use crate::{
-    http::{Agent, Url},
+    http::{self, Agent, Url},
     output::CombinedWriter,
 };
 
@@ -61,7 +61,16 @@ impl Worker {
                         return Ok(());
                     };
 
-                    request.call(msg.url)?;
+                    if let Err(e) = request.call(msg.url) {
+                        if matches!(
+                            e.downcast_ref::<http::Error>(),
+                            Some(http::Error::NotFound(_))
+                        ) {
+                            info!("Segment not found, skipping ahead...");
+                            for _ in url_rx.try_iter() {} //consume all
+                        }
+                    }
+
                     if msg.should_sync {
                         sync_tx.send(())?;
                     }
