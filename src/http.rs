@@ -2,7 +2,7 @@ mod decoder;
 mod request;
 mod url;
 
-pub use request::{TextRequest, WriterRequest};
+pub use request::{Request, TextRequest};
 pub use url::Url;
 
 use std::{
@@ -114,7 +114,7 @@ impl Agent {
         TextRequest::new(Method::Post, url, data, self.clone())
     }
 
-    pub fn writer<T: Write>(&self, writer: T, url: Url) -> Result<WriterRequest<T>> {
-        WriterRequest::new(writer, url, self.clone())
+    pub fn request<T: Write>(&self, writer: T, url: Url) -> Result<Request<T>> {
+        Request::new(writer, Method::Get, url, String::default(), self.clone())
     }
 }

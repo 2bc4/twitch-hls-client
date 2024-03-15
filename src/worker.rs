@@ -39,12 +39,13 @@ impl Worker {
                     };
 
                     let request = if let Some(header_url) = header_url {
-                        let mut request = agent.writer(writer, header_url)?;
-                        request.call(initial_msg.url)?;
+                        let mut request = agent.request(writer, header_url)?;
+                        request.call()?;
+                        request.url(initial_msg.url)?;
 
                         request
                     } else {
-                        agent.writer(writer, initial_msg.url)?
+                        agent.request(writer, initial_msg.url)?
                     };
 
                     if initial_msg.should_sync {
@@ -54,13 +55,15 @@ impl Worker {
                     request
                 };
 
+                request.call()?;
                 loop {
                     let Ok(msg) = url_rx.recv() else {
                         debug!("Exiting");
                         return Ok(());
                     };
 
-                    match request.call(msg.url) {
+                    request.url(msg.url)?;
+                    match request.call() {
                         Ok(()) => (),
                         Err(e) if StatusError::is_not_found(&e) => {
                             info!("Segment not found, skipping ahead...");
