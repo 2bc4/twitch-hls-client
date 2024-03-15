@@ -119,12 +119,12 @@ impl Handler {
                 }
 
                 last_duration.sleep(time.elapsed());
+                self.init = false;
             }
             QueueRange::Back(newest) => {
                 if !self.init {
                     info!("Failed to find next segment, skipping to newest...");
                 }
-                self.init = false;
 
                 let newest = newest.context("Failed to find newest segment")?;
                 debug!("Sending newest segment to worker:\n{newest:?}");
@@ -134,12 +134,12 @@ impl Handler {
                         self.worker.url(mem::take(url))?;
                         duration.sleep(time.elapsed());
                     }
-                    Segment::NewestPrefetch(ref mut url) => self.worker.sync_url(mem::take(url))?,
+                    Segment::NewestPrefetch(ref mut url) => self.worker.url(mem::take(url))?,
                     Segment::NextPrefetch(_) => bail!("Failed to resolve newest segment"),
                 }
             }
             QueueRange::Empty => {
-                if last_duration < Duration::MAX {
+                if last_duration < Duration::MAX && !self.init {
                     info!("Playlist unchanged, retrying...");
                 }
 
