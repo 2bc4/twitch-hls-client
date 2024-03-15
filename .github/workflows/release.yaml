@@ -53,10 +53,10 @@ jobs:
           components: rust-src
       - name: Build
         shell: bash
-        run: RUSTFLAGS='-Ctarget-cpu=${{ matrix.target-cpu }}' cargo +nightly build -Z build-std=std,panic_abort -Z build-std-features= --release --target=${{ matrix.target }}
+        run: RUSTFLAGS='-Ctarget-cpu=${{ matrix.target-cpu }} -Zlocation-detail=none' cargo +nightly build -Z build-std=std,panic_abort -Z build-std-features=panic_immediate_abort --release --target=${{ matrix.target }}
       - name: Smoke test
         shell: bash
-        run: RUSTFLAGS='-Ctarget-cpu=${{ matrix.target-cpu }}' cargo +nightly run -Z build-std=std,panic_abort -Z build-std-features= --release --target=${{ matrix.target }} -- -V
+        run: RUSTFLAGS='-Ctarget-cpu=${{ matrix.target-cpu }} -Zlocation-detail=none' cargo +nightly run -Z build-std=std,panic_abort -Z build-std-features=panic_immediate_abort --release --target=${{ matrix.target }} -- -V
       - name: Move binary
         shell: bash
         run: mv "target/${{ matrix.target }}/release/${{ matrix.bin-name }}" .
