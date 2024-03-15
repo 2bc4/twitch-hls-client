@@ -102,7 +102,7 @@ There are standalone binaries built by GitHub for Linux and Windows [here](https
 
 Alternatively, you can build it yourself by installing the [Rust toolchain](https://rustup.rs) and then running:
 ```
-cargo install --locked --git https://github.com/2bc4/twitch-hls-client.git
+cargo install --git https://github.com/2bc4/twitch-hls-client.git
 ```
 
 #### NixOS
