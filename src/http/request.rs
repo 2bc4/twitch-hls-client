@@ -191,9 +191,8 @@ impl<T: Write> Request<T> {
             .parse()
             .context("Failed to parse request status code")?;
 
-        match code {
-            200 => (),
-            _ => return Err(StatusError(code, self.url.clone()).into()),
+        if code != 200 {
+            return Err(StatusError(code, mem::take(&mut self.url)).into());
         }
 
         match io::copy(
@@ -213,7 +212,7 @@ impl<T: Write> Request<T> {
             self.handler.writer.take().expect("Missing writer"),
             self.method,
             url,
-            self.data.clone(),
+            mem::take(&mut self.data),
             self.agent.clone(),
         )?;
 
