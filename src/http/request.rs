@@ -4,6 +4,7 @@ use std::{
         ErrorKind::{InvalidInput, Other, UnexpectedEof},
         Read, Write,
     },
+    mem,
     net::{SocketAddr, TcpStream, ToSocketAddrs},
     sync::Arc,
     time::Duration,
@@ -131,7 +132,8 @@ impl<T: Write> Request<T> {
                     retries += 1;
 
                     let written = self.handler.written;
-                    self.reconnect(self.url.clone())?;
+                    let url = mem::take(&mut self.url);
+                    self.reconnect(url)?;
 
                     if written > 0 {
                         info!("Resuming from offset: {written} bytes");
