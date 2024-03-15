@@ -5,7 +5,7 @@
 - Playback of low latency and normal latency streams
 - Ad blocking with playlist proxies or with a turbo/subscriber token
 - Generally lower latency than the Twitch web player
-- Tiny (at most uses 3-4MB of memory)
+- Tiny (at most uses 3-4MB of memory depending on platform)
 
 ### Usage
 #### Watching
