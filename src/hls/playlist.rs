@@ -115,7 +115,7 @@ impl MasterPlaylist {
             &play_session_id={play_session_id}\
             &sig={sig}\
             &token={token}\
-            &player_version=1.26.0-rc.1\
+            &player_version=1.29.0-rc.1\
             &warp={low_latency}\
             &browser_family=firefox\
             &browser_version={browser_version}\
