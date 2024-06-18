@@ -13,7 +13,7 @@ unsafe_code = "forbid"
 warnings = "deny"
 
 [lints.clippy]
-pedantic = "deny"
+pedantic = { level = "deny", priority = -1 }
 module-name-repetitions = "allow"
 
 [profile.release]
