@@ -115,7 +115,7 @@ impl MasterPlaylist {
             &play_session_id={play_session_id}\
             &sig={sig}\
             &token={token}\
-            &player_version=1.29.0-rc.1\
+            &player_version={player_version}\
             &warp={low_latency}\
             &browser_family=firefox\
             &browser_version={browser_version}\
@@ -127,6 +127,7 @@ impl MasterPlaylist {
             play_session_id = &access_token.play_session_id,
             sig = access_token.signature,
             token = access_token.token,
+            player_version = constants::PLAYER_VERSION,
             browser_version = &constants::USER_AGENT[(constants::USER_AGENT.len() - 5)..],
         );
 
