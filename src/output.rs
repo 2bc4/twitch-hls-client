@@ -3,7 +3,7 @@ mod recorder;
 
 pub use player::Player;
 
-use std::io::{self, Write};
+use std::io::{self, ErrorKind::Other, Write};
 
 use anyhow::{bail, Result};
 use log::debug;
@@ -49,9 +49,14 @@ impl Write for OutputWriter {
             Self::Player(player) => player.write_all(buf),
             Self::Recorder(recorder) => recorder.write_all(buf),
             Self::Combined(player, recorder) => {
-                player.write_all(buf)?;
-                recorder.write_all(buf)?;
+                if let Err(e) = player.write_all(buf) {
+                    match e.kind() {
+                        Other => (), //ignore player closed
+                        _ => return Err(e),
+                    }
+                }
 
+                recorder.write_all(buf)?;
                 Ok(())
             }
         }
