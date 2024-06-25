@@ -30,10 +30,10 @@ Provide a file path to output the stream to with `-r`, a channel to watch, and a
 
 Example:
 ```
-$ twitch-hls-client -r recording twitchchannel best
+$ twitch-hls-client -r recording.mp4 twitchchannel best
 Fetching playlist for channel twitchchannel
 Low latency streaming
-Recording to: recording
+Recording to: recording.mp4
 ```
 
 You can also use `-p` and `-r` at the same time.<br/>
@@ -67,7 +67,7 @@ Almost every option can also be set via config file. Example config file with al
 # This is a comment
 player=../mpv/mpv
 player-args=- --profile=low-latency
-record=./recording
+record=./recording.mp4
 servers=https://eu.luminous.dev/live/[channel],https://lb-eu.cdn-perfprod.com/live/[channel]
 debug=true
 quiet=true
