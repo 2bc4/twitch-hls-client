@@ -1,5 +1,5 @@
 pub const USER_AGENT: &str =
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/127.0";
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0";
 
 pub const PLAYER_VERSION: &str = "1.29.0-rc.1";
 
