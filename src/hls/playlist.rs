@@ -56,6 +56,16 @@ impl Display for MasterPlaylist {
 
 impl MasterPlaylist {
     pub fn new(args: &Args, agent: &Agent) -> Result<Self> {
+        if let Some(url) = &args.force_playlist_url {
+            info!("Using forced playlist URL");
+            return Ok(Self {
+                variant_playlists: vec![VariantPlaylist {
+                    url: url.to_owned().into(),
+                    name: "forced".to_owned(),
+                }],
+            });
+        }
+
         info!("Fetching playlist for channel {}", args.channel);
         let low_latency = !args.no_low_latency;
         let mut master_playlist = if let Some(ref servers) = args.servers {

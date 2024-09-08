@@ -28,6 +28,7 @@ pub struct Args {
     client_id: Option<String>,
     auth_token: Option<String>,
     never_proxy: Option<Vec<String>>,
+    force_playlist_url: Option<String>,
     codecs: String,
     no_low_latency: bool,
     channel: String,
@@ -42,6 +43,7 @@ impl Default for Args {
             client_id: Option::default(),
             auth_token: Option::default(),
             never_proxy: Option::default(),
+            force_playlist_url: Option::default(),
             channel: String::default(),
         }
     }
@@ -59,6 +61,11 @@ impl ArgParser for Args {
         parser.parse(&mut self.codecs, "--codecs")?;
         parser.parse_fn(&mut self.never_proxy, "--never-proxy", Self::split_comma)?;
         parser.parse_switch(&mut self.no_low_latency, "--no-low-latency")?;
+        parser.parse_fn(
+            &mut self.force_playlist_url,
+            "--force-playlist-url",
+            Parser::parse_opt_string,
+        )?;
 
         self.channel = parser
             .parse_free_required::<String>()

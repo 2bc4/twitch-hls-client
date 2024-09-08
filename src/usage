@@ -42,6 +42,8 @@ Options:
           Abort request if protocol is not HTTPS
       --force-ipv4
           Only use IPv4 addresses when resolving host names
+      --force-playlist-url <URL>
+          Skip fetching/parsing the variant playlist URL and use this URL instead
       --client-id <ID>
           Value to be used in the Client-Id header.
           If not specified will use the default client ID.
