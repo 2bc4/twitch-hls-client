@@ -43,7 +43,7 @@ fn main() -> Result<()> {
         debug!("{args:?}");
 
         let agent = Agent::new(&args.http)?;
-        let mut master_playlist = match MasterPlaylist::new(&args.hls, &agent) {
+        let mut master_playlist = match MasterPlaylist::new(&mut args.hls, &agent) {
             Ok(playlist) => playlist,
             Err(e) if e.downcast_ref::<OfflineError>().is_some() => {
                 info!("{e}, exiting...");

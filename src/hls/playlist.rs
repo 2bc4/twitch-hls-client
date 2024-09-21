@@ -37,15 +37,14 @@ pub struct MasterPlaylist {
 
 impl Display for MasterPlaylist {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        let last_idx = self.variant_playlists.len() - 1;
-        for (idx, playlist) in self.variant_playlists.iter().enumerate() {
-            if idx == 0 {
-                write!(f, "{} (best),", playlist.name)?;
-                continue;
-            }
+        let mut iter = self.variant_playlists.iter().peekable();
+        if let Some(playlist) = iter.next() {
+            write!(f, "{} (best),", playlist.name)?;
+        }
 
+        while let Some(playlist) = iter.next() {
             write!(f, " {}", playlist.name)?;
-            if idx != last_idx {
+            if iter.peek().is_some() {
                 write!(f, ",")?;
             }
         }
@@ -55,12 +54,12 @@ impl Display for MasterPlaylist {
 }
 
 impl MasterPlaylist {
-    pub fn new(args: &Args, agent: &Agent) -> Result<Self> {
-        if let Some(url) = &args.force_playlist_url {
+    pub fn new(args: &mut Args, agent: &Agent) -> Result<Self> {
+        if let Some(url) = args.force_playlist_url.take() {
             info!("Using forced playlist URL");
             return Ok(Self {
                 variant_playlists: vec![VariantPlaylist {
-                    url: url.to_owned().into(),
+                    url,
                     name: "forced".to_owned(),
                 }],
             });
@@ -68,13 +67,13 @@ impl MasterPlaylist {
 
         info!("Fetching playlist for channel {}", args.channel);
         let low_latency = !args.no_low_latency;
-        let mut master_playlist = if let Some(ref servers) = args.servers {
+        let mut master_playlist = if let Some(servers) = &args.servers {
             Self::fetch_proxy_playlist(low_latency, servers, &args.codecs, &args.channel, agent)?
         } else {
             Self::fetch_twitch_playlist(
                 low_latency,
-                &args.client_id,
-                &args.auth_token,
+                args.client_id.take(),
+                args.auth_token.take(),
                 &args.codecs,
                 &args.channel,
                 agent,
@@ -102,8 +101,8 @@ impl MasterPlaylist {
 
     fn fetch_twitch_playlist(
         low_latency: bool,
-        client_id: &Option<String>,
-        auth_token: &Option<String>,
+        client_id: Option<String>,
+        auth_token: Option<String>,
         codecs: &str,
         channel: &str,
         agent: &Agent,
@@ -141,7 +140,9 @@ impl MasterPlaylist {
             browser_version = &constants::USER_AGENT[(constants::USER_AGENT.len() - 5)..],
         );
 
-        Self::parse_variant_playlists(agent.get(url.into())?.text().map_err(map_if_offline)?)
+        Ok(Self::parse_variant_playlists(
+            agent.get(url.into())?.text().map_err(map_if_offline)?,
+        ))
     }
 
     fn fetch_proxy_playlist(
@@ -192,16 +193,16 @@ impl MasterPlaylist {
             })
             .ok_or(OfflineError)?;
 
-        Self::parse_variant_playlists(&playlist)
+        Ok(Self::parse_variant_playlists(&playlist))
     }
 
-    fn parse_variant_playlists(playlist: &str) -> Result<Self> {
+    fn parse_variant_playlists(playlist: &str) -> Self {
         debug!("Master playlist:\n{playlist}");
         if playlist.contains("FUTURE=\"true\"") {
             info!("Low latency streaming");
         }
 
-        Ok(Self {
+        Self {
             variant_playlists: playlist
                 .lines()
                 .filter(|l| l.starts_with("#EXT-X-MEDIA"))
@@ -217,7 +218,7 @@ impl MasterPlaylist {
                     })
                 })
                 .collect(),
-        })
+        }
     }
 }
 
@@ -388,8 +389,8 @@ struct PlaybackAccessToken {
 
 impl PlaybackAccessToken {
     fn new(
-        client_id: &Option<String>,
-        auth_token: &Option<String>,
+        client_id: Option<String>,
+        auth_token: Option<String>,
         channel: &str,
         agent: &Agent,
     ) -> Result<Self> {
@@ -415,14 +416,15 @@ impl PlaybackAccessToken {
         let mut request = agent.post(constants::TWITCH_GQL_ENDPOINT.into(), gql)?;
         request.header("Content-Type: text/plain;charset=UTF-8")?;
         request.header(&format!("X-Device-ID: {}", &Self::gen_id()))?;
+
+        if let Some(auth_token) = &auth_token {
+            request.header(&format!("Authorization: OAuth {auth_token}"))?;
+        }
+
         request.header(&format!(
             "Client-Id: {}",
             Self::choose_client_id(client_id, auth_token, agent)?
         ))?;
-
-        if let Some(auth_token) = auth_token {
-            request.header(&format!("Authorization: OAuth {auth_token}"))?;
-        }
 
         let response = request.text()?;
         debug!("GQL response: {response}");
@@ -446,13 +448,12 @@ impl PlaybackAccessToken {
     }
 
     fn choose_client_id(
-        client_id: &Option<String>,
-        auth_token: &Option<String>,
+        client_id: Option<String>,
+        auth_token: Option<String>,
         agent: &Agent,
     ) -> Result<String> {
-        //--client-id > (if auth token) client id from twitch > default
         let client_id = if let Some(client_id) = client_id {
-            client_id.to_owned()
+            client_id
         } else if let Some(auth_token) = auth_token {
             let mut request = agent.get(constants::TWITCH_OAUTH_ENDPOINT.into())?;
             request.header(&format!("Authorization: OAuth {auth_token}"))?;
