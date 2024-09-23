@@ -28,8 +28,10 @@ pub struct Args {
     never_proxy: Option<Vec<String>>,
     force_playlist_url: Option<Url>,
     no_low_latency: bool,
+    print_streams: bool,
     codecs: String,
     channel: String,
+    quality: Option<String>,
 }
 
 impl Default for Args {
@@ -42,7 +44,9 @@ impl Default for Args {
             never_proxy: Option::default(),
             force_playlist_url: Option::default(),
             no_low_latency: bool::default(),
+            print_streams: bool::default(),
             channel: String::default(),
+            quality: Option::default(),
         }
     }
 }
@@ -58,6 +62,7 @@ impl ArgParser for Args {
         )?;
         parser.parse_fn(&mut self.never_proxy, "--never-proxy", Self::split_comma)?;
         parser.parse_switch(&mut self.no_low_latency, "--no-low-latency")?;
+        parser.parse_switch(&mut self.print_streams, "--print-streams")?;
         parser.parse_fn(
             &mut self.force_playlist_url,
             "--force-playlist-url",
@@ -70,6 +75,10 @@ impl ArgParser for Args {
             .context("Missing channel argument")?
             .to_lowercase()
             .replace("twitch.tv/", "");
+
+        if !self.print_streams {
+            parser.parse_free(&mut self.quality, "quality")?;
+        }
 
         if let Some(never_proxy) = &self.never_proxy {
             if never_proxy.iter().any(|a| a.eq(&self.channel)) {

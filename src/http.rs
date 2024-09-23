@@ -87,7 +87,7 @@ pub struct Agent {
 }
 
 impl Agent {
-    pub fn new(args: &Args) -> Result<Self> {
+    pub fn new(args: Args) -> Result<Self> {
         let mut roots = RootCertStore::empty();
         for cert in rustls_native_certs::load_native_certs()? {
             //Ignore parsing errors, OS can have broken certs.
@@ -97,7 +97,7 @@ impl Agent {
         }
 
         Ok(Self {
-            args: Arc::new(args.to_owned()),
+            args: Arc::new(args),
             tls_config: Arc::new(
                 ClientConfig::builder()
                     .with_root_certificates(Arc::new(roots))

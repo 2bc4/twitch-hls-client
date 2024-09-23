@@ -3,49 +3,29 @@ use std::{env, error::Error, fmt::Display, fs, path::Path, process, str::FromStr
 use anyhow::{Context, Result};
 use pico_args::Arguments;
 
-use crate::{constants, hls::Args as HlsArgs, http::Args as HttpArgs, output::Args as OutputArgs};
+use crate::{
+    constants, hls::Args as HlsArgs, http::Args as HttpArgs, output::Args as OutputArgs,
+    Args as MainArgs,
+};
 
 pub trait ArgParser {
     fn parse(&mut self, parser: &mut Parser) -> Result<()>;
 }
 
-#[derive(Default, Debug)]
-pub struct Args {
-    pub http: HttpArgs,
-    pub hls: HlsArgs,
-    pub output: OutputArgs,
-    pub debug: bool,
-    pub passthrough: bool,
-    pub print_streams: bool,
-    pub quality: Option<String>,
-}
+pub fn parse() -> Result<(MainArgs, HttpArgs, HlsArgs, OutputArgs)> {
+    let mut parser = Parser::new()?;
 
-impl ArgParser for Args {
-    fn parse(&mut self, parser: &mut Parser) -> Result<()> {
-        parser.parse_switch_or(&mut self.debug, "-d", "--debug")?;
-        parser.parse_switch(&mut self.passthrough, "--passthrough")?;
-        parser.parse_switch(&mut self.print_streams, "--print-streams")?;
+    let mut main = MainArgs::default();
+    let mut http = HttpArgs::default();
+    let mut hls = HlsArgs::default();
+    let mut output = OutputArgs::default();
 
-        self.http.parse(parser)?;
-        self.hls.parse(parser)?;
-        self.output.parse(parser)?;
+    main.parse(&mut parser)?;
+    http.parse(&mut parser)?;
+    output.parse(&mut parser)?;
+    hls.parse(&mut parser)?; //must be last because it parses the free args
 
-        if !self.print_streams {
-            parser.parse_free(&mut self.quality, "quality")?;
-        }
-
-        Ok(())
-    }
-}
-
-impl Args {
-    pub fn new() -> Result<Self> {
-        let mut parser = Parser::new()?;
-        let mut args = Self::default();
-        args.parse(&mut parser)?;
-
-        Ok(args)
-    }
+    Ok((main, http, hls, output))
 }
 
 pub struct Parser {
@@ -135,7 +115,7 @@ impl Parser {
         key: &'static str,
         f: fn(_: &str) -> Result<T, E>,
     ) -> Result<(), E> {
-        //unwrap val or get arg from config file
+        //unwrap arg or try to get arg from config file
         if let Some(val) = val {
             *dst = val;
         } else if let Some(ref cfg) = self.config {

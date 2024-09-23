@@ -14,7 +14,7 @@ use std::{
 use anyhow::Result;
 use log::{debug, info};
 
-use args::Args;
+use args::{ArgParser, Parser};
 use hls::{
     playlist::{MasterPlaylist, MediaPlaylist},
     segment::Handler,
@@ -24,6 +24,21 @@ use http::Agent;
 use logger::Logger;
 use output::{OutputWriter, Player};
 use worker::Worker;
+
+#[derive(Default, Debug)]
+pub struct Args {
+    debug: bool,
+    passthrough: bool,
+}
+
+impl ArgParser for Args {
+    fn parse(&mut self, parser: &mut Parser) -> Result<()> {
+        parser.parse_switch_or(&mut self.debug, "-d", "--debug")?;
+        parser.parse_switch(&mut self.passthrough, "--passthrough")?;
+
+        Ok(())
+    }
+}
 
 fn main_loop(mut handler: Handler) -> Result<()> {
     handler.process(Instant::now())?;
@@ -37,13 +52,13 @@ fn main_loop(mut handler: Handler) -> Result<()> {
 
 fn main() -> Result<()> {
     let handler = {
-        let mut args = Args::new()?;
+        let (main_args, http_args, hls_args, mut output_args) = args::parse()?;
 
-        Logger::init(args.debug)?;
-        debug!("{args:?}");
+        Logger::init(main_args.debug)?;
+        debug!("{main_args:?} {http_args:?} {hls_args:?} {output_args:?}");
 
-        let agent = Agent::new(&args.http)?;
-        let mut master_playlist = match MasterPlaylist::new(&mut args.hls, &agent) {
+        let agent = Agent::new(http_args)?;
+        let mut master_playlist = match MasterPlaylist::new(hls_args, &agent) {
             Ok(playlist) => playlist,
             Err(e) if e.downcast_ref::<OfflineError>().is_some() => {
                 info!("{e}, exiting...");
@@ -52,18 +67,18 @@ fn main() -> Result<()> {
             Err(e) => return Err(e),
         };
 
-        let Some(variant_playlist) = args.quality.and_then(|q| master_playlist.find(&q)) else {
+        let Some(variant_playlist) = master_playlist.get_stream() else {
             info!("Available stream qualities: {master_playlist}");
             return Ok(());
         };
 
-        if args.passthrough {
-            return Player::passthrough(&mut args.output.player, &variant_playlist.url);
+        if main_args.passthrough {
+            return Player::passthrough(&mut output_args.player, &variant_playlist.url);
         }
 
         let mut playlist = MediaPlaylist::new(variant_playlist.url, &agent)?;
         let worker = Worker::spawn(
-            OutputWriter::new(&args.output)?,
+            OutputWriter::new(&output_args)?,
             playlist.header.take(),
             agent.clone(),
         )?;

@@ -33,6 +33,7 @@ impl PartialEq for VariantPlaylist {
 
 pub struct MasterPlaylist {
     variant_playlists: Vec<VariantPlaylist>,
+    quality: Option<String>,
 }
 
 impl Display for MasterPlaylist {
@@ -54,7 +55,7 @@ impl Display for MasterPlaylist {
 }
 
 impl MasterPlaylist {
-    pub fn new(args: &mut Args, agent: &Agent) -> Result<Self> {
+    pub fn new(mut args: Args, agent: &Agent) -> Result<Self> {
         if let Some(url) = args.force_playlist_url.take() {
             info!("Using forced playlist URL");
             return Ok(Self {
@@ -62,12 +63,13 @@ impl MasterPlaylist {
                     url,
                     name: "forced".to_owned(),
                 }],
+                quality: args.quality.take(),
             });
         }
 
         info!("Fetching playlist for channel {}", args.channel);
         let low_latency = !args.no_low_latency;
-        let mut master_playlist = if let Some(servers) = &args.servers {
+        let mut variant_playlists = if let Some(servers) = &args.servers {
             Self::fetch_proxy_playlist(low_latency, servers, &args.codecs, &args.channel, agent)?
         } else {
             Self::fetch_twitch_playlist(
@@ -81,21 +83,27 @@ impl MasterPlaylist {
         };
 
         ensure!(
-            !master_playlist.variant_playlists.is_empty(),
-            "No variant playlists found"
+            !variant_playlists.is_empty(),
+            "No variant playlist(s) found"
         );
 
-        master_playlist.variant_playlists.dedup();
-        Ok(master_playlist)
+        variant_playlists.dedup();
+        Ok(Self {
+            variant_playlists,
+            quality: args.quality.take(),
+        })
     }
 
-    pub fn find(&mut self, name: &str) -> Option<VariantPlaylist> {
-        if name == "best" {
+    pub fn get_stream(&mut self) -> Option<VariantPlaylist> {
+        let quality = self.quality.take()?;
+        if quality == "best" {
             return Some(mem::take(self.variant_playlists.first_mut()?));
         }
 
         Some(mem::take(
-            self.variant_playlists.iter_mut().find(|v| v.name == name)?,
+            self.variant_playlists
+                .iter_mut()
+                .find(|v| v.name == quality || v.name == "forced")?,
         ))
     }
 
@@ -106,7 +114,7 @@ impl MasterPlaylist {
         codecs: &str,
         channel: &str,
         agent: &Agent,
-    ) -> Result<Self> {
+    ) -> Result<Vec<VariantPlaylist>> {
         let access_token = PlaybackAccessToken::new(client_id, auth_token, channel, agent)?;
         let url = format!(
             "{base_url}{channel}.m3u8\
@@ -151,7 +159,7 @@ impl MasterPlaylist {
         codecs: &str,
         channel: &str,
         agent: &Agent,
-    ) -> Result<Self> {
+    ) -> Result<Vec<VariantPlaylist>> {
         let playlist = servers
             .iter()
             .find_map(|s| {
@@ -196,29 +204,27 @@ impl MasterPlaylist {
         Ok(Self::parse_variant_playlists(&playlist))
     }
 
-    fn parse_variant_playlists(playlist: &str) -> Self {
+    fn parse_variant_playlists(playlist: &str) -> Vec<VariantPlaylist> {
         debug!("Master playlist:\n{playlist}");
         if playlist.contains("FUTURE=\"true\"") {
             info!("Low latency streaming");
         }
 
-        Self {
-            variant_playlists: playlist
-                .lines()
-                .filter(|l| l.starts_with("#EXT-X-MEDIA"))
-                .zip(playlist.lines().filter(|l| l.starts_with("http")))
-                .filter_map(|(line, url)| {
-                    Some(VariantPlaylist {
-                        name: line
-                            .split_once("NAME=\"")
-                            .map(|s| s.1.split('"'))
-                            .and_then(|mut s| s.next())
-                            .map(|s| s.replace(" (source)", ""))?,
-                        url: url.into(),
-                    })
+        playlist
+            .lines()
+            .filter(|l| l.starts_with("#EXT-X-MEDIA"))
+            .zip(playlist.lines().filter(|l| l.starts_with("http")))
+            .filter_map(|(line, url)| {
+                Some(VariantPlaylist {
+                    name: line
+                        .split_once("NAME=\"")
+                        .map(|s| s.1.split('"'))
+                        .and_then(|mut s| s.next())
+                        .map(|s| s.replace(" (source)", ""))?,
+                    url: url.into(),
                 })
-                .collect(),
-        }
+            })
+            .collect()
     }
 }
 
