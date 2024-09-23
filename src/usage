@@ -4,15 +4,39 @@ Arguments:
   <CHANNEL>
           Twitch channel to watch (can also be twitch.tv/channel)
   <QUALITY>
-          Stream quality/variant playlist to stream (best, 1080p, 720p, 360p, 160p, audio_only, etc.)
+          Stream to play (best, 1080p, 720p, 360p, 160p, audio_only, etc.)
 
-Options:
+General options:
+  -h, --help
+          Print help (this message) and exit
+  -V, --version
+          Print version and exit
+  -d, --debug
+          Enable debug logging
+  -c <PATH>
+          Path to config file
+      --no-config
+          Ignore config file
+
+Player options:
   -p <PATH>
           Path to player
   -a <ARGUMENTS>
           Arguments to pass to the player [default: -]
+  -q, --quiet
+          Silence player output
+      --passthrough
+          Passthrough playlist URL to player and do nothing else
+      --no-kill
+          Don't kill the player on exit
+
+Recording options:
   -r <PATH>
           Record to <PATH>
+      --overwrite
+          Allow overwriting file when recording
+
+HLS options:
   -s <URL1,URL2>
           Ad blocking playlist proxy server to fetch the master playlist from.
           If not specified will fetch the master playlist directly from Twitch.
@@ -20,48 +44,32 @@ Options:
           Can be multiple comma separated servers, will try each in order until successful.
           If URL includes the keyword "[channel]" it will be replaced with the channel argument at runtime.
           Note: This does not support standard HTTP proxies (ie. proxies using the CONNECT request)
-  -c <PATH>
-          Path to config file
-  -d, --debug
-          Enable debug logging
-  -q, --quiet
-          Silence player output
-      --passthrough
-          Passthrough playlist URL to player and do nothing else
       --print-streams
-          Print available stream qualities and exit
-      --overwrite
-          Allow overwriting file when recording
+          Print available streams and exit
       --no-low-latency
           Disable low latency streaming
-      --no-config
-          Ignore config file
-      --no-kill
-          Don't kill the player on exit
-      --force-https
-          Abort request if protocol is not HTTPS
-      --force-ipv4
-          Only use IPv4 addresses when resolving host names
-      --force-playlist-url <URL>
-          Skip fetching/parsing the variant playlist URL and use this URL instead
-      --client-id <ID>
-          Value to be used in the Client-Id header.
-          If not specified will use the default client ID.
       --auth-token <TOKEN>
           Value to be used in the Authorization header.
           If --client-id is not specified will retrieve client ID from Twitch.
+      --client-id <ID>
+          Value to be used in the Client-Id header.
+          If not specified will use the default client ID.
       --never-proxy <CHANNEL1,CHANNEL2>
           Prevent specified channels from using a playlist proxy.
           Can be multiple comma separated channels.
       --codecs <CODEC1,CODEC2>
           Comma separated list of supported codecs [default: av1,h265,h264]
+      --force-playlist-url <URL>
+          Skip fetching/parsing the variant playlist URL and use this URL instead
+
+HTTP options:
+      --force-https
+          Abort request if protocol is not HTTPS
+      --force-ipv4
+          Only use IPv4 addresses when resolving host names
       --user-agent <USERAGENT>
           User agent used in HTTP requests [default: a recent version of Firefox on Windows 10]
       --http-retries <COUNT>
           Retry HTTP requests <COUNT> times before giving up [default: 3]
       --http-timeout <SECONDS>
           HTTP request timeout in seconds [default: 10]
-  -h, --help
-          Print help
-  -V, --version
-          Print version
