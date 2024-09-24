@@ -1,0 +1,34 @@
+# Example config file
+
+# General
+quality=best
+debug=true
+
+# Player
+player=/path/to/player
+player-args=- --profile=low-latency
+quiet=true
+passthrough=false
+no-kill=false
+
+# Recording
+record=/path/to/recording.mp4
+overwrite=false
+
+# HLS
+servers=http://example-proxy-server1.invalid,http://example-proxy-server2.invalid
+print-streams=false
+no-low-latency=false
+client-id=0123456789abcdef
+auth-token=0123456789abcdef
+codecs=av1,h265,h264
+never-proxy=channel1,channel2,channel3
+playlist-cache-dir=/path/to/cache/dir
+force-playlist-url=http://example-playlist-url.invalid
+
+# HTTP
+force-https=true
+force-ipv4=false
+user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:130.0) Gecko/20100101 Firefox/130.0
+http-retries=3
+http-timeout=10

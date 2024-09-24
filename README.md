@@ -65,31 +65,7 @@ With `--auth-token` you can set an OAuth token to be used when fetching the mast
 To find your token, navigate to the Twitch website in a browser and open your browser's devtools (press F12). Click the `Application` (Chrome) or `Storage` (Firefox) tab and find `https://www.twitch.tv` under `Cookies` on the left. Your token is the string of characters beside the cookie named `auth-token`.
 
 ### Config file
-Almost every option can also be set via config file. Example config file with all possible values set (values are made up):
-```
-# This is a comment
-player=../mpv/mpv
-player-args=- --profile=low-latency
-record=./recording.mp4
-servers=https://eu.luminous.dev/live/[channel],https://lb-eu.cdn-perfprod.com/live/[channel]
-debug=true
-quiet=true
-passthrough=false
-print-streams=false
-overwrite=false
-no-low-latency=false
-no-kill=false
-force-https=true
-force-ipv4=false
-client-id=0123456789abcdef
-auth-token=0123456789abcdef
-never-proxy=channel1,channel2,channel3
-codecs=av1,h265,h264
-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0
-http-retries=3
-http-timeout=10
-quality=720p
-```
+Almost every option can also be set via config file. There is an example config file with all possible values set [here](example_config).
 
 Depending on your platform this will look for the config file at the following locations (can be overridden with `-c`):
 
