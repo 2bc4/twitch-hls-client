@@ -1,39 +1,26 @@
 use std::{
-    collections::{vec_deque::IterMut, VecDeque},
-    env,
     fmt::{self, Display, Formatter},
-    iter, mem,
+    fs, iter, mem,
+    path::Path,
 };
 
 use anyhow::{ensure, Context, Result};
 use log::{debug, error, info};
 
-use super::{
-    segment::{Duration, Segment},
-    Args, OfflineError,
-};
+use super::{Args, OfflineError};
 
 use crate::{
     constants,
-    http::{Agent, StatusError, TextRequest, Url},
-    logger,
+    http::{Agent, StatusError, Url},
 };
 
 #[derive(Default)]
-pub struct VariantPlaylist {
-    pub url: Url,
-    name: String,
-}
-
-impl PartialEq for VariantPlaylist {
-    fn eq(&self, other: &Self) -> bool {
-        self.name == other.name
-    }
-}
-
 pub struct MasterPlaylist {
-    variant_playlists: Vec<VariantPlaylist>,
+    cache: Option<Cache>,
     quality: Option<String>,
+    forced: bool,
+
+    variant_playlists: Vec<VariantPlaylist>,
 }
 
 impl Display for MasterPlaylist {
@@ -58,18 +45,25 @@ impl MasterPlaylist {
     pub fn new(mut args: Args, agent: &Agent) -> Result<Self> {
         if let Some(url) = args.force_playlist_url.take() {
             info!("Using forced playlist URL");
-            return Ok(Self {
-                variant_playlists: vec![VariantPlaylist {
-                    url,
-                    name: "forced".to_owned(),
-                }],
-                quality: args.quality.take(),
-            });
+            return Ok(Self::force_playlist_url(None, url));
         }
 
-        info!("Fetching playlist for channel {}", args.channel);
+        let mut master_playlist = Self {
+            cache: Cache::new(args.playlist_cache_dir.take(), &args.channel, &args.quality),
+            quality: args.quality.take(),
+            ..Default::default()
+        };
+
+        if let Some(cache) = &mut master_playlist.cache {
+            if let Some(url) = cache.get(agent) {
+                info!("Using cached playlist URL");
+                return Ok(Self::force_playlist_url(Some(master_playlist), url));
+            }
+        }
+
+        info!("Fetching playlist for channel {}", &args.channel);
         let low_latency = !args.no_low_latency;
-        let mut variant_playlists = if let Some(servers) = &args.servers {
+        master_playlist.variant_playlists = if let Some(servers) = &args.servers {
             Self::fetch_proxy_playlist(low_latency, servers, &args.codecs, &args.channel, agent)?
         } else {
             Self::fetch_twitch_playlist(
@@ -83,28 +77,34 @@ impl MasterPlaylist {
         };
 
         ensure!(
-            !variant_playlists.is_empty(),
+            !master_playlist.variant_playlists.is_empty(),
             "No variant playlist(s) found"
         );
+        master_playlist.variant_playlists.dedup();
 
-        variant_playlists.dedup();
-        Ok(Self {
-            variant_playlists,
-            quality: args.quality.take(),
-        })
+        Ok(master_playlist)
     }
 
-    pub fn get_stream(&mut self) -> Option<VariantPlaylist> {
-        let quality = self.quality.take()?;
-        if quality == "best" {
-            return Some(mem::take(self.variant_playlists.first_mut()?));
+    pub fn get_stream(&mut self) -> Option<Url> {
+        let url = {
+            let quality = self.quality.take()?;
+            if self.forced || quality == "best" {
+                mem::take(self.variant_playlists.first_mut()?).url
+            } else {
+                mem::take(
+                    self.variant_playlists
+                        .iter_mut()
+                        .find(|v| v.name == quality)?,
+                )
+                .url
+            }
+        };
+
+        if let Some(cache) = &mut self.cache {
+            cache.create(&url);
         }
 
-        Some(mem::take(
-            self.variant_playlists
-                .iter_mut()
-                .find(|v| v.name == quality || v.name == "forced")?,
-        ))
+        Some(url)
     }
 
     fn fetch_twitch_playlist(
@@ -149,7 +149,10 @@ impl MasterPlaylist {
         );
 
         Ok(Self::parse_variant_playlists(
-            agent.get(url.into())?.text().map_err(map_if_offline)?,
+            agent
+                .get(url.into())?
+                .text()
+                .map_err(super::map_if_offline)?,
         ))
     }
 
@@ -226,165 +229,29 @@ impl MasterPlaylist {
             })
             .collect()
     }
-}
 
-pub struct MediaPlaylist {
-    pub header: Option<Url>, //used for av1/hevc streams
+    fn force_playlist_url(master_playlist: Option<Self>, url: Url) -> Self {
+        let mut master_playlist = master_playlist.unwrap_or_default();
+        master_playlist.forced = true;
+        master_playlist.variant_playlists = vec![VariantPlaylist {
+            url,
+            ..Default::default()
+        }];
 
-    segments: VecDeque<Segment>,
-    sequence: usize,
-    added: usize,
-
-    request: TextRequest,
-
-    debug_log_playlist: bool,
-}
-
-impl MediaPlaylist {
-    pub fn new(url: Url, agent: &Agent) -> Result<Self> {
-        let mut playlist = Self {
-            header: Option::default(),
-
-            segments: VecDeque::with_capacity(16),
-            sequence: usize::default(),
-            added: usize::default(),
-
-            request: agent.get(url)?,
-
-            debug_log_playlist: logger::is_debug() && env::var_os("DEBUG_NO_PLAYLIST").is_none(),
-        };
-
-        playlist.reload()?;
-        Ok(playlist)
-    }
-
-    pub fn reload(&mut self) -> Result<()> {
-        debug!("----------RELOADING----------");
-        let playlist = self.request.text().map_err(map_if_offline)?;
-        if self.debug_log_playlist {
-            debug!("Playlist:\n{playlist}");
-        }
-
-        if playlist
-            .lines()
-            .next_back()
-            .is_some_and(|l| l.starts_with("#EXT-X-ENDLIST"))
-        {
-            return Err(OfflineError.into());
-        }
-
-        let mut prefetch_removed = 0;
-        for _ in 0..2 {
-            if let Some(segment) = self.segments.back() {
-                match segment {
-                    Segment::NextPrefetch(_) | Segment::NewestPrefetch(_) => {
-                        self.segments.pop_back();
-                        prefetch_removed += 1;
-                    }
-                    Segment::Normal(_, _) => (),
-                }
-            }
-        }
-
-        let mut prev_segment_count = self.segments.len();
-        let mut total_segments = 0;
-        let mut lines = playlist.lines().peekable();
-        while let Some(line) = lines.next() {
-            let Some(split) = line.split_once(':') else {
-                continue;
-            };
-
-            match split.0 {
-                "#EXT-X-MEDIA-SEQUENCE" => {
-                    let sequence = split.1.parse()?;
-                    ensure!(sequence >= self.sequence, "Sequence went backwards");
-
-                    if sequence > 0 {
-                        let removed = sequence - self.sequence;
-                        if removed < self.segments.len() {
-                            self.segments.drain(..removed);
-                            prev_segment_count = self.segments.len();
-
-                            debug!("Segments removed: {removed}");
-                        } else {
-                            self.segments.clear();
-                            prev_segment_count = 0;
-                            prefetch_removed = 0;
-
-                            debug!("All segments removed");
-                        }
-                    }
-
-                    self.sequence = sequence;
-                }
-                "#EXT-X-MAP" if self.header.is_none() => {
-                    self.header = Some(
-                        split
-                            .1
-                            .split_once('=')
-                            .context("Failed to parse segment header")?
-                            .1
-                            .replace('"', "")
-                            .into(),
-                    );
-                }
-                "#EXTINF" => {
-                    total_segments += 1;
-                    if total_segments > prev_segment_count {
-                        if let Some(url) = lines.next() {
-                            self.segments
-                                .push_back(Segment::Normal(split.1.parse()?, url.into()));
-                        }
-                    }
-                }
-                "#EXT-X-TWITCH-PREFETCH" => {
-                    total_segments += 1;
-                    if total_segments > prev_segment_count {
-                        if lines.peek().is_some() {
-                            self.segments
-                                .push_back(Segment::NextPrefetch(split.1.into()));
-                        } else {
-                            self.segments
-                                .push_back(Segment::NewestPrefetch(split.1.into()));
-                        }
-                    }
-                }
-                _ => continue,
-            }
-        }
-
-        self.added = total_segments - (prev_segment_count + prefetch_removed);
-        debug!("Segments added: {}", self.added);
-
-        Ok(())
-    }
-
-    pub fn segments(&mut self) -> QueueRange<'_> {
-        if self.added == 0 {
-            QueueRange::Empty
-        } else if self.added == self.segments.len() {
-            QueueRange::Back(self.segments.back_mut())
-        } else {
-            QueueRange::Partial(self.segments.range_mut(self.segments.len() - self.added..))
-        }
-    }
-
-    pub fn last_duration(&mut self) -> Option<Duration> {
-        self.segments
-            .iter()
-            .rev()
-            .find_map(|s| match s {
-                Segment::Normal(duration, _) => Some(duration),
-                _ => None,
-            })
-            .copied()
+        master_playlist
     }
 }
 
-pub enum QueueRange<'a> {
-    Partial(IterMut<'a, Segment>),
-    Back(Option<&'a mut Segment>),
-    Empty,
+#[derive(Default)]
+struct VariantPlaylist {
+    url: Url,
+    name: String,
+}
+
+impl PartialEq for VariantPlaylist {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
 }
 
 struct PlaybackAccessToken {
@@ -484,10 +351,49 @@ impl PlaybackAccessToken {
     }
 }
 
-fn map_if_offline(error: anyhow::Error) -> anyhow::Error {
-    if StatusError::is_not_found(&error) {
-        return OfflineError.into();
+struct Cache {
+    path: String,
+}
+
+impl Cache {
+    fn new(dir: Option<String>, channel: &str, quality: &Option<String>) -> Option<Self> {
+        if let Some(dir) = dir {
+            if let Some(quality) = quality {
+                if let Err(e) = Path::new(&dir).try_exists() {
+                    error!("Failed to open playlist cache directory: {e}");
+                    return None;
+                }
+
+                return Some(Self {
+                    path: format!("{dir}/{channel}-{quality}"),
+                });
+            }
+        }
+
+        None
     }
 
-    error
+    fn get(&mut self, agent: &Agent) -> Option<Url> {
+        debug!("Reading playlist cache: {}", self.path);
+        Path::new(&self.path).try_exists().ok()?;
+
+        let url: Url = fs::read_to_string(&self.path).ok()?.trim_end().into();
+        if !agent.exists(url.clone()) {
+            debug!("Removing playlist cache: {}", self.path);
+            if let Err(e) = fs::remove_file(&self.path) {
+                error!("Failed to remove playlist cache: {e}");
+            }
+
+            return None;
+        }
+
+        Some(url)
+    }
+
+    fn create(&mut self, url: &str) {
+        debug!("Creating playlist cache: {}", self.path);
+        if let Err(e) = fs::write(&self.path, url) {
+            error!("Failed to create playlist cache: {e}");
+        }
+    }
 }

@@ -114,6 +114,14 @@ impl Agent {
         TextRequest::new(Method::Post, url, data, self.clone())
     }
 
+    pub fn exists(&self, url: Url) -> bool {
+        let Ok(mut request) = self.get(url) else {
+            return false;
+        };
+
+        request.text().is_ok()
+    }
+
     pub fn request<T: Write>(&self, writer: T, url: Url) -> Result<Request<T>> {
         Request::new(writer, Method::Get, url, String::default(), self.clone())
     }

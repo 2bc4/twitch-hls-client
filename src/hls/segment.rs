@@ -3,7 +3,7 @@ use std::{cmp::Ordering, mem, str::FromStr, thread, time::Duration as StdDuratio
 use anyhow::{bail, Context, Result};
 use log::{debug, info};
 
-use super::playlist::{MediaPlaylist, QueueRange};
+use super::{MediaPlaylist, QueueRange};
 use crate::{http::Url, worker::Worker};
 
 #[derive(Default, Copy, Clone, Debug)]

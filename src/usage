@@ -32,7 +32,7 @@ Player options:
 
 Recording options:
   -r <PATH>
-          Record to <PATH>
+          Record to the specified file path
       --overwrite
           Allow overwriting file when recording
 
@@ -48,17 +48,20 @@ HLS options:
           Print available streams and exit
       --no-low-latency
           Disable low latency streaming
-      --auth-token <TOKEN>
-          Value to be used in the Authorization header.
-          If --client-id is not specified will retrieve client ID from Twitch.
       --client-id <ID>
           Value to be used in the Client-Id header.
           If not specified will use the default client ID.
+      --auth-token <TOKEN>
+          Value to be used in the Authorization header.
+          If --client-id is not specified will retrieve client ID from Twitch.
+      --codecs <CODEC1,CODEC2>
+          Comma separated list of supported codecs [default: av1,h265,h264]
       --never-proxy <CHANNEL1,CHANNEL2>
           Prevent specified channels from using a playlist proxy.
           Can be multiple comma separated channels.
-      --codecs <CODEC1,CODEC2>
-          Comma separated list of supported codecs [default: av1,h265,h264]
+      --playlist-cache-dir <PATH>
+          Cache the variant playlist URL to a file in the specified directory.
+          If the playlist is still available it will be used instead of fetching a new one.
       --force-playlist-url <URL>
           Skip fetching/parsing the variant playlist URL and use this URL instead
 

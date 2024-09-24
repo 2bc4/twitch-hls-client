@@ -15,11 +15,7 @@ use anyhow::Result;
 use log::{debug, info};
 
 use args::{ArgParser, Parser};
-use hls::{
-    playlist::{MasterPlaylist, MediaPlaylist},
-    segment::Handler,
-    OfflineError,
-};
+use hls::{segment::Handler, MasterPlaylist, MediaPlaylist, OfflineError};
 use http::Agent;
 use logger::Logger;
 use output::{OutputWriter, Player};
@@ -67,16 +63,16 @@ fn main() -> Result<()> {
             Err(e) => return Err(e),
         };
 
-        let Some(variant_playlist) = master_playlist.get_stream() else {
-            info!("Available stream qualities: {master_playlist}");
+        let Some(url) = master_playlist.get_stream() else {
+            info!("Available streams: {master_playlist}");
             return Ok(());
         };
 
         if main_args.passthrough {
-            return Player::passthrough(&mut output_args.player, &variant_playlist.url);
+            return Player::passthrough(&mut output_args.player, &url);
         }
 
-        let mut playlist = MediaPlaylist::new(variant_playlist.url, &agent)?;
+        let mut playlist = MediaPlaylist::new(url, &agent)?;
         let worker = Worker::spawn(
             OutputWriter::new(&output_args)?,
             playlist.header.take(),
