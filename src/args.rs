@@ -1,6 +1,6 @@
 use std::{env, error::Error, fmt::Display, fs, path::Path, process, str::FromStr};
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use pico_args::Arguments;
 
 use crate::{
@@ -24,6 +24,10 @@ pub fn parse() -> Result<(MainArgs, HttpArgs, HlsArgs, OutputArgs)> {
     http.parse(&mut parser)?;
     output.parse(&mut parser)?;
     hls.parse(&mut parser)?; //must be last because it parses the free args
+
+    if let Some(arg) = parser.finish() {
+        bail!("Unrecognized argument: {arg}");
+    }
 
     Ok((main, http, hls, output))
 }
@@ -128,6 +132,10 @@ impl Parser {
         }
 
         Ok(())
+    }
+
+    fn finish(self) -> Option<String> {
+        self.parser.finish().into_iter().next()?.into_string().ok()
     }
 
     #[cfg(all(unix, not(target_os = "macos")))]
