@@ -35,13 +35,9 @@ impl Display for StatusError {
 
 impl StatusError {
     pub fn is_not_found(error: &anyhow::Error) -> bool {
-        if let Some(StatusError(code, _)) = error.downcast_ref::<StatusError>() {
-            if code == &404 {
-                return true;
-            }
-        }
-
-        false
+        error
+            .downcast_ref::<StatusError>()
+            .is_some_and(|StatusError(code, _)| *code == 404)
     }
 }
 

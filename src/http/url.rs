@@ -125,9 +125,9 @@ impl Scheme {
 
     fn new(url: &str) -> Self {
         match url.split(':').next() {
-            Some("http") => Scheme::Http,
-            Some("https") => Scheme::Https,
-            _ => Scheme::Unknown,
+            Some("http") => Self::Http,
+            Some("https") => Self::Https,
+            _ => Self::Unknown,
         }
     }
 }
