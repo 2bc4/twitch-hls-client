@@ -10,7 +10,6 @@ rust-version = "1.79"
 
 [lints.rust]
 unsafe_code = "forbid"
-warnings = "deny"
 
 [lints.clippy]
 pedantic = { level = "deny", priority = -1 }
