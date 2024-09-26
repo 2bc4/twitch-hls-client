@@ -25,16 +25,13 @@ pub struct MasterPlaylist {
 
 impl Display for MasterPlaylist {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        let mut iter = self.variant_playlists.iter().peekable();
+        let mut iter = self.variant_playlists.iter();
         if let Some(playlist) = iter.next() {
-            write!(f, "{} (best),", playlist.name)?;
+            write!(f, "{} (best)", playlist.name)?;
         }
 
-        while let Some(playlist) = iter.next() {
-            write!(f, " {}", playlist.name)?;
-            if iter.peek().is_some() {
-                write!(f, ",")?;
-            }
+        for playlist in iter {
+            write!(f, ", {}", playlist.name)?;
         }
 
         Ok(())
