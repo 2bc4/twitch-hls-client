@@ -124,14 +124,10 @@ impl Scheme {
     }
 
     fn new(url: &str) -> Self {
-        if let Some(scheme) = url.split(':').next() {
-            return match scheme {
-                "http" => Scheme::Http,
-                "https" => Scheme::Https,
-                _ => Scheme::Unknown,
-            };
+        match url.split(':').next() {
+            Some("http") => Scheme::Http,
+            Some("https") => Scheme::Https,
+            _ => Scheme::Unknown,
         }
-
-        Scheme::Unknown
     }
 }
