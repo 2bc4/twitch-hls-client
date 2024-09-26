@@ -10,6 +10,7 @@ pub struct Url {
     #[allow(dead_code)] //used for debug logging
     hash: u64,
 
+    pub scheme: Scheme,
     inner: String,
 }
 
@@ -17,6 +18,7 @@ impl From<&str> for Url {
     fn from(url: &str) -> Self {
         Self {
             hash: Self::hash(url),
+            scheme: Scheme::new(url),
             inner: url.to_owned(),
         }
     }
@@ -26,6 +28,7 @@ impl From<String> for Url {
     fn from(url: String) -> Self {
         Self {
             hash: Self::hash(&url),
+            scheme: Scheme::new(&url),
             inner: url,
         }
     }
@@ -52,13 +55,6 @@ impl Display for Url {
 }
 
 impl Url {
-    pub fn scheme(&self) -> Result<&str> {
-        self.inner
-            .split(':')
-            .next()
-            .context("Failed to parse scheme in URL")
-    }
-
     pub fn host(&self) -> Result<&str> {
         let host = self
             .inner
@@ -66,11 +62,7 @@ impl Url {
             .nth(2)
             .context("Failed to parse host in URL")?;
 
-        if let Some(split) = host.split_once(':') {
-            Ok(split.0)
-        } else {
-            Ok(host)
-        }
+        Ok(host.split_once(':').map_or(host, |(s, _)| s))
     }
 
     pub fn path(&self) -> Result<&str> {
@@ -85,10 +77,10 @@ impl Url {
             return port.1.parse().context("Failed to parse port in URL");
         }
 
-        match self.scheme()? {
-            "http" => Ok(80),
-            "https" => Ok(443),
-            _ => bail!("Unsupported scheme in URL"),
+        match self.scheme {
+            Scheme::Http => Ok(80),
+            Scheme::Https => Ok(443),
+            Scheme::Unknown => bail!("Unknown scheme in URL"),
         }
     }
 
@@ -110,5 +102,36 @@ impl Url {
     #[cfg(not(feature = "debug-logging"))]
     fn hash(_url: &str) -> u64 {
         u64::default()
+    }
+}
+
+#[derive(Default, Clone, Debug, PartialEq)]
+pub enum Scheme {
+    Http,
+    Https,
+
+    #[default]
+    Unknown,
+}
+
+impl Scheme {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Http => "http",
+            Self::Https => "https",
+            Self::Unknown => "<unknown>",
+        }
+    }
+
+    fn new(url: &str) -> Self {
+        if let Some(scheme) = url.split(':').next() {
+            return match scheme {
+                "http" => Scheme::Http,
+                "https" => Scheme::Https,
+                _ => Scheme::Unknown,
+            };
+        }
+
+        Scheme::Unknown
     }
 }

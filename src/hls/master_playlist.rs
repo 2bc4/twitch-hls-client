@@ -168,7 +168,7 @@ impl MasterPlaylist {
             .find_map(|s| {
                 info!(
                     "Using playlist proxy: {}://{}",
-                    s.scheme().unwrap_or("<unknown>"),
+                    s.scheme.as_str(),
                     s.host().unwrap_or("<unknown>"),
                 );
 

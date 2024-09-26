@@ -14,7 +14,7 @@ use anyhow::{bail, ensure, Context, Result};
 use log::{debug, error, info};
 use rustls::{ClientConfig, ClientConnection, StreamOwned};
 
-use super::{decoder::Decoder, Agent, StatusError, Url};
+use super::{decoder::Decoder, Agent, Scheme, StatusError, Url};
 
 #[derive(Copy, Clone)]
 pub enum Method {
@@ -105,7 +105,7 @@ impl<T: Write> Request<T> {
     }
 
     pub fn url(&mut self, url: Url) -> Result<()> {
-        if self.url.scheme()? != url.scheme()? || self.url.host()? != url.host()? {
+        if self.url.scheme != url.scheme || self.url.host()? != url.host()? {
             return self.reconnect(url);
         }
 
@@ -275,13 +275,12 @@ impl Write for Transport {
 
 impl Transport {
     fn new(url: &Url, agent: Agent) -> Result<Self> {
-        let scheme = url.scheme()?;
         let host = url.host()?;
         let port = url.port()?;
 
         if agent.args.force_https {
             ensure!(
-                scheme == "https",
+                url.scheme == Scheme::Https,
                 "URL protocol is not HTTPS and --force-https is enabled: {url}",
             );
         }
@@ -297,10 +296,10 @@ impl Transport {
         sock.set_read_timeout(Some(agent.args.timeout))?;
         sock.set_write_timeout(Some(agent.args.timeout))?;
 
-        match scheme {
-            "http" => Ok(Self::Http(sock)),
-            "https" => Ok(Self::Https(Self::init_tls(host, sock, agent.tls_config)?)),
-            _ => bail!("{scheme} is not supported"),
+        match url.scheme {
+            Scheme::Http => Ok(Self::Http(sock)),
+            Scheme::Https => Ok(Self::Https(Self::init_tls(host, sock, agent.tls_config)?)),
+            Scheme::Unknown => bail!("Unsupported protocol"),
         }
     }
 

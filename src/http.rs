@@ -3,7 +3,7 @@ mod request;
 mod url;
 
 pub use request::{Request, TextRequest};
-pub use url::Url;
+pub use url::{Scheme, Url};
 
 use std::{
     fmt::{self, Display, Formatter},
