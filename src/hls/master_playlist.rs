@@ -50,11 +50,9 @@ impl MasterPlaylist {
             ..Default::default()
         };
 
-        if let Some(cache) = &mut master_playlist.cache {
-            if let Some(url) = cache.get(agent) {
-                info!("Using cached playlist URL");
-                return Ok(Self::force_playlist_url(Some(master_playlist), url));
-            }
+        if let Some(url) = master_playlist.cache.as_ref().and_then(|c| c.get(agent)) {
+            info!("Using cached playlist URL");
+            return Ok(Self::force_playlist_url(Some(master_playlist), url));
         }
 
         info!("Fetching playlist for channel {}", &args.channel);
@@ -370,7 +368,7 @@ impl Cache {
         None
     }
 
-    fn get(&mut self, agent: &Agent) -> Option<Url> {
+    fn get(&self, agent: &Agent) -> Option<Url> {
         debug!("Reading playlist cache: {}", self.path);
 
         let url: Url = fs::read_to_string(&self.path).ok()?.trim_end().into();
@@ -386,9 +384,9 @@ impl Cache {
         Some(url)
     }
 
-    fn create(&mut self, url: &str) {
+    fn create(&self, url: &Url) {
         debug!("Creating playlist cache: {}", self.path);
-        if let Err(e) = fs::write(&self.path, url) {
+        if let Err(e) = fs::write(&self.path, url.as_str()) {
             error!("Failed to create playlist cache: {e}");
         }
     }
