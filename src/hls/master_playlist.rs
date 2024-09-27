@@ -1,7 +1,6 @@
 use std::{
     fmt::{self, Display, Formatter},
     fs, iter, mem,
-    path::Path,
 };
 
 use anyhow::{ensure, Context, Result};
@@ -356,14 +355,15 @@ impl Cache {
     fn new(dir: Option<String>, channel: &str, quality: &Option<String>) -> Option<Self> {
         if let Some(dir) = dir {
             if let Some(quality) = quality {
-                if let Err(e) = Path::new(&dir).try_exists() {
-                    error!("Failed to open playlist cache directory: {e}");
-                    return None;
+                match fs::metadata(&dir) {
+                    Ok(metadata) if metadata.is_dir() && !metadata.permissions().readonly() => {
+                        return Some(Self {
+                            path: format!("{dir}/{channel}-{quality}"),
+                        });
+                    }
+                    Err(e) => error!("Failed to open playlist cache directory: {e}"),
+                    _ => error!("Playlist cache path is not writable or is not a directory"),
                 }
-
-                return Some(Self {
-                    path: format!("{dir}/{channel}-{quality}"),
-                });
             }
         }
 
@@ -372,7 +372,6 @@ impl Cache {
 
     fn get(&mut self, agent: &Agent) -> Option<Url> {
         debug!("Reading playlist cache: {}", self.path);
-        Path::new(&self.path).try_exists().ok()?;
 
         let url: Url = fs::read_to_string(&self.path).ok()?.trim_end().into();
         if !agent.exists(url.clone()) {
