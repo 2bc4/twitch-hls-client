@@ -32,13 +32,10 @@ impl MediaPlaylist {
     pub fn new(url: Url, agent: &Agent) -> Result<Self> {
         let mut playlist = Self {
             header: Option::default(),
-
             segments: VecDeque::with_capacity(16),
             sequence: usize::default(),
             added: usize::default(),
-
             request: agent.get(url)?,
-
             debug_log_playlist: logger::is_debug() && env::var_os("DEBUG_NO_PLAYLIST").is_none(),
         };
 
@@ -61,22 +58,10 @@ impl MediaPlaylist {
             return Err(OfflineError.into());
         }
 
-        let mut prefetch_removed = 0;
-        for _ in 0..2 {
-            if let Some(segment) = self.segments.back() {
-                match segment {
-                    Segment::NextPrefetch(_) | Segment::NewestPrefetch(_) => {
-                        self.segments.pop_back();
-                        prefetch_removed += 1;
-                    }
-                    Segment::Normal(_, _) => (),
-                }
-            }
-        }
-
+        let mut prefetch_removed = Self::remove_prefetch(&mut self.segments);
         let mut prev_segment_count = self.segments.len();
         let mut total_segments = 0;
-        let mut lines = playlist.lines().peekable();
+        let mut lines = playlist.lines();
         while let Some(line) = lines.next() {
             let Some(split) = line.split_once(':') else {
                 continue;
@@ -128,13 +113,7 @@ impl MediaPlaylist {
                 "#EXT-X-TWITCH-PREFETCH" => {
                     total_segments += 1;
                     if total_segments > prev_segment_count {
-                        if lines.peek().is_some() {
-                            self.segments
-                                .push_back(Segment::NextPrefetch(split.1.into()));
-                        } else {
-                            self.segments
-                                .push_back(Segment::NewestPrefetch(split.1.into()));
-                        }
+                        self.segments.push_back(Segment::Prefetch(split.1.into()));
                     }
                 }
                 _ => continue,
@@ -163,9 +142,16 @@ impl MediaPlaylist {
             .rev()
             .find_map(|s| match s {
                 Segment::Normal(duration, _) => Some(duration),
-                _ => None,
+                Segment::Prefetch(_) => None,
             })
             .copied()
+    }
+
+    fn remove_prefetch(segments: &mut VecDeque<Segment>) -> usize {
+        let before = segments.len();
+        segments.retain(|s| matches!(*s, Segment::Normal(_, _)));
+
+        before - segments.len()
     }
 }
 
