@@ -149,13 +149,11 @@ impl MasterPlaylist {
             token = access_token.token,
             player_version = constants::PLAYER_VERSION,
             browser_version = &constants::USER_AGENT[(constants::USER_AGENT.len() - 5)..],
-        );
+        )
+        .into();
 
         Ok(Self::parse_variant_playlists(
-            agent
-                .get(url.into())?
-                .text()
-                .map_err(super::map_if_offline)?,
+            agent.get(url)?.text().map_err(super::map_if_offline)?,
         ))
     }
 
@@ -183,9 +181,10 @@ impl MasterPlaylist {
                     &supported_codecs={codecs}\
                     &platform=web",
                     &s.replace("[channel]", channel),
-                );
+                )
+                .into();
 
-                let mut request = match agent.get(url.into()) {
+                let mut request = match agent.get(url) {
                     Ok(request) => request,
                     Err(e) => {
                         error!("{e}");
@@ -194,7 +193,7 @@ impl MasterPlaylist {
                 };
 
                 match request.text() {
-                    Ok(playlist_url) => Some(playlist_url.to_owned()),
+                    Ok(_) => Some(request.take()),
                     Err(e) if StatusError::is_not_found(&e) => {
                         error!("Playlist not found. Stream offline?");
                         None

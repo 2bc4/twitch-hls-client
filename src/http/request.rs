@@ -52,6 +52,10 @@ impl TextRequest {
 
         Ok(&self.inner.get_mut().0)
     }
+
+    pub fn take(mut self) -> String {
+        mem::take(&mut self.inner.get_mut().0)
+    }
 }
 
 pub struct Request<T: Write> {
