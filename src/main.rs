@@ -36,18 +36,18 @@ impl ArgParser for Args {
     }
 }
 
-fn main_loop(mut handler: Handler) -> Result<()> {
-    handler.process(Instant::now())?;
+fn main_loop(mut playlist: MediaPlaylist, mut handler: Handler) -> Result<()> {
+    handler.process(&mut playlist, Instant::now())?;
     loop {
         let time = Instant::now();
 
-        handler.playlist.reload()?;
-        handler.process(time)?;
+        playlist.reload()?;
+        handler.process(&mut playlist, time)?;
     }
 }
 
 fn main() -> Result<()> {
-    let handler = {
+    let (playlist, handler) = {
         let (main_args, http_args, hls_args, mut output_args) = args::parse()?;
 
         Logger::init(main_args.debug)?;
@@ -79,10 +79,10 @@ fn main() -> Result<()> {
             agent.clone(),
         )?;
 
-        Handler::new(playlist, worker)
+        (playlist, Handler::new(worker))
     };
 
-    match main_loop(handler) {
+    match main_loop(playlist, handler) {
         Ok(()) => Ok(()),
         Err(e) => {
             if e.downcast_ref::<OfflineError>().is_some() {

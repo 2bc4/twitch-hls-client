@@ -77,23 +77,17 @@ pub enum Segment {
 }
 
 pub struct Handler {
-    pub playlist: MediaPlaylist,
     worker: Worker,
     init: bool,
 }
 
 impl Handler {
-    pub fn new(playlist: MediaPlaylist, worker: Worker) -> Self {
-        Self {
-            playlist,
-            worker,
-            init: true,
-        }
+    pub fn new(worker: Worker) -> Self {
+        Self { worker, init: true }
     }
 
-    pub fn process(&mut self, time: Instant) -> Result<()> {
-        let last_duration = self
-            .playlist
+    pub fn process(&mut self, playlist: &mut MediaPlaylist, time: Instant) -> Result<()> {
+        let last_duration = playlist
             .last_duration()
             .context("Failed to find last segment duration")?;
 
@@ -104,7 +98,7 @@ impl Handler {
             return Ok(());
         }
 
-        match self.playlist.segments() {
+        match playlist.segments() {
             QueueRange::Partial(ref mut segments) => {
                 for segment in segments {
                     debug!("Sending segment to worker:\n{segment:?}");
