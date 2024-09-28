@@ -135,7 +135,7 @@ impl Player {
                 .join(" ")
                 .into();
         } else {
-            pargs.args = format!("{}{url}", pargs.args).into();
+            pargs.args = format!("{} {url}", pargs.args).into();
         }
 
         let Some(mut player) = Self::spawn(pargs)? else {
