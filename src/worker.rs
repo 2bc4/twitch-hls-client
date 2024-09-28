@@ -69,23 +69,16 @@ impl Worker {
     }
 
     pub fn url(&mut self, url: Url) -> Result<()> {
-        self.join_if_dead()?;
-        self.url_tx.send(url)?;
-
-        Ok(())
-    }
-
-    fn join_if_dead(&mut self) -> Result<()> {
         if self
             .handle
             .as_ref()
-            .context("Worker handle None")?
+            .expect("Missing worker handle")
             .is_finished()
         {
             let result = self
                 .handle
                 .take()
-                .context("Handle None while joining worker")?
+                .expect("Missing worker handle while joining worker")
                 .join()
                 .expect("Worker panicked");
 
@@ -93,6 +86,7 @@ impl Worker {
             return result;
         }
 
+        self.url_tx.send(url)?;
         Ok(())
     }
 }
