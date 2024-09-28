@@ -87,8 +87,9 @@ impl ArgParser for Args {
             .to_lowercase()
             .replace("twitch.tv/", "");
 
-        if !self.print_streams {
-            parser.parse_free(&mut self.quality, "quality")?;
+        parser.parse_free(&mut self.quality, "quality")?;
+        if self.print_streams {
+            self.quality = None;
         }
 
         if let Some(never_proxy) = &self.never_proxy {
