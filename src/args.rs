@@ -122,20 +122,17 @@ impl Parser {
         //unwrap arg or try to get arg from config file
         if let Some(val) = val {
             *dst = val;
-        } else if let Some(ref cfg) = self.config {
-            let key = key.trim_start_matches('-');
-            if let Some(line) = cfg.lines().find(|l| l.starts_with(key)) {
-                if let Some(split) = line.split_once('=') {
-                    *dst = f(split.1)?;
-                }
+        } else if let Some(cfg) = &self.config {
+            if let Some(split) = cfg
+                .lines()
+                .find(|l| l.starts_with(key.trim_start_matches('-')))
+                .and_then(|l| l.split_once('='))
+            {
+                *dst = f(split.1)?;
             }
         }
 
         Ok(())
-    }
-
-    fn finish(self) -> Option<String> {
-        self.parser.finish().into_iter().next()?.into_string().ok()
     }
 
     #[cfg(all(unix, not(target_os = "macos")))]
@@ -204,5 +201,9 @@ impl Parser {
             },
             parser,
         })
+    }
+
+    fn finish(self) -> Option<String> {
+        self.parser.finish().into_iter().next()?.into_string().ok()
     }
 }
