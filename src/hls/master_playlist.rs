@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     fmt::{self, Display, Formatter},
     fs, iter, mem,
 };
@@ -57,17 +58,25 @@ impl MasterPlaylist {
 
         info!("Fetching playlist for channel {}", &args.channel);
         let low_latency = !args.no_low_latency;
-        master_playlist.variant_playlists = if let Some(servers) = &args.servers {
-            Self::fetch_proxy_playlist(low_latency, servers, &args.codecs, &args.channel, agent)?
-        } else {
-            Self::fetch_twitch_playlist(
-                low_latency,
-                args.client_id.take(),
-                args.auth_token.take(),
-                &args.codecs,
-                &args.channel,
-                agent,
-            )?
+        master_playlist.variant_playlists = {
+            if let Some(servers) = &args.servers {
+                Self::fetch_proxy_playlist(
+                    low_latency,
+                    servers,
+                    &args.codecs,
+                    &args.channel,
+                    agent,
+                )?
+            } else {
+                Self::fetch_twitch_playlist(
+                    low_latency,
+                    args.client_id.take(),
+                    args.auth_token.take(),
+                    &args.codecs,
+                    &args.channel,
+                    agent,
+                )?
+            }
         };
 
         ensure!(
@@ -318,23 +327,27 @@ impl PlaybackAccessToken {
         client_id: Option<String>,
         auth_token: Option<String>,
         agent: &Agent,
-    ) -> Result<String> {
-        let client_id = if let Some(client_id) = client_id {
-            client_id
-        } else if let Some(auth_token) = auth_token {
-            let mut request = agent.get(constants::TWITCH_OAUTH_ENDPOINT.into())?;
-            request.header(&format!("Authorization: OAuth {auth_token}"))?;
+    ) -> Result<Cow<'static, str>> {
+        let client_id = {
+            if let Some(client_id) = client_id {
+                Cow::Owned(client_id)
+            } else if let Some(auth_token) = auth_token {
+                let mut request = agent.get(constants::TWITCH_OAUTH_ENDPOINT.into())?;
+                request.header(&format!("Authorization: OAuth {auth_token}"))?;
 
-            request
-                .text()?
-                .split_once(r#""client_id":""#)
-                .context("Failed to parse client id in GQL response")?
-                .1
-                .chars()
-                .take(30)
-                .collect()
-        } else {
-            constants::DEFAULT_CLIENT_ID.to_owned()
+                Cow::Owned(
+                    request
+                        .text()?
+                        .split_once(r#""client_id":""#)
+                        .context("Failed to parse client id in GQL response")?
+                        .1
+                        .chars()
+                        .take(30)
+                        .collect(),
+                )
+            } else {
+                Cow::Borrowed(constants::DEFAULT_CLIENT_ID)
+            }
         };
 
         Ok(client_id)
