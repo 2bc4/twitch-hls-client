@@ -1,4 +1,4 @@
-use std::{env, error::Error, fmt::Display, fs, path::Path, process, str::FromStr};
+use std::{borrow::Cow, env, error::Error, fmt::Display, fs, path::Path, process, str::FromStr};
 
 use anyhow::{bail, Context, Result};
 use pico_args::Arguments;
@@ -46,22 +46,9 @@ impl Parser {
         Ok(self.resolve(dst, arg, key, T::from_str)?)
     }
 
-    pub fn parse_cfg<T: FromStr>(
-        &mut self,
-        dst: &mut T,
-        key: &'static str,
-        cfg_key: &'static str,
-    ) -> Result<()>
-    where
-        <T as FromStr>::Err: Display + Send + Sync + Error + 'static,
-    {
-        let arg = self.parser.opt_value_from_str(key)?;
-        Ok(self.resolve(dst, arg, cfg_key, T::from_str)?)
-    }
-
     pub fn parse_free(&mut self, dst: &mut Option<String>, cfg_key: &'static str) -> Result<()> {
-        let arg = self.parser.opt_free_from_fn(Self::parse_opt_string)?;
-        self.resolve(dst, arg, cfg_key, Self::parse_opt_string)
+        let arg = self.parser.opt_free_from_fn(Self::opt_string)?;
+        self.resolve(dst, arg, cfg_key, Self::opt_string)
     }
 
     pub fn parse_free_required<T: FromStr>(&mut self) -> Result<T>
@@ -107,9 +94,38 @@ impl Parser {
         self.resolve(dst, arg, cfg_key, f)
     }
 
-    #[allow(clippy::unnecessary_wraps)] //function pointer
-    pub fn parse_opt_string(arg: &str) -> Result<Option<String>> {
-        Ok(Some(arg.to_owned()))
+    pub fn parse_opt_string(&mut self, dst: &mut Option<String>, key: &'static str) -> Result<()> {
+        let arg = self.parser.opt_value_from_fn(key, Self::opt_string)?;
+        self.resolve(dst, arg, key, Self::opt_string)
+    }
+
+    pub fn parse_opt_string_cfg(
+        &mut self,
+        dst: &mut Option<String>,
+        key: &'static str,
+        cfg_key: &'static str,
+    ) -> Result<()> {
+        let arg = self.parser.opt_value_from_fn(key, Self::opt_string)?;
+        self.resolve(dst, arg, cfg_key, Self::opt_string)
+    }
+
+    pub fn parse_cow_string(
+        &mut self,
+        dst: &mut Cow<'static, str>,
+        key: &'static str,
+    ) -> Result<()> {
+        let arg = self.parser.opt_value_from_fn(key, Self::cow_string)?;
+        self.resolve(dst, arg, key, Self::cow_string)
+    }
+
+    pub fn parse_cow_string_cfg(
+        &mut self,
+        dst: &mut Cow<'static, str>,
+        key: &'static str,
+        cfg_key: &'static str,
+    ) -> Result<()> {
+        let arg = self.parser.opt_value_from_fn(key, Self::cow_string)?;
+        self.resolve(dst, arg, cfg_key, Self::cow_string)
     }
 
     fn resolve<T, E>(
@@ -133,6 +149,16 @@ impl Parser {
         }
 
         Ok(())
+    }
+
+    #[allow(clippy::unnecessary_wraps)] //function pointer
+    fn opt_string(arg: &str) -> Result<Option<String>> {
+        Ok(Some(arg.to_owned()))
+    }
+
+    #[allow(clippy::unnecessary_wraps)] //function pointer
+    fn cow_string(arg: &str) -> Result<Cow<'static, str>> {
+        Ok(arg.to_owned().into())
     }
 
     #[cfg(all(unix, not(target_os = "macos")))]

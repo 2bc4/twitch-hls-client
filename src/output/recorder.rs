@@ -16,7 +16,7 @@ pub struct Args {
 
 impl ArgParser for Args {
     fn parse(&mut self, parser: &mut Parser) -> Result<()> {
-        parser.parse_fn_cfg(&mut self.path, "-r", "record", Parser::parse_opt_string)?;
+        parser.parse_opt_string_cfg(&mut self.path, "-r", "record")?;
         parser.parse_switch(&mut self.overwrite, "--overwrite")?;
 
         Ok(())

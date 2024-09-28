@@ -6,7 +6,10 @@ pub use master_playlist::MasterPlaylist;
 pub use media_playlist::{MediaPlaylist, QueueRange};
 
 use anyhow::{Context, Result};
-use std::fmt::{self, Display, Formatter};
+use std::{
+    borrow::Cow,
+    fmt::{self, Display, Formatter},
+};
 
 use crate::{
     args::{ArgParser, Parser},
@@ -31,7 +34,7 @@ pub struct Args {
     no_low_latency: bool,
     client_id: Option<String>,
     auth_token: Option<String>,
-    codecs: String,
+    codecs: Cow<'static, str>,
     never_proxy: Option<Vec<String>>,
     playlist_cache_dir: Option<String>,
     force_playlist_url: Option<Url>,
@@ -42,7 +45,7 @@ pub struct Args {
 impl Default for Args {
     fn default() -> Self {
         Self {
-            codecs: "av1,h265,h264".to_owned(),
+            codecs: "av1,h265,h264".into(),
             servers: Option::default(),
             print_streams: bool::default(),
             no_low_latency: bool::default(),
@@ -62,24 +65,14 @@ impl ArgParser for Args {
         parser.parse_fn_cfg(&mut self.servers, "-s", "servers", Self::split_comma)?;
         parser.parse_switch(&mut self.print_streams, "--print-streams")?;
         parser.parse_switch(&mut self.no_low_latency, "--no-low-latency")?;
-        parser.parse_fn(&mut self.client_id, "--client-id", Parser::parse_opt_string)?;
-        parser.parse_fn(
-            &mut self.auth_token,
-            "--auth-token",
-            Parser::parse_opt_string,
-        )?;
-        parser.parse(&mut self.codecs, "--codecs")?;
+        parser.parse_opt_string(&mut self.client_id, "--client-id")?;
+        parser.parse_opt_string(&mut self.auth_token, "--auth-token")?;
+        parser.parse_cow_string(&mut self.codecs, "--codecs")?;
         parser.parse_fn(&mut self.never_proxy, "--never-proxy", Self::split_comma)?;
-        parser.parse_fn(
-            &mut self.playlist_cache_dir,
-            "--playlist-cache-dir",
-            Parser::parse_opt_string,
-        )?;
-        parser.parse_fn(
-            &mut self.force_playlist_url,
-            "--force-playlist-url",
-            |arg| Ok(Some(arg.to_owned().into())),
-        )?;
+        parser.parse_opt_string(&mut self.playlist_cache_dir, "--playlist-cache-dir")?;
+        parser.parse_fn(&mut self.force_playlist_url, "--force-playlist-url", |a| {
+            Ok(Some(a.to_owned().into()))
+        })?;
 
         self.channel = parser
             .parse_free_required::<String>()

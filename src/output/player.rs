@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     fmt::{self, Display, Formatter},
     io::{self, ErrorKind::BrokenPipe, Write},
     process::{Child, ChildStdin, Command, Stdio},
@@ -24,7 +25,7 @@ impl Display for PipeClosedError {
 #[allow(clippy::struct_field_names)] //.args
 pub struct Args {
     path: Option<String>,
-    args: String,
+    args: Cow<'static, str>,
     quiet: bool,
     no_kill: bool,
 }
@@ -32,7 +33,7 @@ pub struct Args {
 impl Default for Args {
     fn default() -> Self {
         Self {
-            args: "-".to_owned(),
+            args: "-".into(),
             path: Option::default(),
             quiet: bool::default(),
             no_kill: bool::default(),
@@ -42,8 +43,8 @@ impl Default for Args {
 
 impl ArgParser for Args {
     fn parse(&mut self, parser: &mut Parser) -> Result<()> {
-        parser.parse_fn_cfg(&mut self.path, "-p", "player", Parser::parse_opt_string)?;
-        parser.parse_cfg(&mut self.args, "-a", "player-args")?;
+        parser.parse_opt_string_cfg(&mut self.path, "-p", "player")?;
+        parser.parse_cow_string_cfg(&mut self.args, "-a", "player-args")?;
         parser.parse_switch_or(&mut self.quiet, "-q", "--quiet")?;
         parser.parse_switch(&mut self.no_kill, "--no-kill")?;
 
@@ -131,9 +132,10 @@ impl Player {
                     }
                 })
                 .collect::<Vec<String>>()
-                .join(" ");
+                .join(" ")
+                .into();
         } else {
-            pargs.args += &format!(" {url}");
+            pargs.args = format!("{}{url}", pargs.args).into();
         }
 
         let Some(mut player) = Self::spawn(pargs)? else {
