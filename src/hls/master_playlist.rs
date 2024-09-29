@@ -2,6 +2,7 @@ use std::{
     borrow::Cow,
     fmt::{self, Display, Formatter},
     fs, iter, mem,
+    time::Duration,
 };
 
 use anyhow::{ensure, Context, Result};
@@ -367,6 +368,8 @@ impl Cache {
             if let Some(quality) = quality {
                 match fs::metadata(&dir) {
                     Ok(metadata) if metadata.is_dir() && !metadata.permissions().readonly() => {
+                        Self::remove_stale(&dir);
+
                         return Some(Self {
                             path: format!("{dir}/{channel}-{quality}"),
                         });
@@ -400,6 +403,36 @@ impl Cache {
         debug!("Creating playlist cache: {}", self.path);
         if let Err(e) = fs::write(&self.path, url.as_str()) {
             error!("Failed to create playlist cache: {e}");
+        }
+    }
+
+    fn remove_stale(dir: &str) {
+        let iter = match fs::read_dir(dir) {
+            Ok(iter) => iter,
+            Err(e) => {
+                error!("Failed to read playlist cache directory: {e}");
+                return;
+            }
+        };
+
+        for entry in iter {
+            let Ok(entry) = entry else {
+                continue;
+            };
+
+            if let Some(duration) = fs::metadata(entry.path())
+                .ok()
+                .and_then(|m| m.modified().ok())
+                .and_then(|t| t.elapsed().ok())
+            {
+                //After 48 hours a playlist cannot be valid
+                if duration >= Duration::from_secs(48 * 60 * 60) {
+                    debug!("Removing stale playlist cache: {}", entry.path().display());
+                    if let Err(e) = fs::remove_file(entry.path()) {
+                        error!("Failed to remove stale playlist cache: {e}");
+                    }
+                }
+            }
         }
     }
 }
