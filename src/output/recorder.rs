@@ -43,7 +43,7 @@ impl Write for Recorder {
 
 impl Recorder {
     pub fn new(args: &Args) -> Result<Option<Self>> {
-        let Some(ref path) = args.path else {
+        let Some(path) = &args.path else {
             return Ok(None);
         };
 
@@ -55,7 +55,7 @@ impl Recorder {
         }
 
         Ok(Some(Self {
-            file: File::options().write(true).create_new(true).open(path)?,
+            file: File::create_new(path)?,
         }))
     }
 }
