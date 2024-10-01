@@ -6,7 +6,7 @@ description = "Minimal CLI client for watching/recording Twitch streams"
 license = "GPL-3.0-or-later"
 repository = "https://github.com/2bc4/twitch-hls-client"
 edition = "2021"
-rust-version = "1.79"
+rust-version = "1.80"
 
 [lints.rust]
 unsafe_code = "forbid"
