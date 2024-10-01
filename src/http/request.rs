@@ -169,7 +169,7 @@ impl<T: Write> Request<T> {
         //then split buf there and feed remaining half into decoder
         let mut buf = [0u8; BUF_SIZE];
         let mut written = 0;
-        let (headers, remaining) = loop {
+        let (mut headers, remaining) = loop {
             let consumed = self.stream.read(&mut buf[written..])?;
             if consumed == 0 {
                 return Err(io::Error::from(UnexpectedEof).into());
@@ -200,7 +200,7 @@ impl<T: Write> Request<T> {
         }
 
         match io::copy(
-            &mut Decoder::new(remaining.chain(&mut self.stream), &headers)?,
+            &mut Decoder::new(remaining.chain(&mut self.stream), headers.to_mut())?,
             &mut self.handler,
         ) {
             Ok(_) => Ok(()),

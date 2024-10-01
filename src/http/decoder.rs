@@ -42,8 +42,9 @@ impl<T: Read> Read for Decoder<T> {
 }
 
 impl<T: Read> Decoder<T> {
-    pub fn new(reader: T, headers: &str) -> Result<Self> {
-        let headers = headers.to_lowercase();
+    pub fn new(reader: T, headers: &mut str) -> Result<Self> {
+        headers.make_ascii_lowercase();
+
         let content_length = headers
             .lines()
             .find(|h| h.starts_with("content-length"))
@@ -77,7 +78,7 @@ impl<T: Read> Decoder<T> {
                     consumed: u64::default(),
                 })
             }
-            _ => match content_length {
+            (false, false) => match content_length {
                 Some(length) => {
                     debug!("Content length: {length}");
 
@@ -86,7 +87,7 @@ impl<T: Read> Decoder<T> {
                         consumed: u64::default(),
                     })
                 }
-                _ => bail!("Could not resolve encoding of HTTP response"),
+                None => bail!("Could not resolve encoding of HTTP response"),
             },
         }
     }
