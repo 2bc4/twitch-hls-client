@@ -42,9 +42,7 @@ impl<T: Read> Read for Decoder<T> {
 }
 
 impl<T: Read> Decoder<T> {
-    pub fn new(reader: T, headers: &mut str) -> Result<Self> {
-        headers.make_ascii_lowercase();
-
+    pub fn new(reader: T, headers: &str) -> Result<Self> {
         let content_length = headers
             .lines()
             .find(|h| h.starts_with("content-length"))

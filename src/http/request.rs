@@ -159,31 +159,32 @@ impl<T: Write> Request<T> {
     }
 
     fn do_request(&mut self) -> Result<()> {
-        const BUF_SIZE: usize = 2048;
-
         debug!("Request:\n{}", self.raw);
         self.stream.write_all(self.raw.as_bytes())?;
         self.stream.flush()?;
 
         //Read into buf and search for the header terminator string,
         //then split buf there and feed remaining half into decoder
-        let mut buf = [0u8; BUF_SIZE];
+        let mut buf = [0u8; 2048];
         let mut written = 0;
-        let (mut headers, remaining) = loop {
+        let (headers, remaining) = loop {
             let consumed = self.stream.read(&mut buf[written..])?;
             if consumed == 0 {
                 return Err(io::Error::from(UnexpectedEof).into());
             }
             written += consumed;
 
-            if let Some(mut headers_end) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
-                headers_end += 4; //pass \r\n\r\n
-                match (buf.get(..headers_end), buf.get(headers_end..written)) {
-                    (Some(headers), Some(remaining)) => {
-                        break (String::from_utf8_lossy(headers), remaining);
-                    }
-                    _ => continue, //loop to return UnexpectedEof
-                }
+            if let Some((headers, remaining)) = buf
+                .windows(4)
+                .position(|w| w == b"\r\n\r\n")
+                .and_then(|p| buf.split_at_mut_checked(p + 4 /* pass \r\n\r\n */))
+                .and_then(|(h, r)| {
+                    let len = h.len();
+                    Some((h, r.get(..written - len)?))
+                })
+            {
+                headers.make_ascii_lowercase();
+                break (String::from_utf8_lossy(headers), remaining);
             }
         };
         debug!("Response:\n{headers}");
@@ -200,7 +201,7 @@ impl<T: Write> Request<T> {
         }
 
         match io::copy(
-            &mut Decoder::new(remaining.chain(&mut self.stream), headers.to_mut())?,
+            &mut Decoder::new(remaining.chain(&mut self.stream), &headers)?,
             &mut self.handler,
         ) {
             Ok(_) => Ok(()),
