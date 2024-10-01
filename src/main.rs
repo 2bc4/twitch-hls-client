@@ -76,7 +76,7 @@ fn main() -> Result<()> {
         let worker = Worker::spawn(
             OutputWriter::new(&output_args)?,
             playlist.header.take(),
-            agent.clone(),
+            agent,
         )?;
 
         (playlist, Handler::new(worker))

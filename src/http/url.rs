@@ -105,7 +105,7 @@ impl Url {
     }
 }
 
-#[derive(Default, Clone, Debug, PartialEq)]
+#[derive(Default, Clone, Debug, PartialEq, Eq)]
 pub enum Scheme {
     Http,
     Https,
@@ -115,7 +115,7 @@ pub enum Scheme {
 }
 
 impl Scheme {
-    pub fn as_str(&self) -> &'static str {
+    pub const fn as_str(&self) -> &'static str {
         match self {
             Self::Http => "http",
             Self::Https => "https",

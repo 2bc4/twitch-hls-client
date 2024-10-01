@@ -82,7 +82,7 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(worker: Worker) -> Self {
+    pub const fn new(worker: Worker) -> Self {
         Self { worker, init: true }
     }
 

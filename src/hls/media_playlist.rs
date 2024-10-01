@@ -136,7 +136,7 @@ impl MediaPlaylist {
         }
     }
 
-    pub fn last_duration(&mut self) -> Option<Duration> {
+    pub fn last_duration(&self) -> Option<Duration> {
         self.segments
             .iter()
             .rev()

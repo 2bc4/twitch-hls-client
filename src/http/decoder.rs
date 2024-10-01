@@ -42,7 +42,7 @@ impl<T: Read> Read for Decoder<T> {
 }
 
 impl<T: Read> Decoder<T> {
-    pub fn new(reader: T, headers: &str) -> Result<Decoder<T>> {
+    pub fn new(reader: T, headers: &str) -> Result<Self> {
         let headers = headers.to_lowercase();
         let content_length = headers
             .lines()

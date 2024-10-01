@@ -74,7 +74,7 @@ pub fn is_debug() -> bool {
 }
 
 #[cfg(not(feature = "debug-logging"))]
-pub fn is_debug() -> bool {
+pub const fn is_debug() -> bool {
     false
 }
 

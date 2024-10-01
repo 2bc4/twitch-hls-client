@@ -23,10 +23,10 @@ pub enum Method {
 }
 
 impl Method {
-    fn as_str(self) -> &'static str {
+    const fn as_str(self) -> &'static str {
         match self {
-            Method::Get => "GET",
-            Method::Post => "POST",
+            Self::Get => "GET",
+            Self::Post => "POST",
         }
     }
 }
@@ -212,7 +212,7 @@ impl<T: Write> Request<T> {
 
     fn reconnect(&mut self, url: Url) -> Result<()> {
         debug!("Reconnecting...");
-        *self = Request::new(
+        *self = Self::new(
             self.handler.writer.take().expect("Missing writer"),
             self.method,
             url,
