@@ -139,12 +139,14 @@ impl Parser {
         if let Some(val) = val {
             *dst = val;
         } else if let Some(cfg) = &self.config {
-            if let Some(split) = cfg
+            let key = key.trim_start_matches('-');
+            if let Some(val) = cfg
                 .lines()
-                .find(|l| l.starts_with(key.trim_start_matches('-')))
+                .find(|l| l.starts_with(key))
                 .and_then(|l| l.split_once('='))
+                .and_then(|(k, v)| k.eq(key).then_some(v))
             {
-                *dst = f(split.1)?;
+                *dst = f(val)?;
             }
         }
 
