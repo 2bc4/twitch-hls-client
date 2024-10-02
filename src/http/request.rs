@@ -280,9 +280,6 @@ impl Write for Transport {
 
 impl Transport {
     fn new(url: &Url, agent: Agent) -> Result<Self> {
-        let host = url.host()?;
-        let port = url.port()?;
-
         if agent.args.force_https {
             ensure!(
                 url.scheme == Scheme::Https,
@@ -290,7 +287,9 @@ impl Transport {
             );
         }
 
-        let addrs = (host, port).to_socket_addrs()?;
+        let host = url.host()?;
+        let addrs = (host, url.port()?).to_socket_addrs()?;
+
         let sock = if agent.args.force_ipv4 {
             Self::try_connect(addrs.filter(SocketAddr::is_ipv4), agent.args.timeout)?
         } else {
@@ -325,13 +324,16 @@ impl Transport {
 
     fn init_tls(
         host: &str,
-        mut sock: TcpStream,
+        sock: TcpStream,
         tls_config: Arc<ClientConfig>,
     ) -> Result<StreamOwned<ClientConnection, TcpStream>> {
-        let mut conn = ClientConnection::new(tls_config, host.to_owned().try_into()?)?;
-        conn.complete_io(&mut sock)?; //handshake
+        let mut stream = StreamOwned::new(
+            ClientConnection::new(tls_config, host.to_owned().try_into()?)?,
+            sock,
+        );
 
-        Ok(StreamOwned::new(conn, sock))
+        stream.flush()?;
+        Ok(stream)
     }
 }
 
