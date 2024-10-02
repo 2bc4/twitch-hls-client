@@ -1,6 +1,6 @@
 use std::{
     fs::File,
-    io::{self, Write},
+    io::{self, BufWriter, Write},
 };
 
 use anyhow::Result;
@@ -24,7 +24,7 @@ impl ArgParser for Args {
 }
 
 pub struct Recorder {
-    file: File,
+    file: BufWriter<File>,
 }
 
 impl Write for Recorder {
@@ -33,7 +33,7 @@ impl Write for Recorder {
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        unimplemented!();
+        self.file.flush()
     }
 
     fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
@@ -50,12 +50,12 @@ impl Recorder {
         info!("Recording to: {path}");
         if args.overwrite {
             return Ok(Some(Self {
-                file: File::create(path)?,
+                file: BufWriter::new(File::create(path)?),
             }));
         }
 
         Ok(Some(Self {
-            file: File::create_new(path)?,
+            file: BufWriter::new(File::create_new(path)?),
         }))
     }
 }

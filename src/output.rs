@@ -41,7 +41,10 @@ impl Write for OutputWriter {
 
     fn flush(&mut self) -> io::Result<()> {
         debug!("Finished writing segment");
-        Ok(())
+        match self {
+            Self::Player(_) => Ok(()),
+            Self::Recorder(recorder) | Self::Combined(_, recorder) => recorder.flush(),
+        }
     }
 
     fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
