@@ -1,9 +1,10 @@
+mod cache;
 mod master_playlist;
 mod media_playlist;
 pub mod segment;
 
 pub use master_playlist::MasterPlaylist;
-pub use media_playlist::{MediaPlaylist, QueueRange};
+pub use media_playlist::MediaPlaylist;
 
 use anyhow::{Context, Result};
 use std::{
