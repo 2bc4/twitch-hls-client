@@ -90,10 +90,10 @@ impl MasterPlaylist {
 
     pub fn get_stream(&mut self) -> Option<Url> {
         let url = {
-            let quality = self.quality.take()?;
-            if self.forced || quality == "best" {
+            if self.forced || self.quality.as_ref()? == "best" {
                 mem::take(self.variant_playlists.first_mut()?).url
             } else {
+                let quality = self.quality.take()?;
                 mem::take(
                     self.variant_playlists
                         .iter_mut()
