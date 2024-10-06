@@ -8,7 +8,7 @@ use std::{
 use anyhow::{bail, Context, Result};
 use log::{error, info};
 
-use crate::args::{ArgParser, Parser};
+use crate::args::{Parse, Parser};
 
 #[derive(Debug)]
 pub struct PipeClosedError;
@@ -22,10 +22,9 @@ impl Display for PipeClosedError {
 }
 
 #[derive(Clone, Debug)]
-#[allow(clippy::struct_field_names)] //.args
 pub struct Args {
     path: Option<String>,
-    args: Cow<'static, str>,
+    pargs: Cow<'static, str>,
     quiet: bool,
     no_kill: bool,
 }
@@ -33,7 +32,7 @@ pub struct Args {
 impl Default for Args {
     fn default() -> Self {
         Self {
-            args: "-".into(),
+            pargs: "-".into(),
             path: Option::default(),
             quiet: bool::default(),
             no_kill: bool::default(),
@@ -41,10 +40,10 @@ impl Default for Args {
     }
 }
 
-impl ArgParser for Args {
+impl Parse for Args {
     fn parse(&mut self, parser: &mut Parser) -> Result<()> {
         parser.parse_opt_string_cfg(&mut self.path, "-p", "player")?;
-        parser.parse_cow_string_cfg(&mut self.args, "-a", "player-args")?;
+        parser.parse_cow_string_cfg(&mut self.pargs, "-a", "player-args")?;
         parser.parse_switch_or(&mut self.quiet, "-q", "--quiet")?;
         parser.parse_switch(&mut self.no_kill, "--no-kill")?;
 
@@ -70,38 +69,38 @@ impl Drop for Player {
 
 impl Write for Player {
     fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
-        unimplemented!();
+        unreachable!();
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        unimplemented!();
+        unreachable!();
     }
 
     fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
-        self.stdin.write_all(buf).map_err(|e| {
-            if e.kind() == BrokenPipe {
+        self.stdin.write_all(buf).map_err(|error| {
+            if error.kind() == BrokenPipe {
                 let _ = self.process.try_wait(); //reap pid
                 return io::Error::other(PipeClosedError);
             }
 
-            e
+            error
         })
     }
 }
 
 impl Player {
-    pub fn spawn(pargs: &Args) -> Result<Option<Self>> {
-        let Some(ref path) = pargs.path else {
+    pub fn spawn(args: &Args) -> Result<Option<Self>> {
+        let Some(path) = &args.path else {
             return Ok(None);
         };
 
-        info!("Opening player: {} {}", path, pargs.args);
+        info!("Opening player: {path} {}", args.pargs);
         let mut command = Command::new(path);
         command
-            .args(pargs.args.split_whitespace())
+            .args(args.pargs.split_whitespace())
             .stdin(Stdio::piped());
 
-        if pargs.quiet {
+        if args.quiet {
             command.stdout(Stdio::null()).stderr(Stdio::null());
         }
 
@@ -114,19 +113,19 @@ impl Player {
         Ok(Some(Self {
             stdin,
             process,
-            no_kill: pargs.no_kill,
+            no_kill: args.no_kill,
         }))
     }
 
-    pub fn passthrough(pargs: &mut Args, url: &str) -> Result<()> {
+    pub fn passthrough(args: &mut Args, url: &str) -> Result<()> {
         info!("Passing through playlist URL to player");
-        if pargs.args.split_whitespace().any(|a| a == "-") {
-            pargs.args = pargs
-                .args
+        if args.pargs.split_whitespace().any(|a| a == "-") {
+            args.pargs = args
+                .pargs
                 .split_whitespace()
                 .map(|a| {
                     if a == "-" {
-                        url.to_string()
+                        url.to_owned()
                     } else {
                         a.to_owned()
                     }
@@ -135,10 +134,10 @@ impl Player {
                 .join(" ")
                 .into();
         } else {
-            pargs.args = format!("{} {url}", pargs.args).into();
+            args.pargs = format!("{} {url}", args.pargs).into();
         }
 
-        let Some(mut player) = Self::spawn(pargs)? else {
+        let Some(mut player) = Self::spawn(args)? else {
             bail!("No player set");
         };
 

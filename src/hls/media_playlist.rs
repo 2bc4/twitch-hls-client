@@ -7,36 +7,36 @@ use anyhow::{ensure, Context, Result};
 use log::debug;
 
 use super::{
+    map_if_offline,
     segment::{Duration, Segment},
     OfflineError,
 };
 
 use crate::{
-    http::{Agent, TextRequest, Url},
+    http::{Connection, Url},
     logger,
 };
 
 pub struct MediaPlaylist {
     pub header: Option<Url>, //used for av1/hevc streams
 
+    conn: Connection,
     segments: VecDeque<Segment>,
+    debug_log_playlist: bool,
+
     sequence: usize,
     added: usize,
-
-    request: TextRequest,
-
-    debug_log_playlist: bool,
 }
 
 impl MediaPlaylist {
-    pub fn new(url: Url, agent: &Agent) -> Result<Self> {
+    pub fn new(conn: Connection) -> Result<Self> {
         let mut playlist = Self {
-            header: Option::default(),
+            conn,
             segments: VecDeque::with_capacity(16),
+            debug_log_playlist: logger::is_debug() && env::var_os("DEBUG_NO_PLAYLIST").is_none(),
+            header: Option::default(),
             sequence: usize::default(),
             added: usize::default(),
-            request: agent.get(url)?,
-            debug_log_playlist: logger::is_debug() && env::var_os("DEBUG_NO_PLAYLIST").is_none(),
         };
 
         playlist.reload()?;
@@ -45,7 +45,7 @@ impl MediaPlaylist {
 
     pub fn reload(&mut self) -> Result<()> {
         debug!("----------RELOADING----------");
-        let playlist = self.request.text().map_err(super::map_if_offline)?;
+        let playlist = self.conn.text().map_err(map_if_offline)?;
         if self.debug_log_playlist {
             debug!("Playlist:\n{playlist}");
         }
@@ -91,15 +91,15 @@ impl MediaPlaylist {
                     self.sequence = sequence;
                 }
                 "#EXT-X-MAP" if self.header.is_none() => {
-                    self.header = Some(
-                        split
-                            .1
-                            .split_once('=')
-                            .context("Failed to parse segment header")?
-                            .1
-                            .replace('"', "")
-                            .into(),
-                    );
+                    let mut url: Url = split
+                        .1
+                        .split_once('=')
+                        .context("Failed to parse segment header")?
+                        .1
+                        .into();
+
+                    url.retain(|c| c != '"');
+                    self.header = Some(url);
                 }
                 "#EXTINF" => {
                     total_segments += 1;

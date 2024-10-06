@@ -7,8 +7,8 @@ use anyhow::{ensure, Context, Result};
 use log::{debug, info};
 
 use crate::{
-    http::{Agent, StatusError, Url},
-    output::OutputWriter,
+    http::{Agent, Method, StatusError, Url},
+    output::Writer,
 };
 
 pub struct Worker {
@@ -18,39 +18,26 @@ pub struct Worker {
 }
 
 impl Worker {
-    pub fn spawn(writer: OutputWriter, header_url: Option<Url>, agent: Agent) -> Result<Self> {
+    pub fn spawn(writer: Writer, header_url: Option<Url>, agent: Agent) -> Result<Self> {
         let (url_tx, url_rx): (Sender<Url>, Receiver<Url>) = mpsc::channel();
 
         let handle = thread::Builder::new()
             .name("worker".to_owned())
             .spawn(move || -> Result<()> {
                 debug!("Starting");
-                let mut request = {
-                    let Ok(initial_url) = url_rx.recv() else {
-                        debug!("Exiting before initial url");
-                        return Ok(());
-                    };
 
-                    if let Some(header_url) = header_url {
-                        let mut request = agent.request(writer, header_url)?;
-                        request.call()?;
-                        request.url(initial_url)?;
+                let mut request = agent.binary(writer);
+                if let Some(header_url) = header_url {
+                    request.call(Method::Get, &header_url)?;
+                }
 
-                        request
-                    } else {
-                        agent.request(writer, initial_url)?
-                    }
-                };
-
-                request.call()?;
                 loop {
                     let Ok(url) = url_rx.recv() else {
                         debug!("Exiting");
                         return Ok(());
                     };
 
-                    request.url(url)?;
-                    match request.call() {
+                    match request.call(Method::Get, &url) {
                         Ok(()) => (),
                         Err(e) if StatusError::is_not_found(&e) => {
                             info!("Segment not found, skipping ahead...");

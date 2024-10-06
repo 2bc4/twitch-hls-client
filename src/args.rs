@@ -8,7 +8,7 @@ use crate::{
     Args as MainArgs,
 };
 
-pub trait ArgParser {
+pub trait Parse {
     fn parse(&mut self, parser: &mut Parser) -> Result<()>;
 }
 
@@ -47,14 +47,11 @@ impl Parser {
     }
 
     pub fn parse_free(&mut self, dst: &mut Option<String>, cfg_key: &'static str) -> Result<()> {
-        let arg = self.parser.opt_free_from_fn(Self::opt_string)?;
-        self.resolve(dst, arg, cfg_key, Self::opt_string)
+        let arg = self.parser.opt_free_from_fn(Self::opt_string_impl)?;
+        self.resolve(dst, arg, cfg_key, Self::opt_string_impl)
     }
 
-    pub fn parse_free_required<T: FromStr>(&mut self) -> Result<T>
-    where
-        <T as FromStr>::Err: Display + Send + Sync + Error + 'static,
-    {
+    pub fn parse_free_required(&mut self) -> Result<String> {
         Ok(self.parser.free_from_str()?)
     }
 
@@ -95,8 +92,8 @@ impl Parser {
     }
 
     pub fn parse_opt_string(&mut self, dst: &mut Option<String>, key: &'static str) -> Result<()> {
-        let arg = self.parser.opt_value_from_fn(key, Self::opt_string)?;
-        self.resolve(dst, arg, key, Self::opt_string)
+        let arg = self.parser.opt_value_from_fn(key, Self::opt_string_impl)?;
+        self.resolve(dst, arg, key, Self::opt_string_impl)
     }
 
     pub fn parse_opt_string_cfg(
@@ -105,8 +102,8 @@ impl Parser {
         key: &'static str,
         cfg_key: &'static str,
     ) -> Result<()> {
-        let arg = self.parser.opt_value_from_fn(key, Self::opt_string)?;
-        self.resolve(dst, arg, cfg_key, Self::opt_string)
+        let arg = self.parser.opt_value_from_fn(key, Self::opt_string_impl)?;
+        self.resolve(dst, arg, cfg_key, Self::opt_string_impl)
     }
 
     pub fn parse_cow_string(
@@ -114,8 +111,8 @@ impl Parser {
         dst: &mut Cow<'static, str>,
         key: &'static str,
     ) -> Result<()> {
-        let arg = self.parser.opt_value_from_fn(key, Self::cow_string)?;
-        self.resolve(dst, arg, key, Self::cow_string)
+        let arg = self.parser.opt_value_from_fn(key, Self::cow_string_impl)?;
+        self.resolve(dst, arg, key, Self::cow_string_impl)
     }
 
     pub fn parse_cow_string_cfg(
@@ -124,8 +121,8 @@ impl Parser {
         key: &'static str,
         cfg_key: &'static str,
     ) -> Result<()> {
-        let arg = self.parser.opt_value_from_fn(key, Self::cow_string)?;
-        self.resolve(dst, arg, cfg_key, Self::cow_string)
+        let arg = self.parser.opt_value_from_fn(key, Self::cow_string_impl)?;
+        self.resolve(dst, arg, cfg_key, Self::cow_string_impl)
     }
 
     fn resolve<T, E>(
@@ -153,13 +150,13 @@ impl Parser {
         Ok(())
     }
 
-    #[allow(clippy::unnecessary_wraps)] //function pointer
-    fn opt_string(arg: &str) -> Result<Option<String>> {
+    #[allow(clippy::unnecessary_wraps, reason = "function pointer")]
+    fn opt_string_impl(arg: &str) -> Result<Option<String>> {
         Ok(Some(arg.to_owned()))
     }
 
-    #[allow(clippy::unnecessary_wraps)] //function pointer
-    fn cow_string(arg: &str) -> Result<Cow<'static, str>> {
+    #[allow(clippy::unnecessary_wraps, reason = "function pointer")]
+    fn cow_string_impl(arg: &str) -> Result<Cow<'static, str>> {
         Ok(arg.to_owned().into())
     }
 
@@ -201,7 +198,7 @@ impl Parser {
     fn new() -> Result<Self> {
         let mut parser = Arguments::from_env();
         if parser.contains("-h") || parser.contains("--help") {
-            println!(include_str!("usage"));
+            print!(include_str!("usage"));
             process::exit(0);
         }
 

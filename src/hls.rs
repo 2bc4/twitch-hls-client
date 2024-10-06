@@ -3,7 +3,7 @@ mod master_playlist;
 mod media_playlist;
 pub mod segment;
 
-pub use master_playlist::MasterPlaylist;
+pub use master_playlist::fetch_playlist;
 pub use media_playlist::MediaPlaylist;
 
 use anyhow::{Context, Result};
@@ -13,7 +13,7 @@ use std::{
 };
 
 use crate::{
-    args::{ArgParser, Parser},
+    args::{Parse, Parser},
     http::{StatusError, Url},
 };
 
@@ -61,7 +61,7 @@ impl Default for Args {
     }
 }
 
-impl ArgParser for Args {
+impl Parse for Args {
     fn parse(&mut self, parser: &mut Parser) -> Result<()> {
         parser.parse_fn_cfg(&mut self.servers, "-s", "servers", Self::split_comma)?;
         parser.parse_switch(&mut self.print_streams, "--print-streams")?;
@@ -76,7 +76,7 @@ impl ArgParser for Args {
         })?;
 
         self.channel = parser
-            .parse_free_required::<String>()
+            .parse_free_required()
             .context("Missing channel argument")?
             .to_lowercase()
             .replace("twitch.tv/", "");
@@ -97,7 +97,7 @@ impl ArgParser for Args {
 }
 
 impl Args {
-    #![allow(clippy::unnecessary_wraps)] //function pointer
+    #[allow(clippy::unnecessary_wraps, reason = "function pointer")]
     fn split_comma<T: for<'a> From<&'a str>>(arg: &str) -> Result<Option<Vec<T>>> {
         Ok(Some(arg.split(',').map(T::from).collect()))
     }

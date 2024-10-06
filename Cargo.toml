@@ -1,12 +1,12 @@
 [package]
 name = "twitch-hls-client"
 version = "1.3.11"
+edition = "2021"
+rust-version = "1.80"
 authors = ["2bc4 <119853089+2bc4@users.noreply.github.com>"]
 description = "Minimal CLI client for watching/recording Twitch streams"
 license = "GPL-3.0-or-later"
 repository = "https://github.com/2bc4/twitch-hls-client"
-edition = "2021"
-rust-version = "1.80"
 
 [lints.rust]
 unsafe_code = "forbid"
@@ -30,8 +30,8 @@ debug-logging = ["rustls/logging"]
 [dependencies]
 anyhow = "1.0"
 chunked_transfer = "1.5"
-fastrand = "2.0"
 flate2 = "1.0"
+getrandom = { version = "0.2", features = ["std"] }
 log = { version = "0.4", features = ["std", "max_level_debug"] }
 pico-args = { version = "0.5", features = ["eq-separator"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }

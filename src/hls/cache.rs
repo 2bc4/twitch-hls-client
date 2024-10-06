@@ -2,19 +2,19 @@ use std::{fs, time::Duration};
 
 use log::{debug, error};
 
-use crate::http::{Agent, Url};
+use crate::http::{Agent, Connection, Url};
 
 pub struct Cache {
     path: String,
 }
 
 impl Cache {
-    pub fn new(dir: Option<String>, channel: &str, quality: &Option<String>) -> Option<Self> {
+    pub fn new(dir: &Option<String>, channel: &str, quality: &Option<String>) -> Option<Self> {
         if let Some(dir) = dir {
             if let Some(quality) = quality {
-                match fs::metadata(&dir) {
+                match fs::metadata(dir) {
                     Ok(metadata) if metadata.is_dir() && !metadata.permissions().readonly() => {
-                        Self::remove_stale(&dir);
+                        Self::remove_stale(dir);
 
                         return Some(Self {
                             path: format!("{dir}/{channel}-{quality}"),
@@ -29,20 +29,20 @@ impl Cache {
         None
     }
 
-    pub fn get(&self, agent: &Agent) -> Option<Url> {
+    pub fn get(&self, agent: &Agent) -> Option<Connection> {
         debug!("Reading playlist cache: {}", self.path);
 
-        let url: Url = fs::read_to_string(&self.path).ok()?.trim_end().into();
-        if !agent.exists(url.clone()) {
+        let url = fs::read_to_string(&self.path).ok()?.trim_end().into();
+        let Some(request) = agent.exists(&url) else {
             debug!("Removing playlist cache: {}", self.path);
             if let Err(e) = fs::remove_file(&self.path) {
                 error!("Failed to remove playlist cache: {e}");
             }
 
             return None;
-        }
+        };
 
-        Some(url)
+        Some(Connection::new(url, request))
     }
 
     pub fn create(&self, url: &Url) {

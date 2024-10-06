@@ -6,15 +6,16 @@ use std::{
 use anyhow::Result;
 use log::{Level, LevelFilter, Log, Metadata, Record};
 
-#[allow(dead_code)] //.enable_debug if debug logging feature disabled
 pub struct Logger {
+    #[allow(dead_code)]
     enable_debug: bool,
+
     enable_colors: bool,
 }
 
 impl Log for Logger {
     fn enabled(&self, _metadata: &Metadata<'_>) -> bool {
-        unimplemented!(); //no need
+        unreachable!();
     }
 
     fn log(&self, record: &Record<'_>) {

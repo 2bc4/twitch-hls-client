@@ -5,19 +5,19 @@ use chunked_transfer::Decoder as ChunkDecoder;
 use flate2::read::GzDecoder;
 use log::debug;
 
-enum Encoding<T: Read> {
-    Unencoded(T, u64),
-    Chunked(ChunkDecoder<T>),
-    ChunkedGzip(GzDecoder<ChunkDecoder<T>>),
-    Gzip(GzDecoder<T>),
+enum Encoding<R: Read> {
+    Unencoded(R, u64),
+    Chunked(ChunkDecoder<R>),
+    ChunkedGzip(GzDecoder<ChunkDecoder<R>>),
+    Gzip(GzDecoder<R>),
 }
 
-pub struct Decoder<T: Read> {
-    kind: Encoding<T>,
+pub struct Decoder<R: Read> {
+    kind: Encoding<R>,
     consumed: u64,
 }
 
-impl<T: Read> Read for Decoder<T> {
+impl<R: Read> Read for Decoder<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match &mut self.kind {
             Encoding::Unencoded(reader, length) => {
@@ -41,16 +41,28 @@ impl<T: Read> Read for Decoder<T> {
     }
 }
 
-impl<T: Read> Decoder<T> {
-    pub fn new(reader: T, headers: &str) -> Result<Self> {
-        let content_length = headers
-            .lines()
-            .find(|h| h.starts_with("content-length"))
-            .and_then(|h| h.split_whitespace().nth(1))
-            .and_then(|h| h.parse().ok());
+impl<R: Read> Decoder<R> {
+    pub fn new(reader: R, headers: &str) -> Result<Self> {
+        let mut content_length = None;
+        let mut is_chunked = false;
+        let mut is_gzipped = false;
 
-        let is_chunked = headers.lines().any(|h| h == "transfer-encoding: chunked");
-        let is_gzipped = headers.lines().any(|h| h == "content-encoding: gzip");
+        for line in headers.lines() {
+            let mut split = line.split_whitespace();
+            match split.next() {
+                Some("content-encoding:") => {
+                    is_gzipped = split.next().is_some_and(|h| h == "gzip");
+                }
+                Some("transfer-encoding:") => {
+                    is_chunked = split.next().is_some_and(|h| h == "chunked");
+                }
+                Some("content-length:") => {
+                    content_length = split.next().and_then(|h| h.parse().ok());
+                }
+                _ => continue,
+            }
+        }
+
         match (is_chunked, is_gzipped) {
             (true, true) => {
                 debug!("Body is chunked and gzipped");
@@ -85,7 +97,7 @@ impl<T: Read> Decoder<T> {
                         consumed: u64::default(),
                     })
                 }
-                None => bail!("Could not resolve encoding of HTTP response"),
+                None => bail!("Failed to resolve encoding of HTTP response"),
             },
         }
     }

@@ -8,7 +8,7 @@ use crate::{http::Url, worker::Worker};
 
 #[derive(Default, Copy, Clone, Debug)]
 pub struct Duration {
-    pub is_ad: bool,
+    is_ad: bool,
     inner: StdDuration,
 }
 

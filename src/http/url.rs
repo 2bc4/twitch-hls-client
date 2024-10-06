@@ -1,42 +1,31 @@
 use std::{
     fmt::{self, Display, Formatter},
-    ops::Deref,
+    ops::{Deref, DerefMut},
 };
 
 use anyhow::{bail, Context, Result};
 
 #[derive(Default, Clone, Debug)]
 pub struct Url {
-    #[allow(dead_code)] //used for debug logging
-    hash: u64,
-
     pub scheme: Scheme,
     inner: String,
 }
 
 impl From<&str> for Url {
-    fn from(url: &str) -> Self {
+    fn from(inner: &str) -> Self {
         Self {
-            hash: Self::hash(url),
-            scheme: Scheme::new(url),
-            inner: url.to_owned(),
+            scheme: Scheme::new(inner),
+            inner: inner.to_owned(),
         }
     }
 }
 
 impl From<String> for Url {
-    fn from(url: String) -> Self {
+    fn from(inner: String) -> Self {
         Self {
-            hash: Self::hash(&url),
-            scheme: Scheme::new(&url),
-            inner: url,
+            scheme: Scheme::new(&inner),
+            inner,
         }
-    }
-}
-
-impl PartialEq for Url {
-    fn eq(&self, other: &Self) -> bool {
-        self.inner == other.inner
     }
 }
 
@@ -48,9 +37,15 @@ impl Deref for Url {
     }
 }
 
+impl DerefMut for Url {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
+
 impl Display for Url {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.inner)
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        f.write_str(&self.inner)
     }
 }
 
@@ -58,7 +53,7 @@ impl Url {
     pub fn host(&self) -> Result<&str> {
         let host = self
             .inner
-            .split('/')
+            .split_terminator('/')
             .nth(2)
             .context("Failed to parse host in URL")?;
 
@@ -73,7 +68,12 @@ impl Url {
     }
 
     pub fn port(&self) -> Result<u16> {
-        if let Some(port) = self.inner.split('/').nth(2).and_then(|p| p.split_once(':')) {
+        if let Some(port) = self
+            .inner
+            .split_terminator('/')
+            .nth(2)
+            .and_then(|p| p.split_once(':'))
+        {
             return port.1.parse().context("Failed to parse port in URL");
         }
 
@@ -83,29 +83,9 @@ impl Url {
             Scheme::Unknown => bail!("Unknown scheme in URL"),
         }
     }
-
-    #[cfg(feature = "debug-logging")]
-    fn hash(url: &str) -> u64 {
-        use crate::logger;
-        use std::hash::{DefaultHasher, Hasher};
-
-        if logger::is_debug() {
-            let mut hasher = DefaultHasher::new();
-            hasher.write(url.as_bytes());
-
-            hasher.finish()
-        } else {
-            u64::default()
-        }
-    }
-
-    #[cfg(not(feature = "debug-logging"))]
-    fn hash(_url: &str) -> u64 {
-        u64::default()
-    }
 }
 
-#[derive(Default, Clone, Debug, PartialEq, Eq)]
+#[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Scheme {
     Http,
     Https,
@@ -114,15 +94,17 @@ pub enum Scheme {
     Unknown,
 }
 
-impl Scheme {
-    pub const fn as_str(&self) -> &'static str {
+impl Display for Scheme {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Http => "http",
-            Self::Https => "https",
-            Self::Unknown => "<unknown>",
+            Self::Http => f.write_str("http"),
+            Self::Https => f.write_str("https"),
+            Self::Unknown => f.write_str("<unknown>"),
         }
     }
+}
 
+impl Scheme {
     fn new(url: &str) -> Self {
         match url.split(':').next() {
             Some("http") => Self::Http,
