@@ -56,7 +56,8 @@ pub fn fetch_playlist(mut args: Args, agent: &Agent) -> Result<Option<Connection
         }
     };
 
-    let Some(url) = choose_url(&playlist, &args.quality, args.print_streams) else {
+    let Some(url) = choose_stream(&playlist, &args.quality, args.print_streams) else {
+        print_streams(&playlist);
         return Ok(None);
     };
 
@@ -228,10 +229,9 @@ fn fetch_proxy_playlist(
 
     Ok(playlist)
 }
-fn choose_url(playlist: &str, quality: &Option<String>, should_print: bool) -> Option<Url> {
+fn choose_stream(playlist: &str, quality: &Option<String>, should_print: bool) -> Option<Url> {
     debug!("Master playlist:\n{playlist}");
     let (Some(quality), false) = (quality, should_print) else {
-        print_streams(playlist);
         return None;
     };
 
@@ -240,12 +240,8 @@ fn choose_url(playlist: &str, quality: &Option<String>, should_print: bool) -> O
         return Some(iter.next()?.1.into());
     }
 
-    if let Some((_, url)) = iter.find(|(name, _)| name == quality) {
-        Some(url.into())
-    } else {
-        print_streams(playlist);
-        None
-    }
+    iter.find(|(name, _)| name == quality)
+        .map(|(_, url)| url.into())
 }
 
 fn playlist_iter(playlist: &str) -> impl Iterator<Item = (&str, &str)> {
