@@ -61,7 +61,7 @@ jobs:
         shell: bash
         run: mv "target/${{ matrix.target }}/release/${{ matrix.bin-name }}" .
       - name: Zip files
-        uses: vimtor/action-zip@v1.1
+        uses: vimtor/action-zip@v1.2
         id: archive
         with:
           files: README.md LICENSE ${{ matrix.bin-name }}
