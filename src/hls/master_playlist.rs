@@ -29,31 +29,29 @@ pub fn fetch_playlist(mut args: Args, agent: &Agent) -> Result<Option<Connection
     }
 
     info!("Fetching playlist for channel {}", &args.channel);
-    let playlist = {
-        if let Some(servers) = &args.servers {
-            fetch_proxy_playlist(
-                !args.no_low_latency,
-                servers,
-                &args.codecs,
-                &args.channel,
-                agent,
-            )?
-        } else {
-            let response = fetch_twitch_gql(
-                args.client_id.take(),
-                args.auth_token.take(),
-                &args.channel,
-                agent,
-            )?;
+    let playlist = if let Some(servers) = &args.servers {
+        fetch_proxy_playlist(
+            !args.no_low_latency,
+            servers,
+            &args.codecs,
+            &args.channel,
+            agent,
+        )?
+    } else {
+        let response = fetch_twitch_gql(
+            args.client_id.take(),
+            args.auth_token.take(),
+            &args.channel,
+            agent,
+        )?;
 
-            fetch_twitch_playlist(
-                &response,
-                !args.no_low_latency,
-                &args.codecs,
-                &args.channel,
-                agent,
-            )?
-        }
+        fetch_twitch_playlist(
+            &response,
+            !args.no_low_latency,
+            &args.codecs,
+            &args.channel,
+            agent,
+        )?
     };
 
     let Some(url) = choose_stream(&playlist, &args.quality, args.print_streams) else {
@@ -229,6 +227,7 @@ fn fetch_proxy_playlist(
 
     Ok(playlist)
 }
+
 fn choose_stream(playlist: &str, quality: &Option<String>, should_print: bool) -> Option<Url> {
     debug!("Master playlist:\n{playlist}");
     let (Some(quality), false) = (quality, should_print) else {
