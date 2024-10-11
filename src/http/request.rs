@@ -3,11 +3,12 @@ use std::{
     hash::{DefaultHasher, Hasher},
     io::{
         self,
-        ErrorKind::{InvalidInput, Other, UnexpectedEof},
+        ErrorKind::{InvalidData, InvalidInput, Other, UnexpectedEof},
         Read, Write,
     },
     mem,
     net::{SocketAddr, TcpStream, ToSocketAddrs},
+    str,
     time::Duration,
 };
 
@@ -122,12 +123,10 @@ impl<W: Write> Request<W> {
                     }
                     retries += 1;
 
-                    let written = self.handler.written;
                     self.connect(url, host, hash)?;
-
-                    if written > 0 {
-                        info!("Resuming from offset: {written} bytes");
-                        self.handler.resume_target = written;
+                    if self.handler.written > 0 {
+                        info!("Resuming from offset: {} bytes", self.handler.written);
+                        self.handler.resume_target = self.handler.written;
                     }
                 }
                 Err(e) => return Err(e),
@@ -180,13 +179,7 @@ impl<W: Write> Request<W> {
                 })
             {
                 headers.make_ascii_lowercase();
-
-                //If any of the headers aren't valid UTF-8 it's garbage so just grab first
-                let Some(headers) = headers.utf8_chunks().next() else {
-                    bail!("Response wasn't valid UTF-8");
-                };
-
-                break (headers.valid(), remaining);
+                break (str::from_utf8(headers)?, remaining);
             }
         };
         debug!("Response:\n{headers}");
@@ -318,11 +311,13 @@ impl Write for StringWriter {
     }
 
     fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
-        for chunk in buf.utf8_chunks() {
-            self.0.push_str(chunk.valid());
+        match str::from_utf8(buf) {
+            Ok(string) => {
+                self.0.push_str(string);
+                Ok(())
+            }
+            Err(_) => Err(io::Error::from(InvalidData)),
         }
-
-        Ok(())
     }
 }
 
