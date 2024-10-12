@@ -68,6 +68,7 @@ pub struct Request<W: Write> {
     scheme: Scheme,
     hash: u64,
 
+    headers_buf: Box<[u8]>,
     retries: u64,
     agent: Agent,
 }
@@ -76,6 +77,7 @@ impl<W: Write> Request<W> {
     pub fn new(writer: W, agent: Agent) -> Self {
         Self {
             handler: Handler::new(writer),
+            headers_buf: vec![0u8; 2048].into_boxed_slice(),
             retries: agent.args.retries,
             agent,
             stream: Option::default(),
@@ -158,24 +160,20 @@ impl<W: Write> Request<W> {
         )?;
         stream.flush()?;
 
-        //Read into buf and search for the header terminator string,
-        //then split buf there and feed remaining half into decoder
-        let mut buf = [0u8; 2048];
         let mut written = 0;
         let (headers, remaining) = loop {
-            let consumed = stream.read(&mut buf[written..])?;
+            let consumed = stream.read(&mut self.headers_buf[written..])?;
             if consumed == 0 {
                 return Err(io::Error::from(UnexpectedEof).into());
             }
             written += consumed;
 
-            if let Some((headers, remaining)) = buf
+            if let Some((headers, remaining)) = self
+                .headers_buf
                 .windows(4)
                 .position(|w| w == b"\r\n\r\n")
-                .and_then(|p| buf.split_at_mut_checked(p + 4 /* pass \r\n\r\n */))
-                .and_then(|(h, r)| {
-                    let len = written - h.len();
-                    Some((h, r.get(..len)?))
+                .and_then(|p| {
+                    self.headers_buf[..written].split_at_mut_checked(p + 4 /* pass \r\n\r\n */)
                 })
             {
                 headers.make_ascii_lowercase();
