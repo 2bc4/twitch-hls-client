@@ -1,8 +1,9 @@
 mod decoder;
 mod request;
+mod tls_stream;
 mod url;
 
-pub use request::{Method, Request, TextRequest};
+pub use request::{Request, TextRequest};
 pub use url::{Scheme, Url};
 
 use std::{
@@ -73,6 +74,21 @@ impl Parse for Args {
         parser.parse_cow_string(&mut self.user_agent, "--user-agent")?;
 
         Ok(())
+    }
+}
+
+#[derive(Copy, Clone)]
+pub enum Method {
+    Get,
+    Post,
+}
+
+impl Display for Method {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            Self::Get => f.write_str("GET"),
+            Self::Post => f.write_str("POST"),
+        }
     }
 }
 

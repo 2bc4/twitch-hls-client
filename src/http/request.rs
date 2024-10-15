@@ -1,9 +1,9 @@
 use std::{
-    fmt::{self, Arguments, Display, Formatter},
+    fmt::Arguments,
     hash::{DefaultHasher, Hasher},
     io::{
-        self,
-        ErrorKind::{InvalidData, InvalidInput, Other, UnexpectedEof},
+        self, BufRead, BufReader,
+        ErrorKind::{InvalidData, Other, UnexpectedEof},
         Read, Write,
     },
     mem,
@@ -14,61 +14,21 @@ use std::{
 
 use anyhow::{bail, ensure, Context, Result};
 use log::{debug, error, info};
-use rustls::{ClientConnection, StreamOwned};
 
-use super::{decoder::Decoder, Agent, Scheme, StatusError, Url};
-
-#[derive(Default, Copy, Clone)]
-pub enum Method {
-    #[default]
-    Get,
-    Post,
-}
-
-impl Display for Method {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        match self {
-            Self::Get => f.write_str("GET"),
-            Self::Post => f.write_str("POST"),
-        }
-    }
-}
-
-pub struct TextRequest(Request<StringWriter>);
-
-impl TextRequest {
-    pub fn new(agent: Agent) -> Self {
-        Self(Request::new(StringWriter::default(), agent))
-    }
-
-    pub fn take(&mut self) -> String {
-        mem::take(&mut self.0.handler.writer.0)
-    }
-
-    pub fn text(&mut self, method: Method, url: &Url) -> Result<&str> {
-        self.text_impl(method, url, None)
-    }
-
-    pub fn text_fmt(&mut self, method: Method, url: &Url, args: Arguments) -> Result<&str> {
-        self.text_impl(method, url, Some(args))
-    }
-
-    fn text_impl(&mut self, method: Method, url: &Url, data: Option<Arguments>) -> Result<&str> {
-        self.0.handler.writer.0.clear();
-        self.0.call_impl(method, url, data)?;
-
-        Ok(&self.0.handler.writer.0)
-    }
-}
+use super::{
+    decoder::Decoder,
+    tls_stream::{TlsStream, TLS_MAX_FRAG_SIZE},
+    Agent, Method, Scheme, StatusError, Url,
+};
 
 pub struct Request<W: Write> {
     handler: Handler<W>,
 
-    stream: Option<Transport>,
+    stream: Option<BufReader<Transport>>,
     scheme: Scheme,
     hash: u64,
 
-    headers_buf: Box<[u8]>,
+    decoded_buf: Box<[u8]>,
     retries: u64,
     agent: Agent,
 }
@@ -77,7 +37,7 @@ impl<W: Write> Request<W> {
     pub fn new(writer: W, agent: Agent) -> Self {
         Self {
             handler: Handler::new(writer),
-            headers_buf: vec![0u8; 2048].into_boxed_slice(),
+            decoded_buf: vec![0u8; TLS_MAX_FRAG_SIZE].into_boxed_slice(),
             retries: agent.args.retries,
             agent,
             stream: Option::default(),
@@ -144,7 +104,7 @@ impl<W: Write> Request<W> {
     fn converse(&mut self, method: Method, url: &Url, args: Option<Arguments>) -> Result<()> {
         let mut stream = self.stream.as_mut().expect("Missing stream");
         write!(
-            stream,
+            stream.get_mut(),
             "{method} /{path} HTTP/1.1\r\n\
              Host: {host}\r\n\
              User-Agent: {user_agent}\r\n\
@@ -158,26 +118,17 @@ impl<W: Write> Request<W> {
             user_agent = &self.agent.args.user_agent,
             args = args.unwrap_or(format_args!("\r\n")),
         )?;
-        stream.flush()?;
+        stream.get_mut().flush()?;
 
-        let mut written = 0;
-        let (headers, remaining) = loop {
-            let consumed = stream.read(&mut self.headers_buf[written..])?;
-            if consumed == 0 {
+        let (headers, headers_len) = loop {
+            let buf = stream.fill_buf()?;
+            if buf.is_empty() {
                 return Err(io::Error::from(UnexpectedEof).into());
             }
-            written += consumed;
 
-            if let Some((headers, remaining)) = self
-                .headers_buf
-                .windows(4)
-                .position(|w| w == b"\r\n\r\n")
-                .and_then(|p| {
-                    self.headers_buf[..written].split_at_mut_checked(p + 4 /* pass \r\n\r\n */)
-                })
-            {
-                headers.make_ascii_lowercase();
-                break (str::from_utf8(headers)?, remaining);
+            if let Some(mut position) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
+                position += 4; //pass \r\n\r\n
+                break (str::from_utf8(&buf[..position])?, position);
             }
         };
         debug!("Response:\n{headers}");
@@ -192,15 +143,31 @@ impl<W: Write> Request<W> {
             return Err(StatusError(code, url.clone()).into());
         }
 
-        match io::copy(
-            &mut Decoder::new(remaining.chain(&mut stream), headers)?,
-            &mut self.handler,
-        ) {
-            Ok(_) => Ok(()),
-            //Chunk decoder returns InvalidInput on some segment servers, can be ignored
-            Err(e) if e.kind() == InvalidInput => Ok(()),
-            Err(e) => Err(e.into()),
+        let mut decoder = Decoder::new(headers);
+        stream.consume(headers_len);
+        decoder.set_reader(&mut stream)?;
+
+        loop {
+            let consumed = decoder.read(&mut self.decoded_buf)?;
+            if consumed == 0 {
+                break Ok(());
+            }
+
+            self.handler.write_all(&self.decoded_buf[..consumed])?;
         }
+    }
+
+    fn connect(&mut self, url: &Url, host: &str, hash: u64) -> Result<()> {
+        debug!("Connecting to {host}...");
+
+        self.stream = Some(BufReader::with_capacity(
+            TLS_MAX_FRAG_SIZE,
+            Transport::new(url, host, &self.agent)?,
+        ));
+        self.scheme = url.scheme;
+        self.hash = hash;
+
+        Ok(())
     }
 
     fn hash_host(host: &str) -> u64 {
@@ -209,43 +176,65 @@ impl<W: Write> Request<W> {
 
         hasher.finish()
     }
+}
 
-    fn connect(&mut self, url: &Url, host: &str, hash: u64) -> Result<()> {
-        debug!("Connecting to {host}...");
-        self.stream = Some(Transport::new(url, host, &self.agent)?);
-        self.scheme = url.scheme;
-        self.hash = hash;
+pub struct TextRequest(Request<StringWriter>);
 
-        Ok(())
+impl TextRequest {
+    pub fn new(agent: Agent) -> Self {
+        Self(Request::new(StringWriter::default(), agent))
+    }
+
+    pub fn take(&mut self) -> String {
+        mem::take(&mut self.0.handler.writer.0)
+    }
+
+    pub fn text(&mut self, method: Method, url: &Url) -> Result<&str> {
+        self.text_impl(method, url, None)
+    }
+
+    pub fn text_fmt(&mut self, method: Method, url: &Url, args: Arguments) -> Result<&str> {
+        self.text_impl(method, url, Some(args))
+    }
+
+    fn text_impl(&mut self, method: Method, url: &Url, data: Option<Arguments>) -> Result<&str> {
+        self.0.handler.writer.0.clear();
+        self.0.call_impl(method, url, data)?;
+
+        Ok(&self.0.handler.writer.0)
     }
 }
 
 enum Transport {
-    Http(TcpStream),
-    Https(Box<StreamOwned<ClientConnection, TcpStream>>),
+    Tls(Box<TlsStream>),
+    Unencrypted(TcpStream),
 }
 
 impl Read for Transport {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self {
-            Self::Http(sock) => sock.read(buf),
-            Self::Https(stream) => stream.read(buf),
+            Self::Tls(stream) => stream.read(buf),
+            Self::Unencrypted(sock) => sock.read(buf),
         }
     }
 }
 
 impl Write for Transport {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        match self {
-            Self::Http(sock) => sock.write(buf),
-            Self::Https(stream) => stream.write(buf),
-        }
+    fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+        unreachable!();
     }
 
     fn flush(&mut self) -> io::Result<()> {
         match self {
-            Self::Http(sock) => sock.flush(),
-            Self::Https(stream) => stream.flush(),
+            Self::Tls(stream) => stream.flush(),
+            Self::Unencrypted(sock) => sock.flush(),
+        }
+    }
+
+    fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
+        match self {
+            Self::Tls(stream) => stream.write_all(buf),
+            Self::Unencrypted(sock) => sock.write_all(buf),
         }
     }
 }
@@ -271,11 +260,8 @@ impl Transport {
         sock.set_write_timeout(Some(agent.args.timeout))?;
 
         match url.scheme {
-            Scheme::Http => Ok(Self::Http(sock)),
-            Scheme::Https => Ok(Self::Https(Box::new(StreamOwned::new(
-                ClientConnection::new(agent.tls_config.clone(), host.to_owned().try_into()?)?,
-                sock,
-            )))),
+            Scheme::Http => Ok(Self::Unencrypted(sock)),
+            Scheme::Https => Ok(Self::Tls(Box::new(TlsStream::new(sock, host, agent)?))),
             Scheme::Unknown => bail!("Unsupported protocol"),
         }
     }
@@ -326,7 +312,15 @@ struct Handler<W: Write> {
 }
 
 impl<W: Write> Write for Handler<W> {
-    fn write(&mut self, mut buf: &[u8]) -> io::Result<usize> {
+    fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+        unreachable!();
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+
+    fn write_all(&mut self, mut buf: &[u8]) -> io::Result<()> {
         let buf_len = buf.len();
         if self.resume_target > 0 {
             if (self.written + buf_len) >= self.resume_target {
@@ -334,17 +328,13 @@ impl<W: Write> Write for Handler<W> {
                 self.resume_target = 0;
             } else {
                 self.written += buf_len;
-                return Ok(buf_len); //throw buf into the void
+                return Ok(()); //throw buf into the void
             }
         }
 
         self.writer.write_all(buf)?;
         self.written += buf.len(); //len of the potential trimmed buf reference
 
-        Ok(buf_len)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
         Ok(())
     }
 }
