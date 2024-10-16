@@ -13,7 +13,7 @@ use std::{
 };
 
 use anyhow::{bail, ensure, Context, Result};
-use log::{debug, error, info};
+use log::{debug, error};
 
 use super::{
     decoder::Decoder,
@@ -22,7 +22,7 @@ use super::{
 };
 
 pub struct Request<W: Write> {
-    handler: Handler<W>,
+    writer: W,
 
     stream: Option<BufReader<Transport>>,
     scheme: Scheme,
@@ -36,7 +36,7 @@ pub struct Request<W: Write> {
 impl<W: Write> Request<W> {
     pub fn new(writer: W, agent: Agent) -> Self {
         Self {
-            handler: Handler::new(writer),
+            writer,
             decoded_buf: vec![0u8; TLS_MAX_FRAG_SIZE].into_boxed_slice(),
             retries: agent.args.retries,
             agent,
@@ -86,18 +86,12 @@ impl<W: Write> Request<W> {
                     retries += 1;
 
                     self.connect(url, host, hash)?;
-                    if self.handler.written > 0 {
-                        info!("Resuming from offset: {} bytes", self.handler.written);
-                        self.handler.resume_target = self.handler.written;
-                    }
                 }
                 Err(e) => return Err(e),
             }
         }
 
-        self.handler.written = 0;
-        self.handler.writer.flush()?;
-
+        self.writer.flush()?;
         Ok(())
     }
 
@@ -153,7 +147,7 @@ impl<W: Write> Request<W> {
                 break Ok(());
             }
 
-            self.handler.write_all(&self.decoded_buf[..consumed])?;
+            self.writer.write_all(&self.decoded_buf[..consumed])?;
         }
     }
 
@@ -186,7 +180,7 @@ impl TextRequest {
     }
 
     pub fn take(&mut self) -> String {
-        mem::take(&mut self.0.handler.writer.0)
+        mem::take(&mut self.0.writer.0)
     }
 
     pub fn text(&mut self, method: Method, url: &Url) -> Result<&str> {
@@ -198,10 +192,10 @@ impl TextRequest {
     }
 
     fn text_impl(&mut self, method: Method, url: &Url, data: Option<Arguments>) -> Result<&str> {
-        self.0.handler.writer.0.clear();
+        self.0.writer.0.clear();
         self.0.call_impl(method, url, data)?;
 
-        Ok(&self.0.handler.writer.0)
+        Ok(&self.0.writer.0)
     }
 }
 
@@ -301,50 +295,6 @@ impl Write for StringWriter {
                 Ok(())
             }
             Err(_) => Err(io::Error::from(InvalidData)),
-        }
-    }
-}
-
-struct Handler<W: Write> {
-    writer: W,
-    written: usize,
-    resume_target: usize,
-}
-
-impl<W: Write> Write for Handler<W> {
-    fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
-        unreachable!();
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-
-    fn write_all(&mut self, mut buf: &[u8]) -> io::Result<()> {
-        let buf_len = buf.len();
-        if self.resume_target > 0 {
-            if (self.written + buf_len) >= self.resume_target {
-                buf = &buf[self.resume_target - self.written..];
-                self.resume_target = 0;
-            } else {
-                self.written += buf_len;
-                return Ok(()); //throw buf into the void
-            }
-        }
-
-        self.writer.write_all(buf)?;
-        self.written += buf.len(); //len of the potential trimmed buf reference
-
-        Ok(())
-    }
-}
-
-impl<W: Write> Handler<W> {
-    fn new(writer: W) -> Self {
-        Self {
-            writer,
-            written: usize::default(),
-            resume_target: usize::default(),
         }
     }
 }
