@@ -91,15 +91,15 @@ impl MediaPlaylist {
                     self.sequence = sequence;
                 }
                 "#EXT-X-MAP" if self.header.is_none() => {
-                    let mut url: Url = split
+                    let mut url = split
                         .1
                         .split_once('=')
                         .context("Failed to parse segment header")?
                         .1
-                        .into();
+                        .to_owned();
 
                     url.retain(|c| c != '"');
-                    self.header = Some(url);
+                    self.header = Some(url.into());
                 }
                 "#EXTINF" => {
                     total_segments += 1;
