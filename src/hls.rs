@@ -75,11 +75,14 @@ impl Parse for Args {
             Ok(Some(a.to_owned().into()))
         })?;
 
-        self.channel = parser
+        let channel = parser
             .parse_free_required()
-            .context("Missing channel argument")?
-            .to_lowercase()
-            .replace("twitch.tv/", "");
+            .context("Missing channel argument")?;
+
+        self.channel = channel
+            .rsplit_once('/')
+            .map_or(channel.as_str(), |s| s.1)
+            .to_lowercase();
 
         parser.parse_free(&mut self.quality, "quality")?;
         if self.print_streams {
