@@ -2,7 +2,7 @@ Usage: twitch-hls-client [OPTIONS] [-p <PATH> -r <PATH>] <CHANNEL> <QUALITY>
 
 Arguments:
   <CHANNEL>
-          Twitch channel to watch (can also be twitch.tv/channel)
+          Twitch channel to watch
   <QUALITY>
           Stream to play (best, 1080p, 720p, 360p, 160p, audio_only, etc.)
 
