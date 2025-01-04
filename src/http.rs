@@ -1,6 +1,5 @@
 mod decoder;
 mod request;
-mod tls_stream;
 mod url;
 
 pub use request::{Request, TextRequest};

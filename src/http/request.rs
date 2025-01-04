@@ -2,8 +2,8 @@ use std::{
     fmt::Arguments,
     hash::{DefaultHasher, Hasher},
     io::{
-        self, BufRead, BufReader,
-        ErrorKind::{InvalidData, Other, UnexpectedEof},
+        self,
+        ErrorKind::{InvalidData, InvalidInput, Other, UnexpectedEof},
         Read, Write,
     },
     mem,
@@ -14,30 +14,29 @@ use std::{
 
 use anyhow::{bail, ensure, Context, Result};
 use log::{debug, error};
+use rustls::{ClientConnection, StreamOwned};
 
-use super::{
-    decoder::Decoder,
-    tls_stream::{TlsStream, TLS_MAX_FRAG_SIZE},
-    Agent, Method, Scheme, StatusError, Url,
-};
+use super::{decoder::Decoder, Agent, Method, Scheme, StatusError, Url};
 
 pub struct Request<W: Write> {
     writer: W,
 
-    stream: Option<BufReader<Transport>>,
+    stream: Option<Transport>,
     scheme: Scheme,
     hash: u64,
 
-    decoded_buf: Box<[u8]>,
+    headers_buf: Box<[u8]>,
     retries: u64,
     agent: Agent,
 }
 
 impl<W: Write> Request<W> {
+    const HEADERS_BUF_SIZE: usize = 2048;
+
     pub fn new(writer: W, agent: Agent) -> Self {
         Self {
             writer,
-            decoded_buf: vec![0u8; TLS_MAX_FRAG_SIZE].into_boxed_slice(),
+            headers_buf: vec![0u8; Self::HEADERS_BUF_SIZE].into_boxed_slice(),
             retries: agent.args.retries,
             agent,
             stream: Option::default(),
@@ -98,7 +97,7 @@ impl<W: Write> Request<W> {
     fn converse(&mut self, method: Method, url: &Url, args: Option<Arguments>) -> Result<()> {
         let mut stream = self.stream.as_mut().expect("Missing stream");
         write!(
-            stream.get_mut(),
+            stream,
             "{method} /{path} HTTP/1.1\r\n\
              Host: {host}\r\n\
              User-Agent: {user_agent}\r\n\
@@ -110,19 +109,28 @@ impl<W: Write> Request<W> {
             path = url.path()?,
             host = url.host()?,
             user_agent = &self.agent.args.user_agent,
-            args = args.unwrap_or(format_args!("\r\n")),
+            args = args.unwrap_or(format_args!("\r\n"))
         )?;
-        stream.get_mut().flush()?;
+        stream.flush()?;
 
-        let (headers, headers_len) = loop {
-            let buf = stream.fill_buf()?;
-            if buf.is_empty() {
+        let mut written = 0;
+        let (headers, remaining) = loop {
+            let consumed = stream.read(&mut self.headers_buf[written..])?;
+            if consumed == 0 {
                 return Err(io::Error::from(UnexpectedEof).into());
             }
+            written += consumed;
 
-            if let Some(mut position) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
-                position += 4; //pass \r\n\r\n
-                break (str::from_utf8(&buf[..position])?, position);
+            if let Some((headers, remaining)) = self
+                .headers_buf
+                .windows(4)
+                .position(|w| w == b"\r\n\r\n")
+                .and_then(|p| {
+                    self.headers_buf[..written].split_at_mut_checked(p + 4 /* pass \r\n\r\n */)
+                })
+            {
+                headers.make_ascii_lowercase();
+                break (str::from_utf8(headers)?, remaining);
             }
         };
         debug!("Response:\n{headers}");
@@ -137,27 +145,21 @@ impl<W: Write> Request<W> {
             return Err(StatusError(code, url.clone()).into());
         }
 
-        let mut decoder = Decoder::new(headers);
-        stream.consume(headers_len);
-        decoder.set_reader(&mut stream)?;
-
-        loop {
-            let consumed = decoder.read(&mut self.decoded_buf)?;
-            if consumed == 0 {
-                break Ok(());
-            }
-
-            self.writer.write_all(&self.decoded_buf[..consumed])?;
+        match io::copy(
+            &mut Decoder::new(remaining.chain(&mut stream), headers)?,
+            &mut self.writer,
+        ) {
+            Ok(_) => Ok(()),
+            //Chunk decoder returns InvalidInput on some segment servers, can be ignored
+            Err(e) if e.kind() == InvalidInput => Ok(()),
+            Err(e) => Err(e.into()),
         }
     }
 
     fn connect(&mut self, url: &Url, host: &str, hash: u64) -> Result<()> {
         debug!("Connecting to {host}...");
 
-        self.stream = Some(BufReader::with_capacity(
-            TLS_MAX_FRAG_SIZE,
-            Transport::new(url, host, &self.agent)?,
-        ));
+        self.stream = Some(Transport::new(url, host, &self.agent)?);
         self.scheme = url.scheme;
         self.hash = hash;
 
@@ -200,7 +202,7 @@ impl TextRequest {
 }
 
 enum Transport {
-    Tls(Box<TlsStream>),
+    Tls(Box<StreamOwned<ClientConnection, TcpStream>>),
     Unencrypted(TcpStream),
 }
 
@@ -255,7 +257,10 @@ impl Transport {
 
         match url.scheme {
             Scheme::Http => Ok(Self::Unencrypted(sock)),
-            Scheme::Https => Ok(Self::Tls(Box::new(TlsStream::new(sock, host, agent)?))),
+            Scheme::Https => Ok(Self::Tls(Box::new(StreamOwned::new(
+                ClientConnection::new(agent.tls_config.clone(), host.to_owned().try_into()?)?,
+                sock,
+            )))),
             Scheme::Unknown => bail!("Unsupported protocol"),
         }
     }
