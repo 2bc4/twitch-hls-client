@@ -1,11 +1,11 @@
 use std::{borrow::Cow, env, error::Error, fmt::Display, fs, path::Path, process, str::FromStr};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use pico_args::Arguments;
 
 use crate::{
-    constants, hls::Args as HlsArgs, http::Args as HttpArgs, output::Args as OutputArgs,
-    Args as MainArgs,
+    Args as MainArgs, constants, hls::Args as HlsArgs, http::Args as HttpArgs,
+    output::Args as OutputArgs,
 };
 
 pub trait Parse {

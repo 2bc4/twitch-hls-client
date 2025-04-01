@@ -3,7 +3,7 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-use anyhow::{ensure, Context, Result};
+use anyhow::{Context, Result, ensure};
 use log::{debug, info};
 
 use crate::{

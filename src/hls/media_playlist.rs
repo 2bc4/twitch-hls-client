@@ -1,15 +1,14 @@
 use std::{
-    collections::{vec_deque::IterMut, VecDeque},
+    collections::{VecDeque, vec_deque::IterMut},
     env,
 };
 
-use anyhow::{ensure, Context, Result};
+use anyhow::{Context, Result, ensure};
 use log::debug;
 
 use super::{
-    map_if_offline,
+    OfflineError, map_if_offline,
     segment::{Duration, Segment},
-    OfflineError,
 };
 
 use crate::{
@@ -116,7 +115,7 @@ impl MediaPlaylist {
                         self.segments.push_back(Segment::Prefetch(split.1.into()));
                     }
                 }
-                _ => continue,
+                _ => (),
             }
         }
 

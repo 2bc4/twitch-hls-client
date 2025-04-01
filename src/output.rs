@@ -5,7 +5,7 @@ pub use player::Player;
 
 use std::io::{self, ErrorKind::Other, Write};
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use log::debug;
 
 use player::Args as PlayerArgs;

@@ -9,7 +9,7 @@ use anyhow::{Context, Result};
 use getrandom::getrandom;
 use log::{debug, error, info};
 
-use super::{cache::Cache, map_if_offline, Args, OfflineError};
+use super::{Args, OfflineError, cache::Cache, map_if_offline};
 
 use crate::{
     constants,
@@ -166,7 +166,7 @@ fn fetch_twitch_playlist(
                 .context("Failed to find signature in GQL response")?
                 + TOKEN.len();
 
-            &gql_response
+            gql_response
                 .get(start..start + SIGNATURE_LEN)
                 .context("Invalid signature in GQL response")?
         },

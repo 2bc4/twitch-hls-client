@@ -3,7 +3,7 @@ use std::{cmp::Ordering, mem, str::FromStr, thread, time::Duration as StdDuratio
 use anyhow::{Context, Result};
 use log::{debug, info};
 
-use super::{media_playlist::QueueRange, MediaPlaylist};
+use super::{MediaPlaylist, media_playlist::QueueRange};
 use crate::{http::Url, worker::Worker};
 
 #[derive(Default, Copy, Clone, Debug)]
@@ -121,11 +121,11 @@ impl Handler {
                 debug!("Sending newest segment to worker:\n{newest:?}");
 
                 match newest {
-                    Segment::Normal(duration, ref mut url) => {
+                    Segment::Normal(duration, url) => {
                         self.worker.url(mem::take(url))?;
                         duration.sleep(time.elapsed());
                     }
-                    Segment::Prefetch(ref mut url) => self.worker.url(mem::take(url))?,
+                    Segment::Prefetch(url) => self.worker.url(mem::take(url))?,
                 }
             }
             QueueRange::Empty => {

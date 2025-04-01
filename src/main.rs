@@ -15,7 +15,7 @@ use anyhow::Result;
 use log::{debug, info};
 
 use args::{Parse, Parser};
-use hls::{segment::Handler, MediaPlaylist, OfflineError};
+use hls::{MediaPlaylist, OfflineError, segment::Handler};
 use http::Agent;
 use logger::Logger;
 use output::{Player, Writer};

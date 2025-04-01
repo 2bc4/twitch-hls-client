@@ -1,6 +1,6 @@
 use std::io::{self, Read};
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use chunked_transfer::Decoder as ChunkDecoder;
 use flate2::read::GzDecoder;
 use log::debug;
@@ -59,7 +59,7 @@ impl<R: Read> Decoder<R> {
                 Some("content-length:") => {
                     content_length = split.next().and_then(|h| h.parse().ok());
                 }
-                _ => continue,
+                _ => (),
             }
         }
 

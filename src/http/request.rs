@@ -12,11 +12,11 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{bail, ensure, Context, Result};
+use anyhow::{Context, Result, bail, ensure};
 use log::{debug, error};
 use rustls::{ClientConnection, StreamOwned};
 
-use super::{decoder::Decoder, Agent, Method, Scheme, StatusError, Url};
+use super::{Agent, Method, Scheme, StatusError, Url, decoder::Decoder};
 
 pub struct Request<W: Write> {
     writer: W,
