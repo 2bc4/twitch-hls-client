@@ -18,14 +18,14 @@ Example:
 ```
 $ twitch-hls-client -p mpv twitchchannel best
 Fetching playlist for channel twitchchannel
-Low latency streaming
 Opening player: mpv -
+[file] Reading from stdin...
  (+) Video --vid=1 (h264)
  (+) Audio --aid=1 (aac)
 Using hardware decoding (vaapi).
-VO: [gpu] 1920x1080 vaapi[nv12]
+VO: [dmabuf-wayland] 1920x1080 vaapi[nv12]
 AO: [pipewire] 48000Hz stereo 2ch floatp
-AV: 03:57:23 / 03:57:23 (100%) A-V:  0.000 Cache: 0.7s/482KB
+AV: 03:57:23 / 03:57:23 (100%) A-V:  0.000
 ```
 
 #### Recording
@@ -33,10 +33,9 @@ Provide a file path to output the stream to with `-r`, a channel to watch, and a
 
 Example:
 ```
-$ twitch-hls-client -r recording.mp4 twitchchannel best
+$ twitch-hls-client -r recording.ts twitchchannel best
 Fetching playlist for channel twitchchannel
-Low latency streaming
-Recording to: recording.mp4
+Recording to: recording.ts
 ```
 
 You can also use `-p` and `-r` at the same time.<br/>
