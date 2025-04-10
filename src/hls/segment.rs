@@ -3,8 +3,11 @@ use std::{cmp::Ordering, mem, str::FromStr, thread, time::Duration as StdDuratio
 use anyhow::{Context, Result};
 use log::{debug, info};
 
-use super::{MediaPlaylist, media_playlist::QueueRange};
-use crate::{http::Url, worker::Worker};
+use super::{MediaPlaylist, OfflineError, media_playlist::QueueRange};
+use crate::{
+    http::Url,
+    worker::{DeadError, Worker},
+};
 
 #[derive(Default, Copy, Clone, Debug)]
 pub struct Duration {
@@ -64,7 +67,7 @@ impl Duration {
 
     fn sleep_thread(duration: StdDuration, elapsed: StdDuration) {
         if let Some(sleep_time) = duration.checked_sub(elapsed) {
-            debug!("Sleeping thread for {:?}", sleep_time);
+            debug!("Sleeping thread for {sleep_time:?}");
             thread::sleep(sleep_time);
         }
     }
@@ -74,16 +77,20 @@ impl Duration {
 pub enum Segment {
     Normal(Duration, Url),
     Prefetch(Url),
+    End,
 }
 
 pub struct Handler {
-    worker: Worker,
+    worker: Option<Worker>,
     init: bool,
 }
 
 impl Handler {
     pub const fn new(worker: Worker) -> Self {
-        Self { worker, init: true }
+        Self {
+            worker: Some(worker),
+            init: true,
+        }
     }
 
     pub fn process(&mut self, playlist: &mut MediaPlaylist, time: Instant) -> Result<()> {
@@ -101,11 +108,10 @@ impl Handler {
         match playlist.segments() {
             QueueRange::Partial(ref mut segments) => {
                 for segment in segments {
-                    debug!("Sending segment to worker:\n{segment:?}");
+                    debug!("Processing segment:\n{segment:?}");
                     match segment {
-                        Segment::Normal(_, url) | Segment::Prefetch(url) => {
-                            self.worker.url(mem::take(url))?;
-                        }
+                        Segment::Normal(_, url) | Segment::Prefetch(url) => self.send_url(url)?,
+                        Segment::End => self.join_worker()?,
                     }
                 }
 
@@ -118,14 +124,15 @@ impl Handler {
                 }
 
                 let newest = newest.context("Failed to find newest segment")?;
-                debug!("Sending newest segment to worker:\n{newest:?}");
+                debug!("Processing newest segment:\n{newest:?}");
 
                 match newest {
                     Segment::Normal(duration, url) => {
-                        self.worker.url(mem::take(url))?;
+                        self.send_url(url)?;
                         duration.sleep(time.elapsed());
                     }
-                    Segment::Prefetch(url) => self.worker.url(mem::take(url))?,
+                    Segment::Prefetch(url) => self.send_url(url)?,
+                    Segment::End => self.join_worker()?,
                 }
             }
             QueueRange::Empty => {
@@ -138,5 +145,37 @@ impl Handler {
         }
 
         Ok(())
+    }
+
+    fn send_url(&mut self, url: &mut Url) -> Result<()> {
+        match self
+            .worker
+            .as_mut()
+            .expect("Missing worker while sending URL")
+            .url(mem::take(url))
+        {
+            Ok(()) => Ok(()),
+            Err(send_error) if send_error.downcast_ref::<DeadError>().is_some() => {
+                match self
+                    .worker
+                    .take()
+                    .expect("Missing worker while joining after worker died")
+                    .join()
+                {
+                    Ok(()) => Err(send_error),
+                    Err(join_error) => Err(join_error),
+                }
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    fn join_worker(&mut self) -> Result<()> {
+        self.worker
+            .take()
+            .expect("Missing worker while joining after stream end")
+            .join()?;
+
+        Err(OfflineError.into())
     }
 }

@@ -1,9 +1,10 @@
 use std::{
+    fmt::{self, Display, Formatter},
     sync::mpsc::{self, Receiver, Sender},
     thread::{self, JoinHandle},
 };
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result};
 use log::{debug, info};
 
 use crate::{
@@ -11,9 +12,19 @@ use crate::{
     output::Writer,
 };
 
+#[derive(Debug)]
+pub struct DeadError;
+
+impl std::error::Error for DeadError {}
+
+impl Display for DeadError {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "Worker died unexpectantly")
+    }
+}
+
 pub struct Worker {
-    //Option to call take() because handle.join() consumes self
-    handle: Option<JoinHandle<Result<()>>>,
+    handle: JoinHandle<Result<()>>,
     url_tx: Sender<Url>,
 }
 
@@ -41,7 +52,7 @@ impl Worker {
                         Ok(()) => (),
                         Err(e) if StatusError::is_not_found(&e) => {
                             info!("Segment not found, skipping ahead...");
-                            for _ in url_rx.try_iter() {} //consume all
+                            url_rx.try_iter().for_each(drop);
                         }
                         Err(e) => return Err(e),
                     }
@@ -49,31 +60,20 @@ impl Worker {
             })
             .context("Failed to spawn worker")?;
 
-        Ok(Self {
-            handle: Some(handle),
-            url_tx,
-        })
+        Ok(Self { handle, url_tx })
     }
 
-    pub fn url(&mut self, url: Url) -> Result<()> {
-        if self
-            .handle
-            .as_ref()
-            .expect("Missing worker handle")
-            .is_finished()
-        {
-            let result = self
-                .handle
-                .take()
-                .expect("Missing worker handle while joining worker")
-                .join()
-                .expect("Worker panicked");
-
-            ensure!(result.is_err(), "Worker died");
-            return result;
+    pub fn url(&self, url: Url) -> Result<()> {
+        if self.handle.is_finished() {
+            return Err(DeadError.into());
         }
 
         self.url_tx.send(url)?;
         Ok(())
+    }
+
+    pub fn join(self) -> Result<()> {
+        drop(self.url_tx);
+        self.handle.join().expect("Worker panicked")
     }
 }
