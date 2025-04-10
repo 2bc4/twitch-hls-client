@@ -1,10 +1,12 @@
 mod cache;
 mod master_playlist;
 mod media_playlist;
-pub mod segment;
+mod segment;
+mod worker;
 
 pub use master_playlist::fetch_playlist;
 pub use media_playlist::MediaPlaylist;
+pub use segment::Handler;
 
 use anyhow::{Context, Result};
 use std::{

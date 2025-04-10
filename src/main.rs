@@ -4,7 +4,6 @@ mod hls;
 mod http;
 mod logger;
 mod output;
-mod worker;
 
 use std::{
     io::{self, ErrorKind::Other},
@@ -15,11 +14,10 @@ use anyhow::Result;
 use log::{debug, info};
 
 use args::{Parse, Parser};
-use hls::{MediaPlaylist, OfflineError, segment::Handler};
+use hls::{Handler, MediaPlaylist, OfflineError};
 use http::Agent;
 use logger::Logger;
 use output::{Player, Writer};
-use worker::Worker;
 
 #[derive(Default, Debug)]
 pub struct Args {
@@ -36,7 +34,7 @@ impl Parse for Args {
     }
 }
 
-fn main_loop(mut playlist: MediaPlaylist, mut handler: Handler) -> Result<()> {
+fn main_loop(mut handler: Handler, mut playlist: MediaPlaylist) -> Result<()> {
     handler.process(&mut playlist, Instant::now())?;
     loop {
         let time = Instant::now();
@@ -47,7 +45,7 @@ fn main_loop(mut playlist: MediaPlaylist, mut handler: Handler) -> Result<()> {
 }
 
 fn main() -> Result<()> {
-    let (playlist, handler) = {
+    let (handler, playlist) = {
         let (main_args, http_args, hls_args, mut output_args) = args::parse()?;
 
         Logger::init(main_args.debug)?;
@@ -69,12 +67,12 @@ fn main() -> Result<()> {
         }
 
         let mut playlist = MediaPlaylist::new(conn)?;
-        let worker = Worker::spawn(Writer::new(&output_args)?, playlist.header.take(), agent)?;
+        let writer = Writer::new(&output_args)?;
 
-        (playlist, Handler::new(worker))
+        (Handler::new(writer, &mut playlist, agent)?, playlist)
     };
 
-    match main_loop(playlist, handler) {
+    match main_loop(handler, playlist) {
         Ok(()) => Ok(()),
         Err(e) if e.downcast_ref::<OfflineError>().is_some() => {
             info!("Stream ended, exiting...");

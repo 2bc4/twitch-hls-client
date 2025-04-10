@@ -3,10 +3,15 @@ use std::{cmp::Ordering, mem, str::FromStr, thread, time::Duration as StdDuratio
 use anyhow::{Context, Result};
 use log::{debug, info};
 
-use super::{MediaPlaylist, OfflineError, media_playlist::QueueRange};
-use crate::{
-    http::Url,
+use super::{
+    MediaPlaylist, OfflineError,
+    media_playlist::QueueRange,
     worker::{DeadError, Worker},
+};
+
+use crate::{
+    http::{Agent, Url},
+    output::Writer,
 };
 
 #[derive(Default, Copy, Clone, Debug)]
@@ -86,11 +91,11 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub const fn new(worker: Worker) -> Self {
-        Self {
-            worker: Some(worker),
+    pub fn new(writer: Writer, playlist: &mut MediaPlaylist, agent: Agent) -> Result<Self> {
+        Ok(Self {
+            worker: Some(Worker::spawn(writer, playlist.header.take(), agent)?),
             init: true,
-        }
+        })
     }
 
     pub fn process(&mut self, playlist: &mut MediaPlaylist, time: Instant) -> Result<()> {
