@@ -82,6 +82,14 @@ Alternatively, you can build it yourself by installing the [Rust toolchain](http
 ```
 cargo install --git https://github.com/2bc4/twitch-hls-client.git
 ```
+Or from [crates.io](https://crates.io/crates/twitch-hls-client):
+```
+cargo install twitch-hls-client
+```
+
+Building requires a C/C++ compiler for ring (TLS cryptographic primitives). You should prefer clang over gcc due to a gcc bug resulting in worse TLS performance.
+
+You can trim down and optimize the binary more by building with `build-std` and `panic_immediate_abort`. This can be seen in the [release build action](https://github.com/2bc4/twitch-hls-client/blob/master/.github/workflows/release.yaml#L56).
 
 #### NixOS
 
