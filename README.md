@@ -164,11 +164,7 @@ You can trim down and optimize the binary more by building with `build-std` and 
 - `debug-logging` - Enable debug logging support
 
 ### Reducing player latency with mpv
-If your internet connection is fast enough to handle it, adding these values to your config will reduce latency by ~1-2 seconds:
-
-```
-player-args=- --profile=low-latency --no-cache
-```
+Following [this section](https://mpv.io/manual/master/#low-latency-playback) in the mpv manual is recommended.
 
 ### License
 Distributed under the terms of the [GNU General Public License v3](https://www.gnu.org/licenses/gpl-3.0.txt), see [LICENSE](LICENSE) for more information.
