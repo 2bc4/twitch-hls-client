@@ -51,7 +51,7 @@ fn main() -> Result<()> {
         Logger::init(main_args.debug)?;
         debug!("\n{main_args:#?}\n{http_args:#?}\n{hls_args:#?}\n{output_args:#?}");
 
-        let agent = Agent::new(http_args)?;
+        let agent = Agent::new(http_args);
         let conn = match hls::fetch_playlist(hls_args, &agent) {
             Ok(Some(conn)) => conn,
             Ok(None) => return Ok(()),

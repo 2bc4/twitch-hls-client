@@ -36,4 +36,4 @@ getrandom = { version = "0.2", features = ["std"] }
 log = { version = "0.4", features = ["std", "max_level_debug"] }
 pico-args = { version = "0.5", features = ["eq-separator"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
-rustls-native-certs = "0.7"
+rustls-native-certs = "0.8"

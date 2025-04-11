@@ -14,7 +14,7 @@ use std::{
 };
 
 use anyhow::Result;
-use log::debug;
+use log::{debug, error};
 use rustls::{ClientConfig, RootCertStore};
 
 use crate::{
@@ -98,23 +98,29 @@ pub struct Agent {
 }
 
 impl Agent {
-    pub fn new(args: Args) -> Result<Self> {
+    pub fn new(args: Args) -> Self {
         let mut roots = RootCertStore::empty();
-        for cert in rustls_native_certs::load_native_certs()? {
+        let res = rustls_native_certs::load_native_certs();
+
+        for error in res.errors {
+            error!("Failed to load certificates: {error}");
+        }
+
+        for cert in res.certs {
             //Ignore parsing errors, OS can have broken certs
             if let Err(e) = roots.add(cert) {
                 debug!("Invalid certificate: {e}");
             }
         }
 
-        Ok(Self {
+        Self {
             args: Arc::new(args),
             tls_config: Arc::new(
                 ClientConfig::builder()
                     .with_root_certificates(Arc::new(roots))
                     .with_no_client_auth(),
             ),
-        })
+        }
     }
 
     pub fn text(&self) -> TextRequest {
