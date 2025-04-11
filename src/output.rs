@@ -51,7 +51,7 @@ impl Write for Writer {
         if let Some(player) = &mut self.player {
             match player.write_all(buf) {
                 Ok(()) => (),
-                Err(e) if e.kind() == Other => self.player = None,
+                Err(e) if self.recorder.is_some() && e.kind() == Other => self.player = None,
                 Err(e) => return Err(e),
             }
         }
