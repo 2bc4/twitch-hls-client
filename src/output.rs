@@ -5,7 +5,7 @@ pub use player::Player;
 
 use std::io::{self, ErrorKind::Other, Write};
 
-use anyhow::{Result, bail};
+use anyhow::{Result, ensure};
 use log::debug;
 
 use player::Args as PlayerArgs;
@@ -28,10 +28,9 @@ impl Parse for Args {
     }
 }
 
-pub enum Writer {
-    Player(Player),
-    Recorder(Recorder),
-    Combined(Player, Recorder),
+pub struct Writer {
+    player: Option<Player>,
+    recorder: Option<Recorder>,
 }
 
 impl Write for Writer {
@@ -40,39 +39,43 @@ impl Write for Writer {
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        debug!("Finished writing segment");
-        match self {
-            Self::Player(_) => Ok(()),
-            Self::Recorder(recorder) | Self::Combined(_, recorder) => recorder.flush(),
+        if let Some(recorder) = &mut self.recorder {
+            recorder.flush()?;
         }
+
+        debug!("Finished writing segment");
+        Ok(())
     }
 
     fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
-        match self {
-            Self::Player(player) => player.write_all(buf),
-            Self::Recorder(recorder) => recorder.write_all(buf),
-            Self::Combined(player, recorder) => {
-                if let Err(e) = player.write_all(buf) {
-                    match e.kind() {
-                        Other => (), //ignore player closed
-                        _ => return Err(e),
-                    }
-                }
-
-                recorder.write_all(buf)?;
-                Ok(())
+        if let Some(player) = &mut self.player {
+            match player.write_all(buf) {
+                Ok(()) => (),
+                Err(e) if e.kind() == Other => self.player = None,
+                Err(e) => return Err(e),
             }
         }
+
+        if let Some(recorder) = &mut self.recorder {
+            recorder.write_all(buf)?;
+        }
+
+        Ok(())
     }
 }
 
 impl Writer {
     pub fn new(args: &Args) -> Result<Self> {
-        match (Player::spawn(&args.player)?, Recorder::new(&args.recorder)?) {
-            (Some(player), Some(recorder)) => Ok(Self::Combined(player, recorder)),
-            (Some(player), None) => Ok(Self::Player(player)),
-            (None, Some(recorder)) => Ok(Self::Recorder(recorder)),
-            (None, None) => bail!("Player or recording must be set"),
-        }
+        let writer = Self {
+            player: Player::spawn(&args.player)?,
+            recorder: Recorder::new(&args.recorder)?,
+        };
+
+        ensure!(
+            writer.player.is_some() || writer.recorder.is_some(),
+            "No output configured"
+        );
+
+        Ok(writer)
     }
 }
