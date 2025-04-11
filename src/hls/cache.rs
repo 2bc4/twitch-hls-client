@@ -16,9 +16,10 @@ pub struct Cache {
 
 impl Cache {
     const MAGIC: &str = concat!(env!("CARGO_PKG_NAME"), "\n");
+    const EXPIRATION_TIME: Duration = Duration::from_secs(48 * 60 * 60);
 
     pub fn new(dir: &Option<String>, channel: &str, quality: &Option<String>) -> Option<Self> {
-        let (dir, quality) = dir.as_ref().zip(quality.as_ref())?;
+        let (dir, quality) = (dir.as_ref()?, quality.as_ref()?);
 
         match Self::read_dir(dir) {
             Ok(iter) => {
@@ -95,13 +96,11 @@ impl Cache {
     }
 
     fn remove_if_stale(path: &Path) -> Option<()> {
-        const FOURTY_EIGHT_HOURS: Duration = Duration::from_secs(48 * 60 * 60);
-
         Self::check_magic(path)?;
 
         let metadata = fs::metadata(path).ok()?;
         let modified = metadata.modified().ok().and_then(|t| t.elapsed().ok())?;
-        if metadata.is_file() && modified >= FOURTY_EIGHT_HOURS {
+        if metadata.is_file() && modified >= Self::EXPIRATION_TIME {
             Self::remove_cache(path);
         }
 

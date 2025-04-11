@@ -14,77 +14,6 @@ use crate::{
     output::Writer,
 };
 
-#[derive(Default, Copy, Clone, Debug)]
-pub struct Duration {
-    is_ad: bool,
-    inner: StdDuration,
-}
-
-impl FromStr for Duration {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self {
-            is_ad: s.contains('|'),
-            inner: StdDuration::try_from_secs_f32(
-                s.split_once(',')
-                    .map(|s| s.0.parse())
-                    .context("Invalid segment duration")??,
-            )
-            .context("Failed to parse segment duration")?,
-        })
-    }
-}
-
-impl PartialEq for Duration {
-    fn eq(&self, other: &Self) -> bool {
-        self.inner == other.inner
-    }
-}
-
-impl PartialOrd for Duration {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.inner.cmp(&other.inner))
-    }
-}
-
-impl Duration {
-    //can't wait too long or the server will close the socket
-    const MAX: Self = Self {
-        is_ad: false,
-        inner: StdDuration::from_secs(3),
-    };
-
-    pub fn sleep(&self, elapsed: StdDuration) {
-        if self.inner >= Self::MAX.inner {
-            self.sleep_half(elapsed);
-            return;
-        }
-
-        Self::sleep_thread(self.inner, elapsed);
-    }
-
-    pub fn sleep_half(&self, elapsed: StdDuration) {
-        if let Some(half) = self.inner.checked_div(2) {
-            Self::sleep_thread(half, elapsed);
-        }
-    }
-
-    fn sleep_thread(duration: StdDuration, elapsed: StdDuration) {
-        if let Some(sleep_time) = duration.checked_sub(elapsed) {
-            debug!("Sleeping thread for {sleep_time:?}");
-            thread::sleep(sleep_time);
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum Segment {
-    Normal(Duration, Url),
-    Prefetch(Url),
-    End,
-}
-
 pub struct Handler {
     worker: Option<Worker>,
     init: bool,
@@ -110,13 +39,13 @@ impl Handler {
             return Ok(());
         }
 
-        match playlist.segments() {
+        match playlist.segment_queue() {
             QueueRange::Partial(ref mut segments) => {
                 for segment in segments {
                     debug!("Processing segment:\n{segment:?}");
                     match segment {
-                        Segment::Normal(_, url) | Segment::Prefetch(url) => self.send_url(url)?,
-                        Segment::End => self.join_worker()?,
+                        Segment::Normal(_, url) | Segment::Prefetch(url) => self.dispatch(url)?,
+                        Segment::End => self.stop()?,
                     }
                 }
 
@@ -133,11 +62,11 @@ impl Handler {
 
                 match newest {
                     Segment::Normal(duration, url) => {
-                        self.send_url(url)?;
+                        self.dispatch(url)?;
                         duration.sleep(time.elapsed());
                     }
-                    Segment::Prefetch(url) => self.send_url(url)?,
-                    Segment::End => self.join_worker()?,
+                    Segment::Prefetch(url) => self.dispatch(url)?,
+                    Segment::End => self.stop()?,
                 }
             }
             QueueRange::Empty => {
@@ -152,35 +81,105 @@ impl Handler {
         Ok(())
     }
 
-    fn send_url(&mut self, url: &mut Url) -> Result<()> {
-        match self
-            .worker
+    fn dispatch(&mut self, url: &mut Url) -> Result<()> {
+        self.worker
             .as_mut()
             .expect("Missing worker while sending URL")
             .url(mem::take(url))
-        {
-            Ok(()) => Ok(()),
-            Err(send_error) if send_error.downcast_ref::<DeadError>().is_some() => {
-                match self
-                    .worker
-                    .take()
-                    .expect("Missing worker while joining after worker died")
-                    .join()
-                {
-                    Ok(()) => Err(send_error),
-                    Err(join_error) => Err(join_error),
+            .map_err(|send_error| {
+                if send_error.downcast_ref::<DeadError>().is_some() {
+                    if let Err(join_error) = self.join_worker() {
+                        return join_error;
+                    }
                 }
-            }
-            Err(e) => Err(e),
-        }
+
+                send_error
+            })?;
+
+        Ok(())
+    }
+
+    fn stop(&mut self) -> Result<()> {
+        self.join_worker()?;
+        Err(OfflineError.into())
     }
 
     fn join_worker(&mut self) -> Result<()> {
         self.worker
             .take()
-            .expect("Missing worker while joining after stream end")
-            .join()?;
+            .expect("Missing worker while joining")
+            .join()
+    }
+}
 
-        Err(OfflineError.into())
+#[derive(Debug)]
+pub enum Segment {
+    Normal(Duration, Url),
+    Prefetch(Url),
+    End,
+}
+
+#[derive(Default, Copy, Clone, Debug)]
+pub struct Duration {
+    is_ad: bool,
+    inner: StdDuration,
+}
+
+impl FromStr for Duration {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self {
+            is_ad: s.contains('|'),
+            inner: StdDuration::try_from_secs_f32(
+                s.split_once(',')
+                    .map(|d| d.0)
+                    .and_then(|d| d.parse().ok())
+                    .context("Invalid segment duration")?,
+            )
+            .context("Failed to parse segment duration")?,
+        })
+    }
+}
+
+impl PartialEq for Duration {
+    fn eq(&self, other: &Self) -> bool {
+        self.inner == other.inner
+    }
+}
+
+impl PartialOrd for Duration {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.inner.cmp(&other.inner))
+    }
+}
+
+impl Duration {
+    //Can't wait too long or the server will close the socket
+    const MAX: Self = Self {
+        is_ad: false,
+        inner: StdDuration::from_secs(3),
+    };
+
+    pub fn sleep(&self, elapsed: StdDuration) {
+        if *self >= Self::MAX {
+            self.sleep_half(elapsed);
+            return;
+        }
+
+        Self::sleep_thread(self.inner, elapsed);
+    }
+
+    pub fn sleep_half(&self, elapsed: StdDuration) {
+        if let Some(half) = self.inner.checked_div(2) {
+            Self::sleep_thread(half, elapsed);
+        }
+    }
+
+    fn sleep_thread(duration: StdDuration, elapsed: StdDuration) {
+        if let Some(sleep_time) = duration.checked_sub(elapsed) {
+            debug!("Sleeping thread for {sleep_time:?}");
+            thread::sleep(sleep_time);
+        }
     }
 }

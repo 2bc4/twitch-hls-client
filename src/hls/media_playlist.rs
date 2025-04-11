@@ -16,6 +16,12 @@ use crate::{
     logger,
 };
 
+pub enum QueueRange<'a> {
+    Partial(IterMut<'a, Segment>),
+    Back(Option<&'a mut Segment>),
+    Empty,
+}
+
 pub struct MediaPlaylist {
     pub header: Option<Url>, //used for av1/hevc streams
 
@@ -43,7 +49,6 @@ impl MediaPlaylist {
     }
 
     pub fn reload(&mut self) -> Result<()> {
-        debug!("----------RELOADING----------");
         let playlist = self.conn.text().map_err(map_if_offline)?;
         if self.debug_log_playlist {
             debug!("Playlist:\n{playlist}");
@@ -89,15 +94,15 @@ impl MediaPlaylist {
                     self.sequence = sequence;
                 }
                 "#EXT-X-MAP" if self.header.is_none() => {
-                    let mut url = split
-                        .1
-                        .split_once('=')
-                        .context("Failed to parse segment header")?
-                        .1
-                        .to_owned();
-
-                    url.retain(|c| c != '"');
-                    self.header = Some(url.into());
+                    self.header = Some(
+                        split
+                            .1
+                            .split_once('=')
+                            .context("Failed to parse segment header")?
+                            .1
+                            .trim_matches('"')
+                            .into(),
+                    );
                 }
                 "#EXTINF" => {
                     total_segments += 1;
@@ -124,7 +129,7 @@ impl MediaPlaylist {
         Ok(())
     }
 
-    pub fn segments(&mut self) -> QueueRange<'_> {
+    pub(super) fn segment_queue(&mut self) -> QueueRange<'_> {
         if self.added == 0 {
             QueueRange::Empty
         } else if self.added == self.segments.len() {
@@ -134,7 +139,7 @@ impl MediaPlaylist {
         }
     }
 
-    pub fn last_duration(&self) -> Option<Duration> {
+    pub(super) fn last_duration(&self) -> Option<Duration> {
         self.segments
             .iter()
             .rev()
@@ -151,10 +156,4 @@ impl MediaPlaylist {
 
         before - segments.len()
     }
-}
-
-pub enum QueueRange<'a> {
-    Partial(IterMut<'a, Segment>),
-    Back(Option<&'a mut Segment>),
-    Empty,
 }
