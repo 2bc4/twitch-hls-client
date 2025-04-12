@@ -11,7 +11,7 @@ pub use segment::Handler;
 use anyhow::{Context, Result};
 use std::{
     borrow::Cow,
-    fmt::{self, Display, Formatter},
+    fmt::{self, Debug, Display, Formatter},
 };
 
 use crate::{
@@ -30,7 +30,6 @@ impl Display for OfflineError {
     }
 }
 
-#[derive(Debug)]
 pub struct Args {
     servers: Option<Vec<Url>>,
     print_streams: bool,
@@ -63,6 +62,24 @@ impl Default for Args {
     }
 }
 
+impl Debug for Args {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        f.debug_struct("Args")
+            .field("servers", &self.servers)
+            .field("print_streams", &self.print_streams)
+            .field("no_low_latency", &self.no_low_latency)
+            .field("client_id", &Self::hide_option(&self.client_id))
+            .field("auth_token", &Self::hide_option(&self.auth_token))
+            .field("codecs", &self.codecs)
+            .field("never_proxy", &self.never_proxy)
+            .field("playlist_cache_dir", &self.playlist_cache_dir)
+            .field("force_playlist_url", &self.force_playlist_url)
+            .field("channel", &self.channel)
+            .field("quality", &self.quality)
+            .finish()
+    }
+}
+
 impl Parse for Args {
     fn parse(&mut self, parser: &mut Parser) -> Result<()> {
         parser.parse_fn_cfg(&mut self.servers, "-s", "servers", Self::split_comma)?;
@@ -73,9 +90,11 @@ impl Parse for Args {
         parser.parse_cow_string(&mut self.codecs, "--codecs")?;
         parser.parse_fn(&mut self.never_proxy, "--never-proxy", Self::split_comma)?;
         parser.parse_opt_string(&mut self.playlist_cache_dir, "--playlist-cache-dir")?;
-        parser.parse_fn(&mut self.force_playlist_url, "--force-playlist-url", |a| {
-            Ok(Some(a.to_owned().into()))
-        })?;
+        parser.parse_fn(
+            &mut self.force_playlist_url,
+            "--force-playlist-url",
+            |arg| Ok(Some(arg.to_owned().into())),
+        )?;
 
         let channel = parser
             .parse_free_required()
@@ -105,6 +124,13 @@ impl Args {
     #[allow(clippy::unnecessary_wraps, reason = "function pointer")]
     fn split_comma<T: for<'a> From<&'a str>>(arg: &str) -> Result<Option<Vec<T>>> {
         Ok(Some(arg.split(',').map(T::from).collect()))
+    }
+
+    const fn hide_option(arg: &Option<String>) -> Option<&'static str> {
+        match arg {
+            Some(_) => Some("<hidden>"),
+            None => None,
+        }
     }
 }
 
