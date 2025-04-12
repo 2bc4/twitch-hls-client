@@ -48,6 +48,8 @@ impl Write for Writer {
     }
 
     fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
+        debug_assert!(self.player.is_some() || self.recorder.is_some());
+
         if let Some(player) = &mut self.player {
             match player.write_all(buf) {
                 Ok(()) => (),
