@@ -1,5 +1,5 @@
+mod file;
 mod player;
-mod recorder;
 
 pub use player::Player;
 
@@ -8,21 +8,21 @@ use std::io::{self, ErrorKind::Other, Write};
 use anyhow::{Result, ensure};
 use log::debug;
 
+use file::{Args as FileArgs, File};
 use player::Args as PlayerArgs;
-use recorder::{Args as RecorderArgs, Recorder};
 
 use crate::args::{Parse, Parser};
 
 #[derive(Default, Debug)]
 pub struct Args {
     pub player: PlayerArgs,
-    recorder: RecorderArgs,
+    file: FileArgs,
 }
 
 impl Parse for Args {
     fn parse(&mut self, parser: &mut Parser) -> Result<()> {
         self.player.parse(parser)?;
-        self.recorder.parse(parser)?;
+        self.file.parse(parser)?;
 
         Ok(())
     }
@@ -30,7 +30,7 @@ impl Parse for Args {
 
 pub struct Writer {
     player: Option<Player>,
-    recorder: Option<Recorder>,
+    file: Option<File>,
 }
 
 impl Write for Writer {
@@ -39,8 +39,8 @@ impl Write for Writer {
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        if let Some(recorder) = &mut self.recorder {
-            recorder.flush()?;
+        if let Some(file) = &mut self.file {
+            file.flush()?;
         }
 
         debug!("Finished writing segment");
@@ -48,18 +48,18 @@ impl Write for Writer {
     }
 
     fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
-        debug_assert!(self.player.is_some() || self.recorder.is_some());
+        debug_assert!(self.player.is_some() || self.file.is_some());
 
         if let Some(player) = &mut self.player {
             match player.write_all(buf) {
                 Ok(()) => (),
-                Err(e) if self.recorder.is_some() && e.kind() == Other => self.player = None,
+                Err(e) if self.file.is_some() && e.kind() == Other => self.player = None,
                 Err(e) => return Err(e),
             }
         }
 
-        if let Some(recorder) = &mut self.recorder {
-            recorder.write_all(buf)?;
+        if let Some(file) = &mut self.file {
+            file.write_all(buf)?;
         }
 
         Ok(())
@@ -70,11 +70,11 @@ impl Writer {
     pub fn new(args: &Args) -> Result<Self> {
         let writer = Self {
             player: Player::spawn(&args.player)?,
-            recorder: Recorder::new(&args.recorder)?,
+            file: File::new(&args.file)?,
         };
 
         ensure!(
-            writer.player.is_some() || writer.recorder.is_some(),
+            writer.player.is_some() || writer.file.is_some(),
             "No output configured"
         );
 

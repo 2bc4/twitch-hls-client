@@ -1,5 +1,5 @@
 use std::{
-    fs::File,
+    fs::File as StdFile,
     io::{self, Write},
 };
 
@@ -23,11 +23,11 @@ impl Parse for Args {
     }
 }
 
-pub struct Recorder {
-    file: File,
+pub struct File {
+    file: StdFile,
 }
 
-impl Write for Recorder {
+impl Write for File {
     fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
         unreachable!();
     }
@@ -41,7 +41,7 @@ impl Write for Recorder {
     }
 }
 
-impl Recorder {
+impl File {
     pub fn new(args: &Args) -> Result<Option<Self>> {
         let Some(path) = &args.path else {
             return Ok(None);
@@ -50,12 +50,12 @@ impl Recorder {
         info!("Recording to: {path}");
         if args.overwrite {
             return Ok(Some(Self {
-                file: File::create(path)?,
+                file: StdFile::create(path)?,
             }));
         }
 
         Ok(Some(Self {
-            file: File::create_new(path)?,
+            file: StdFile::create_new(path)?,
         }))
     }
 }
