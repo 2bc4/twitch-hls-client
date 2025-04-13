@@ -12,8 +12,11 @@ passthrough=false
 no-kill=false
 
 # Recording
-record=/path/to/recording.mp4
+record=/path/to/recording.ts
 overwrite=false
+
+# TCP server
+tcp-server=127.0.0.1:8080
 
 # HLS
 servers=http://example-proxy-server1.invalid,http://example-proxy-server2.invalid

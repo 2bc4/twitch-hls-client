@@ -2,7 +2,7 @@ Usage: twitch-hls-client [OPTIONS] [-p <PATH> -r <PATH>] <CHANNEL> <QUALITY>
 
 Arguments:
   <CHANNEL>
-          Twitch channel to watch
+          Twitch channel
   <QUALITY>
           Stream to play (best, 1080p, 720p, 360p, 160p, audio_only, etc.)
 
@@ -18,23 +18,29 @@ General options:
       --no-config
           Ignore config file
 
-Player options:
-  -p <PATH>
-          Path to player
-  -a <ARGUMENTS>
-          Arguments to pass to the player [default: -]
-  -q, --quiet
-          Silence player output
-      --passthrough
-          Passthrough playlist URL to player and do nothing else
-      --no-kill
-          Don't kill the player on exit
+Output options:
+    Player options:
+      -p <PATH>
+              Path to player
+      -a <ARGUMENTS>
+              Arguments to pass to the player [default: -]
+      -q, --quiet
+              Silence player output
+          --passthrough
+              Passthrough playlist URL to player and do nothing else
+          --no-kill
+              Don't kill the player on exit
 
-Recording options:
-  -r <PATH>
-          Record to the specified file path
-      --overwrite
-          Allow overwriting file when recording
+    Recording options:
+      -r <PATH>
+              Record to the specified file path
+          --overwrite
+              Allow overwriting file when recording
+
+    TCP server options:
+      -t <ADDRESS:PORT>
+              Listen on <ADDRESS:PORT> and output stream to connected TCP clients.
+              Clients can connect and disconnect at any time.
 
 HLS options:
   -s <URL1,URL2>
