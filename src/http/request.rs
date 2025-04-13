@@ -265,19 +265,21 @@ impl Transport {
         }
     }
 
-    fn try_connect(
-        iter: impl Iterator<Item = SocketAddr>,
-        timeout: Duration,
-    ) -> Result<TcpStream, io::Error> {
+    fn try_connect(iter: impl Iterator<Item = SocketAddr>, timeout: Duration) -> Result<TcpStream> {
+        let mut addrs = iter.peekable();
+        ensure!(addrs.peek().is_some(), "Failed to resolve socket address");
+
         let mut io_error = None;
-        for addr in iter {
+        for addr in addrs {
             match TcpStream::connect_timeout(&addr, timeout) {
                 Ok(sock) => return Ok(sock),
                 Err(e) => io_error = Some(e),
             }
         }
 
-        Err(io_error.expect("Missing IO error while connection failed"))
+        Err(io_error
+            .expect("Missing IO error while connection failed")
+            .into())
     }
 }
 
