@@ -26,15 +26,9 @@ impl Parse for Args {
     }
 }
 
-struct Client {
-    sock: TcpStream,
-    addr: SocketAddr,
-    has_written: bool,
-}
-
 pub struct Tcp {
     listener: TcpListener,
-    clients: Vec<Client>,
+    clients: Vec<(TcpStream, SocketAddr)>,
 }
 
 impl Write for Tcp {
@@ -43,47 +37,29 @@ impl Write for Tcp {
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-
-    fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
         match self.listener.accept() {
             Ok((sock, addr)) => {
                 info!("Connection accepted: {addr}");
 
                 sock.set_nodelay(true)?;
-                self.clients.push(Client {
-                    sock,
-                    addr,
-                    has_written: false,
-                });
+                self.clients.push((sock, addr));
             }
             Err(e) if e.kind() == ErrorKind::WouldBlock => (),
             Err(e) => error!("Failed to accept connection: {e}"),
         }
 
-        self.clients.retain_mut(|client| {
-            //Check for the MPEG-TS header to ensure we don't start writing in the middle of a packet
-            if !client.has_written {
-                //Sync byte == 0x47 -> PUSI bit == 1 -> PAT bit == 0
-                if buf[0] != 0x47
-                    || (buf[1] & 0x40) >> 6 != 1
-                    || ((u16::from(buf[1]) & 0x1F) << 8) | u16::from(buf[2]) != 0x0000
-                {
-                    return true;
-                }
-            }
+        Ok(())
+    }
 
-            match client.sock.write_all(buf) {
-                Ok(()) => {
-                    client.has_written = true;
-                    true
-                }
+    fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
+        self.clients
+            .retain_mut(|(sock, addr)| match sock.write_all(buf) {
+                Ok(()) => true,
                 Err(e) => match e.kind() {
                     ErrorKind::BrokenPipe
                     | ErrorKind::ConnectionReset
                     | ErrorKind::ConnectionAborted => {
-                        info!("Connection closed: {}", client.addr);
+                        info!("Connection closed: {addr}");
                         false
                     }
                     _ => {
@@ -91,8 +67,7 @@ impl Write for Tcp {
                         false
                     }
                 },
-            }
-        });
+            });
 
         Ok(())
     }
