@@ -1,6 +1,6 @@
 use std::{
     io::{self, ErrorKind, Write},
-    net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs},
+    net::{Shutdown, SocketAddr, TcpListener, TcpStream, ToSocketAddrs},
 };
 
 use anyhow::{Context, Result, bail};
@@ -29,7 +29,7 @@ impl Parse for Args {
 
 pub struct Tcp {
     listener: TcpListener,
-    clients: Vec<(TcpStream, SocketAddr)>,
+    clients: Vec<Client>,
 
     header: Option<Box<[u8]>>,
 }
@@ -39,6 +39,17 @@ impl Output for Tcp {
         self.header = Some(header.into());
         Ok(())
     }
+
+    fn should_wait(&self) -> bool {
+        self.clients.is_empty()
+    }
+
+    fn wait_for_output(&mut self) -> io::Result<()> {
+        self.listener.set_nonblocking(false)?;
+        self.accept()?;
+
+        self.listener.set_nonblocking(true)
+    }
 }
 
 impl Write for Tcp {
@@ -47,41 +58,12 @@ impl Write for Tcp {
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        match self.listener.accept() {
-            Ok((mut sock, addr)) => {
-                info!("Connection accepted: {addr}");
-
-                sock.set_nodelay(true)?;
-                if let Some(header) = &self.header {
-                    sock.write_all(header)?;
-                }
-
-                self.clients.push((sock, addr));
-            }
-            Err(e) if e.kind() == ErrorKind::WouldBlock => (),
-            Err(e) => error!("Failed to accept connection: {e}"),
-        }
-
-        Ok(())
+        self.accept()
     }
 
     fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
         self.clients
-            .retain_mut(|(sock, addr)| match sock.write_all(buf) {
-                Ok(()) => true,
-                Err(e) => match e.kind() {
-                    ErrorKind::BrokenPipe
-                    | ErrorKind::ConnectionReset
-                    | ErrorKind::ConnectionAborted => {
-                        info!("Connection closed: {addr}");
-                        false
-                    }
-                    _ => {
-                        error!("Failed to write to TCP client: {e}");
-                        false
-                    }
-                },
-            });
+            .retain_mut(|client| client.write_all(buf).is_ok());
 
         Ok(())
     }
@@ -102,5 +84,64 @@ impl Tcp {
             clients: Vec::default(),
             header: Option::default(),
         }))
+    }
+
+    fn accept(&mut self) -> io::Result<()> {
+        match self.listener.accept() {
+            Ok((sock, addr)) => {
+                info!("Connection accepted: {addr}");
+
+                let mut client = Client::new(sock, addr)?;
+                if let Some(header) = &self.header {
+                    if client.write_all(header).is_err() {
+                        return Ok(());
+                    }
+                }
+
+                self.clients.push(client);
+            }
+            Err(e) if e.kind() == ErrorKind::WouldBlock => (),
+            Err(e) => error!("Failed to accept connection: {e}"),
+        }
+
+        Ok(())
+    }
+}
+
+struct Client {
+    sock: TcpStream,
+    addr: SocketAddr,
+}
+
+impl Write for Client {
+    fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+        unreachable!();
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        unreachable!();
+    }
+
+    fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
+        if let Err(e) = self.sock.write_all(buf) {
+            match e.kind() {
+                ErrorKind::BrokenPipe
+                | ErrorKind::ConnectionReset
+                | ErrorKind::ConnectionAborted => info!("Connection closed: {}", self.addr),
+                _ => error!("Failed to write to TCP client: {e}"),
+            }
+
+            self.sock.shutdown(Shutdown::Both)?;
+            return Err(io::Error::from(ErrorKind::BrokenPipe));
+        }
+
+        Ok(())
+    }
+}
+
+impl Client {
+    pub fn new(sock: TcpStream, addr: SocketAddr) -> io::Result<Self> {
+        sock.set_nodelay(true)?;
+        Ok(Self { sock, addr })
     }
 }

@@ -18,7 +18,7 @@ impl std::error::Error for PipeClosedError {}
 
 impl Display for PipeClosedError {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "Unhandled player closed")
+        f.write_str("Unhandled player closed")
     }
 }
 
@@ -72,9 +72,7 @@ impl Output for Player {
     fn set_header(&mut self, header: &[u8]) -> io::Result<()> {
         self.stdin
             .write_all(header)
-            .map_err(|e| self.handle_broken_pipe(e))?;
-
-        Ok(())
+            .map_err(|e| self.handle_broken_pipe(e))
     }
 }
 

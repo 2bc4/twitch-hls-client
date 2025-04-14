@@ -1,30 +1,49 @@
-use std::{cmp::Ordering, mem, str::FromStr, thread, time::Duration as StdDuration, time::Instant};
+use std::{
+    cmp::Ordering,
+    fmt::{self, Display, Formatter},
+    mem,
+    str::FromStr,
+    thread,
+    time::{self, Instant},
+};
 
 use anyhow::{Context, Result};
 use log::{debug, info};
 
-use super::{
-    MediaPlaylist, OfflineError,
-    media_playlist::QueueRange,
-    worker::{DeadError, Worker},
-};
-
+use super::{MediaPlaylist, OfflineError, media_playlist::QueueRange, worker::Worker};
 use crate::{
     http::{Agent, Url},
-    output::Writer,
+    output::{Output, Writer},
 };
+
+#[derive(Debug)]
+pub struct ResetError;
+
+impl std::error::Error for ResetError {}
+
+impl Display for ResetError {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        f.write_str("Unhandled segment handler reset")
+    }
+}
 
 pub struct Handler {
     worker: Option<Worker>,
+    agent: Agent,
     init: bool,
 }
 
 impl Handler {
-    pub fn new(writer: Writer, playlist: &mut MediaPlaylist, agent: Agent) -> Result<Self> {
+    pub fn new(writer: Writer, agent: Agent) -> Result<Self> {
         Ok(Self {
-            worker: Some(Worker::spawn(writer, playlist.header.take(), agent)?),
+            worker: Some(Worker::spawn(writer, agent.clone())?),
+            agent,
             init: true,
         })
+    }
+
+    pub const fn reset(&mut self) {
+        self.init = true;
     }
 
     pub fn process(&mut self, playlist: &mut MediaPlaylist, time: Instant) -> Result<()> {
@@ -82,19 +101,23 @@ impl Handler {
     }
 
     fn dispatch(&mut self, url: &mut Url) -> Result<()> {
-        self.worker
+        if self
+            .worker
             .as_mut()
             .expect("Missing worker while sending URL")
             .url(mem::take(url))
-            .map_err(|send_error| {
-                if send_error.downcast_ref::<DeadError>().is_some() {
-                    if let Err(join_error) = self.join_worker() {
-                        return join_error;
-                    }
-                }
+            .is_err()
+        {
+            match self.join_worker() {
+                Ok(mut writer) => {
+                    writer.wait_for_output()?;
+                    self.worker = Some(Worker::spawn(writer, self.agent.clone())?);
 
-                send_error
-            })?;
+                    return Err(ResetError.into());
+                }
+                Err(e) => return Err(e),
+            }
+        }
 
         Ok(())
     }
@@ -104,7 +127,7 @@ impl Handler {
         Err(OfflineError.into())
     }
 
-    fn join_worker(&mut self) -> Result<()> {
+    fn join_worker(&mut self) -> Result<Writer> {
         self.worker
             .take()
             .expect("Missing worker while joining")
@@ -122,7 +145,7 @@ pub enum Segment {
 #[derive(Default, Copy, Clone, Debug)]
 pub struct Duration {
     is_ad: bool,
-    inner: StdDuration,
+    inner: time::Duration,
 }
 
 impl FromStr for Duration {
@@ -131,7 +154,7 @@ impl FromStr for Duration {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(Self {
             is_ad: s.contains('|'),
-            inner: StdDuration::try_from_secs_f32(
+            inner: time::Duration::try_from_secs_f32(
                 s.split_once(',')
                     .map(|d| d.0)
                     .and_then(|d| d.parse().ok())
@@ -158,10 +181,10 @@ impl Duration {
     //Can't wait too long or the server will close the socket
     const MAX: Self = Self {
         is_ad: false,
-        inner: StdDuration::from_secs(3),
+        inner: time::Duration::from_secs(3),
     };
 
-    pub fn sleep(&self, elapsed: StdDuration) {
+    pub fn sleep(&self, elapsed: time::Duration) {
         if *self >= Self::MAX {
             self.sleep_half(elapsed);
             return;
@@ -170,13 +193,13 @@ impl Duration {
         Self::sleep_thread(self.inner, elapsed);
     }
 
-    pub fn sleep_half(&self, elapsed: StdDuration) {
+    pub fn sleep_half(&self, elapsed: time::Duration) {
         if let Some(half) = self.inner.checked_div(2) {
             Self::sleep_thread(half, elapsed);
         }
     }
 
-    fn sleep_thread(duration: StdDuration, elapsed: StdDuration) {
+    fn sleep_thread(duration: time::Duration, elapsed: time::Duration) {
         if let Some(sleep_time) = duration.checked_sub(elapsed) {
             debug!("Sleeping thread for {sleep_time:?}");
             thread::sleep(sleep_time);

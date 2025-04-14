@@ -1,5 +1,5 @@
 use std::{
-    fs::File as StdFile,
+    fs,
     io::{self, Write},
 };
 
@@ -25,13 +25,12 @@ impl Parse for Args {
 }
 
 pub struct File {
-    file: StdFile,
+    file: fs::File,
 }
 
 impl Output for File {
     fn set_header(&mut self, header: &[u8]) -> io::Result<()> {
-        self.file.write_all(header)?;
-        Ok(())
+        self.file.write_all(header)
     }
 }
 
@@ -58,12 +57,12 @@ impl File {
         info!("Recording to: {path}");
         if args.overwrite {
             return Ok(Some(Self {
-                file: StdFile::create(path)?,
+                file: fs::File::create(path)?,
             }));
         }
 
         Ok(Some(Self {
-            file: StdFile::create_new(path)?,
+            file: fs::File::create_new(path)?,
         }))
     }
 }

@@ -4,7 +4,7 @@ use std::{
 };
 
 use anyhow::{Context, Result, ensure};
-use log::debug;
+use log::{debug, info};
 
 use super::{
     map_if_offline,
@@ -127,6 +127,13 @@ impl MediaPlaylist {
         debug!("Segments added: {}", self.added);
 
         Ok(())
+    }
+
+    pub fn reset(&mut self) {
+        info!("Resetting playlist...");
+        self.segments.clear();
+        self.sequence = 0;
+        self.added = 0;
     }
 
     pub(super) fn segment_queue(&mut self) -> QueueRange<'_> {

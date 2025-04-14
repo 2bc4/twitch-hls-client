@@ -17,6 +17,14 @@ use crate::args::{Parse, Parser};
 
 pub trait Output {
     fn set_header(&mut self, header: &[u8]) -> io::Result<()>;
+
+    fn should_wait(&self) -> bool {
+        unreachable!();
+    }
+
+    fn wait_for_output(&mut self) -> io::Result<()> {
+        unreachable!();
+    }
 }
 
 #[derive(Default, Debug)]
@@ -45,7 +53,6 @@ pub struct Writer {
 impl Output for Writer {
     fn set_header(&mut self, header: &[u8]) -> io::Result<()> {
         debug!("Outputting segment header");
-
         self.handle_player(|player| player.set_header(header))?;
 
         if let Some(tcp) = &mut self.tcp {
@@ -55,6 +62,25 @@ impl Output for Writer {
         if let Some(file) = &mut self.file {
             file.set_header(header)?;
         }
+
+        Ok(())
+    }
+
+    fn should_wait(&self) -> bool {
+        match (&self.player, &self.tcp, &self.file) {
+            (None, Some(tcp), None) => tcp.should_wait(),
+            _ => false,
+        }
+    }
+
+    fn wait_for_output(&mut self) -> io::Result<()> {
+        debug_assert!(self.tcp.is_some() && self.player.is_none() && self.file.is_none());
+
+        debug!("Waiting for output...");
+        self.tcp
+            .as_mut()
+            .expect("Missing TCP output while waiting for output")
+            .wait_for_output()?;
 
         Ok(())
     }
@@ -97,7 +123,7 @@ impl Write for Writer {
 
 impl Writer {
     pub fn new(args: &Args) -> Result<Self> {
-        let writer = Self {
+        let mut writer = Self {
             player: Player::spawn(&args.player)?,
             tcp: Tcp::new(&args.tcp)?,
             file: File::new(&args.file)?,
@@ -107,6 +133,10 @@ impl Writer {
             writer.player.is_some() || writer.tcp.is_some() || writer.file.is_some(),
             "No output configured"
         );
+
+        if writer.should_wait() {
+            writer.wait_for_output()?;
+        }
 
         Ok(writer)
     }

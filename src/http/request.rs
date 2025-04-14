@@ -45,6 +45,10 @@ impl<W: Write> Request<W> {
         }
     }
 
+    pub const fn get_ref(&self) -> &W {
+        &self.writer
+    }
+
     pub fn into_writer(self) -> W {
         self.writer
     }

@@ -14,10 +14,10 @@ use anyhow::Result;
 use log::{debug, info};
 
 use args::{Parse, Parser};
-use hls::{Handler, MediaPlaylist, OfflineError};
-use http::Agent;
+use hls::{Handler, MediaPlaylist, OfflineError, ResetError};
+use http::{Agent, Method};
 use logger::Logger;
-use output::{Player, Writer};
+use output::{Output, Player, Writer};
 
 #[derive(Default, Debug)]
 pub struct Args {
@@ -40,7 +40,16 @@ fn main_loop(mut handler: Handler, mut playlist: MediaPlaylist) -> Result<()> {
         let time = Instant::now();
 
         playlist.reload()?;
-        handler.process(&mut playlist, time)?;
+        if let Err(e) = handler.process(&mut playlist, time) {
+            if e.downcast_ref::<ResetError>().is_some() {
+                playlist.reset();
+                handler.reset();
+
+                continue;
+            }
+
+            return Err(e);
+        }
     }
 }
 
@@ -66,10 +75,17 @@ fn main() -> Result<()> {
             return Player::passthrough(&mut output_args.player, &conn.url);
         }
 
+        let mut writer = Writer::new(&output_args)?;
         let mut playlist = MediaPlaylist::new(conn)?;
-        let writer = Writer::new(&output_args)?;
 
-        (Handler::new(writer, &mut playlist, agent)?, playlist)
+        if let Some(url) = playlist.header.take() {
+            let mut request = agent.binary(Vec::new());
+            request.call(Method::Get, &url)?;
+
+            writer.set_header(&request.into_writer())?;
+        }
+
+        (Handler::new(writer, agent)?, playlist)
     };
 
     match main_loop(handler, playlist) {

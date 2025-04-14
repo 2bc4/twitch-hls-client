@@ -19,36 +19,34 @@ impl std::error::Error for DeadError {}
 
 impl Display for DeadError {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "Worker died unexpectantly")
+        f.write_str("Worker died unexpectantly")
     }
 }
 
+enum Reason {
+    Wait(Writer),
+    Killed,
+}
+
 pub struct Worker {
-    handle: JoinHandle<Result<()>>,
+    handle: JoinHandle<Result<Reason>>,
     url_tx: Sender<Url>,
 }
 
 impl Worker {
-    pub fn spawn(mut writer: Writer, header_url: Option<Url>, agent: Agent) -> Result<Self> {
+    pub fn spawn(writer: Writer, agent: Agent) -> Result<Self> {
         let (url_tx, url_rx): (Sender<Url>, Receiver<Url>) = mpsc::channel();
 
         let handle = thread::Builder::new()
             .name("worker".to_owned())
-            .spawn(move || -> Result<()> {
+            .spawn(move || -> Result<Reason> {
                 debug!("Starting");
-
-                if let Some(header_url) = header_url {
-                    let mut request = agent.binary(Vec::new());
-                    request.call(Method::Get, &header_url)?;
-
-                    writer.set_header(&request.into_writer())?;
-                }
 
                 let mut request = agent.binary(writer);
                 loop {
                     let Ok(url) = url_rx.recv() else {
                         debug!("Exiting");
-                        return Ok(());
+                        return Ok(Reason::Killed);
                     };
 
                     match request.call(Method::Get, &url) {
@@ -59,6 +57,10 @@ impl Worker {
                         }
                         Err(e) => return Err(e),
                     }
+
+                    if request.get_ref().should_wait() {
+                        return Ok(Reason::Wait(request.into_writer()));
+                    }
                 }
             })
             .context("Failed to spawn worker")?;
@@ -67,16 +69,20 @@ impl Worker {
     }
 
     pub fn url(&self, url: Url) -> Result<()> {
-        if self.handle.is_finished() {
+        if self.handle.is_finished() || self.url_tx.send(url).is_err() {
             return Err(DeadError.into());
         }
 
-        self.url_tx.send(url)?;
         Ok(())
     }
 
-    pub fn join(self) -> Result<()> {
+    pub fn join(self) -> Result<Writer> {
         drop(self.url_tx);
-        self.handle.join().expect("Worker panicked")
+
+        match self.handle.join().expect("Worker panicked") {
+            Ok(Reason::Wait(writer)) => Ok(writer),
+            Ok(Reason::Killed) => Err(DeadError.into()),
+            Err(e) => Err(e),
+        }
     }
 }

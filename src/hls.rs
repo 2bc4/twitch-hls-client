@@ -6,7 +6,7 @@ mod worker;
 
 pub use master_playlist::fetch_playlist;
 pub use media_playlist::MediaPlaylist;
-pub use segment::Handler;
+pub use segment::{Handler, ResetError};
 
 use anyhow::{Context, Result};
 use std::{
@@ -26,7 +26,7 @@ impl std::error::Error for OfflineError {}
 
 impl Display for OfflineError {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "Stream is offline or unavailable")
+        f.write_str("Stream is offline or unavailable")
     }
 }
 
