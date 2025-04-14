@@ -6,6 +6,7 @@ use std::{
 use anyhow::Result;
 use log::info;
 
+use super::Output;
 use crate::args::{Parse, Parser};
 
 #[derive(Default, Debug)]
@@ -25,6 +26,13 @@ impl Parse for Args {
 
 pub struct File {
     file: StdFile,
+}
+
+impl Output for File {
+    fn set_header(&mut self, header: &[u8]) -> io::Result<()> {
+        self.file.write_all(header)?;
+        Ok(())
+    }
 }
 
 impl Write for File {

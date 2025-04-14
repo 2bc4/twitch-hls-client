@@ -9,7 +9,7 @@ use log::{debug, info};
 
 use crate::{
     http::{Agent, Method, StatusError, Url},
-    output::Writer,
+    output::{Output, Writer},
 };
 
 #[derive(Debug)]
@@ -29,7 +29,7 @@ pub struct Worker {
 }
 
 impl Worker {
-    pub fn spawn(writer: Writer, header_url: Option<Url>, agent: Agent) -> Result<Self> {
+    pub fn spawn(mut writer: Writer, header_url: Option<Url>, agent: Agent) -> Result<Self> {
         let (url_tx, url_rx): (Sender<Url>, Receiver<Url>) = mpsc::channel();
 
         let handle = thread::Builder::new()
@@ -37,11 +37,14 @@ impl Worker {
             .spawn(move || -> Result<()> {
                 debug!("Starting");
 
-                let mut request = agent.binary(writer);
                 if let Some(header_url) = header_url {
+                    let mut request = agent.binary(Vec::new());
                     request.call(Method::Get, &header_url)?;
+
+                    writer.set_header(&request.into_writer())?;
                 }
 
+                let mut request = agent.binary(writer);
                 loop {
                     let Ok(url) = url_rx.recv() else {
                         debug!("Exiting");

@@ -45,6 +45,10 @@ impl<W: Write> Request<W> {
         }
     }
 
+    pub fn into_writer(self) -> W {
+        self.writer
+    }
+
     pub fn into_text_request(self) -> TextRequest {
         let mut request = self.agent.text();
         request.0.stream = self.stream;

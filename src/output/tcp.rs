@@ -6,6 +6,7 @@ use std::{
 use anyhow::{Context, Result, bail};
 use log::{error, info};
 
+use super::Output;
 use crate::args::{Parse, Parser};
 
 #[derive(Default, Debug)]
@@ -29,6 +30,15 @@ impl Parse for Args {
 pub struct Tcp {
     listener: TcpListener,
     clients: Vec<(TcpStream, SocketAddr)>,
+
+    header: Option<Box<[u8]>>,
+}
+
+impl Output for Tcp {
+    fn set_header(&mut self, header: &[u8]) -> io::Result<()> {
+        self.header = Some(header.into());
+        Ok(())
+    }
 }
 
 impl Write for Tcp {
@@ -38,10 +48,14 @@ impl Write for Tcp {
 
     fn flush(&mut self) -> io::Result<()> {
         match self.listener.accept() {
-            Ok((sock, addr)) => {
+            Ok((mut sock, addr)) => {
                 info!("Connection accepted: {addr}");
 
                 sock.set_nodelay(true)?;
+                if let Some(header) = &self.header {
+                    sock.write_all(header)?;
+                }
+
                 self.clients.push((sock, addr));
             }
             Err(e) if e.kind() == ErrorKind::WouldBlock => (),
@@ -86,6 +100,7 @@ impl Tcp {
         Ok(Some(Self {
             listener,
             clients: Vec::default(),
+            header: Option::default(),
         }))
     }
 }

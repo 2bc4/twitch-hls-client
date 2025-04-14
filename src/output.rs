@@ -15,6 +15,10 @@ use tcp::{Args as TcpArgs, Tcp};
 
 use crate::args::{Parse, Parser};
 
+pub trait Output {
+    fn set_header(&mut self, header: &[u8]) -> io::Result<()>;
+}
+
 #[derive(Default, Debug)]
 pub struct Args {
     pub player: PlayerArgs,
@@ -38,6 +42,24 @@ pub struct Writer {
     file: Option<File>,
 }
 
+impl Output for Writer {
+    fn set_header(&mut self, header: &[u8]) -> io::Result<()> {
+        debug!("Outputting segment header");
+
+        self.handle_player(|player| player.set_header(header))?;
+
+        if let Some(tcp) = &mut self.tcp {
+            tcp.set_header(header)?;
+        }
+
+        if let Some(file) = &mut self.file {
+            file.set_header(header)?;
+        }
+
+        Ok(())
+    }
+}
+
 impl Write for Writer {
     fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
         unreachable!();
@@ -59,15 +81,7 @@ impl Write for Writer {
     fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
         debug_assert!(self.player.is_some() || self.tcp.is_some() || self.file.is_some());
 
-        if let Some(player) = &mut self.player {
-            match player.write_all(buf) {
-                Ok(()) => (),
-                Err(e) if self.tcp.is_some() || self.file.is_some() && e.kind() == Other => {
-                    self.player = None;
-                }
-                Err(e) => return Err(e),
-            }
-        }
+        self.handle_player(|player| player.write_all(buf))?;
 
         if let Some(tcp) = &mut self.tcp {
             tcp.write_all(buf)?;
@@ -95,5 +109,23 @@ impl Writer {
         );
 
         Ok(writer)
+    }
+
+    fn handle_player<F>(&mut self, f: F) -> io::Result<()>
+    where
+        F: FnOnce(&mut Player) -> io::Result<()>,
+    {
+        if let Some(player) = &mut self.player {
+            if let Err(e) = f(player) {
+                if e.kind() == Other && self.tcp.is_some() || self.file.is_some() {
+                    self.player = None;
+                    return Ok(());
+                }
+
+                return Err(e);
+            }
+        }
+
+        Ok(())
     }
 }
