@@ -34,8 +34,19 @@ impl Parse for Args {
     }
 }
 
-fn main_loop(mut handler: Handler, mut playlist: MediaPlaylist) -> Result<()> {
-    handler.process(&mut playlist, Instant::now())?;
+fn main_loop(mut writer: Writer, mut playlist: MediaPlaylist, agent: Agent) -> Result<()> {
+    if let Some(url) = playlist.header.take() {
+        let mut request = agent.binary(Vec::new());
+        request.call(Method::Get, &url)?;
+
+        writer.set_header(&request.into_writer())?;
+    }
+
+    if writer.should_wait() {
+        writer.wait_for_output()?;
+    }
+
+    let mut handler = Handler::new(writer, agent)?;
     loop {
         let time = Instant::now();
 
@@ -54,7 +65,7 @@ fn main_loop(mut handler: Handler, mut playlist: MediaPlaylist) -> Result<()> {
 }
 
 fn main() -> Result<()> {
-    let (handler, playlist) = {
+    let (writer, playlist, agent) = {
         let (main_args, http_args, hls_args, mut output_args) = args::parse()?;
 
         Logger::init(main_args.debug)?;
@@ -75,20 +86,10 @@ fn main() -> Result<()> {
             return Player::passthrough(&mut output_args.player, &conn.url);
         }
 
-        let mut writer = Writer::new(&output_args)?;
-        let mut playlist = MediaPlaylist::new(conn)?;
-
-        if let Some(url) = playlist.header.take() {
-            let mut request = agent.binary(Vec::new());
-            request.call(Method::Get, &url)?;
-
-            writer.set_header(&request.into_writer())?;
-        }
-
-        (Handler::new(writer, agent)?, playlist)
+        (Writer::new(&output_args)?, MediaPlaylist::new(conn)?, agent)
     };
 
-    match main_loop(handler, playlist) {
+    match main_loop(writer, playlist, agent) {
         Ok(()) => Ok(()),
         Err(e) if e.downcast_ref::<OfflineError>().is_some() => {
             info!("Stream ended, exiting...");

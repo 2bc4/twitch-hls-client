@@ -123,7 +123,7 @@ impl Write for Writer {
 
 impl Writer {
     pub fn new(args: &Args) -> Result<Self> {
-        let mut writer = Self {
+        let writer = Self {
             player: Player::spawn(&args.player)?,
             tcp: Tcp::new(&args.tcp)?,
             file: File::new(&args.file)?,
@@ -133,10 +133,6 @@ impl Writer {
             writer.player.is_some() || writer.tcp.is_some() || writer.file.is_some(),
             "No output configured"
         );
-
-        if writer.should_wait() {
-            writer.wait_for_output()?;
-        }
 
         Ok(writer)
     }
