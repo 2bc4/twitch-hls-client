@@ -1,6 +1,6 @@
 use std::{
     io::{self, ErrorKind, Write},
-    net::{Shutdown, SocketAddr, TcpListener, TcpStream, ToSocketAddrs},
+    net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs},
 };
 
 use anyhow::{Context, Result, bail};
@@ -89,7 +89,7 @@ impl Tcp {
     fn accept(&mut self) -> io::Result<()> {
         match self.listener.accept() {
             Ok((sock, addr)) => {
-                info!("Connection accepted: {addr}");
+                info!("Client accepted: {addr}");
 
                 let mut client = Client::new(sock, addr)?;
                 if let Some(header) = &self.header {
@@ -101,7 +101,7 @@ impl Tcp {
                 self.clients.push(client);
             }
             Err(e) if e.kind() == ErrorKind::WouldBlock => (),
-            Err(e) => error!("Failed to accept connection: {e}"),
+            Err(e) => error!("Failed to accept client: {e}"),
         }
 
         Ok(())
@@ -127,11 +127,10 @@ impl Write for Client {
             match e.kind() {
                 ErrorKind::BrokenPipe
                 | ErrorKind::ConnectionReset
-                | ErrorKind::ConnectionAborted => info!("Connection closed: {}", self.addr),
-                _ => error!("Failed to write to TCP client: {e}"),
+                | ErrorKind::ConnectionAborted => info!("Client closed: {}", self.addr),
+                _ => info!("Client dropped (write error: {e}): {}", self.addr),
             }
 
-            self.sock.shutdown(Shutdown::Both)?;
             return Err(io::Error::from(ErrorKind::BrokenPipe));
         }
 
