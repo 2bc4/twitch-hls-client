@@ -12,7 +12,7 @@
 
 ### Usage
 #### Watching
-Provide a player to output the stream to with `-p`, a channel to watch, and a stream quality.
+Provide a player to output the stream to with `-p`, a channel, and a stream quality.
 
 Example:
 ```
@@ -29,7 +29,7 @@ AV: 03:57:23 / 03:57:23 (100%) A-V:  0.000
 ```
 
 #### Recording
-Provide a file path to output the stream to with `-r`, a channel to watch, and a stream quality.
+Provide a file path to output the stream to with `-r`, a channel, and a stream quality.
 
 Example:
 ```
@@ -38,7 +38,24 @@ Fetching playlist for channel twitchchannel
 Recording to: recording.ts
 ```
 
-You can also use `-p` and `-r` at the same time.<br/>
+#### TCP server
+Provide an address and port to listen on with `-t`, a channel, and a stream quality:
+
+Example:
+```
+$ twitch-hls-client -t 127.0.0.1:8080 twitchchannel best
+Fetching playlist for channel twitchchannel
+Listening on: 127.0.0.1:8080
+```
+
+Example watching with mpv:
+```
+$ mpv tcp://127.0.0.1:8080
+```
+
+----------
+
+You can also use any combination of outputs at the same time.<br/>
 That is the bare minimum, but there are many more options which can be viewed [here](src/usage) or by passing `--help`.
 
 ### Ad blocking playlist proxies
@@ -78,7 +95,9 @@ Depending on your platform this will look for the config file at the following l
 ### Installing
 There are standalone binaries built by GitHub for Linux and Windows [here](https://github.com/2bc4/twitch-hls-client/releases/latest).
 
-Alternatively, you can build it yourself by installing the [Rust toolchain](https://rustup.rs) and then running:
+
+### Building
+Install the [Rust toolchain](https://rustup.rs) and then run:
 ```
 cargo install --git https://github.com/2bc4/twitch-hls-client.git
 ```
