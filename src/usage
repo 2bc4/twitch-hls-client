@@ -40,7 +40,9 @@ Output options:
     TCP server options:
       -t <ADDRESS:PORT>
               Listen on <ADDRESS:PORT> and output stream to connected TCP clients.
-              Clients can connect and disconnect at any time.
+              Clients may connect or disconnect at any time.
+              If there are no clients connected and it is the only output, then
+              segment fetching will be paused until a client connects.
 
 HLS options:
   -s <URL1,URL2>
