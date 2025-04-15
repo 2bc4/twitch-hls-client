@@ -10,7 +10,7 @@ use std::{
 use anyhow::{Context, Result};
 use log::{debug, info};
 
-use super::{MediaPlaylist, OfflineError, media_playlist::QueueRange, worker::Worker};
+use super::{MediaPlaylist, media_playlist::QueueRange, worker::Worker};
 use crate::{
     http::{Agent, Url},
     output::{Output, Writer},
@@ -64,7 +64,6 @@ impl Handler {
                     debug!("Processing segment:\n{segment:?}");
                     match segment {
                         Segment::Normal(_, url) | Segment::Prefetch(url) => self.dispatch(url)?,
-                        Segment::End => self.stop()?,
                     }
                 }
 
@@ -85,7 +84,6 @@ impl Handler {
                         duration.sleep(time.elapsed());
                     }
                     Segment::Prefetch(url) => self.dispatch(url)?,
-                    Segment::End => self.stop()?,
                 }
             }
             QueueRange::Empty => {
@@ -122,11 +120,6 @@ impl Handler {
         Ok(())
     }
 
-    fn stop(&mut self) -> Result<()> {
-        self.join_worker()?;
-        Err(OfflineError.into())
-    }
-
     fn join_worker(&mut self) -> Result<Writer> {
         self.worker
             .take()
@@ -139,7 +132,6 @@ impl Handler {
 pub enum Segment {
     Normal(Duration, Url),
     Prefetch(Url),
-    End,
 }
 
 #[derive(Default, Copy, Clone, Debug)]

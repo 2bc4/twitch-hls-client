@@ -7,7 +7,7 @@ use anyhow::{Context, Result, ensure};
 use log::{debug, info};
 
 use super::{
-    map_if_offline,
+    OfflineError, map_if_offline,
     segment::{Duration, Segment},
 };
 
@@ -54,19 +54,20 @@ impl MediaPlaylist {
             debug!("Playlist:\n{playlist}");
         }
 
+        if playlist
+            .lines()
+            .next_back()
+            .is_some_and(|l| l.trim() == "#EXT-X-ENDLIST")
+        {
+            return Err(OfflineError.into());
+        }
+
         let mut prefetch_removed = Self::remove_prefetch(&mut self.segments);
         let mut prev_segment_count = self.segments.len();
         let mut total_segments = 0;
         let mut lines = playlist.lines();
         while let Some(line) = lines.next() {
             let Some(split) = line.split_once(':') else {
-                if line.trim() == "#EXT-X-ENDLIST" {
-                    total_segments += 1;
-                    self.segments.push_back(Segment::End);
-
-                    break;
-                }
-
                 continue;
             };
 
@@ -152,7 +153,7 @@ impl MediaPlaylist {
             .rev()
             .find_map(|s| match s {
                 Segment::Normal(duration, _) => Some(duration),
-                Segment::Prefetch(_) | Segment::End => None,
+                Segment::Prefetch(_) => None,
             })
             .copied()
     }
