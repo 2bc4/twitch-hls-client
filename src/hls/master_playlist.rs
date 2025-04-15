@@ -116,6 +116,10 @@ fn fetch_twitch_gql(
     response.retain(|c| c != '\\');
 
     debug!("GQL response: {response}");
+    if response.contains(r#"streamPlaybackAccessToken":null"#) {
+        return Err(OfflineError.into());
+    }
+
     Ok(response)
 }
 
