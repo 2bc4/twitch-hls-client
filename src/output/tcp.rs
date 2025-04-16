@@ -160,7 +160,7 @@ impl Client {
                     }
                 }
             })
-            .unwrap();
+            .map_err(|_| io::Error::other("Failed to spawn TCP client thread"))?;
 
         Ok(Self { handle, sender })
     }

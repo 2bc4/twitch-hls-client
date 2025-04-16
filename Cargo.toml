@@ -12,6 +12,7 @@ repository = "https://github.com/2bc4/twitch-hls-client"
 unsafe_code = "forbid"
 
 [lints.clippy]
+unwrap-used = "deny"
 pedantic = { level = "warn", priority = -1 }
 nursery = { level = "warn", priority = -1 }
 module-name-repetitions = "allow"
