@@ -46,6 +46,7 @@ Example:
 $ twitch-hls-client -t 127.0.0.1:8080 twitchchannel best
 Fetching playlist for channel twitchchannel
 Listening on: 127.0.0.1:8080
+Waiting for outputs...
 ```
 
 Example watching with mpv:

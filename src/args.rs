@@ -1,4 +1,7 @@
-use std::{borrow::Cow, env, error::Error, fmt::Display, fs, path::Path, process, str::FromStr};
+use std::{
+    borrow::Cow, env, error::Error, fmt::Display, fs, path::Path, process, str::FromStr,
+    time::Duration,
+};
 
 use anyhow::{Context, Result, bail};
 use pico_args::Arguments;
@@ -91,6 +94,8 @@ impl Parser {
         self.resolve(dst, arg, cfg_key, f)
     }
 
+    /* These types should eventually just be wrapped with a FromStr impl */
+
     pub fn parse_opt_string(&mut self, dst: &mut Option<String>, key: &'static str) -> Result<()> {
         let arg = self.parser.opt_value_from_fn(key, Self::opt_string_impl)?;
         self.resolve(dst, arg, key, Self::opt_string_impl)
@@ -123,6 +128,13 @@ impl Parser {
     ) -> Result<()> {
         let arg = self.parser.opt_value_from_fn(key, Self::cow_string_impl)?;
         self.resolve(dst, arg, cfg_key, Self::cow_string_impl)
+    }
+
+    pub fn parse_duration(&mut self, dst: &mut Duration, key: &'static str) -> Result<()> {
+        let f = |a: &str| Ok(Duration::try_from_secs_f64(a.parse()?)?);
+
+        let arg = self.parser.opt_value_from_fn(key, f)?;
+        self.resolve(dst, arg, key, f)
     }
 
     fn resolve<T, E>(

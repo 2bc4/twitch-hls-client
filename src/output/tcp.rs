@@ -1,6 +1,13 @@
 use std::{
     io::{self, ErrorKind, Write},
     net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs},
+    ops::Deref,
+    sync::{
+        Arc,
+        mpsc::{self, Receiver, Sender}, //change to mpmc when stabilized
+    },
+    thread::{self, JoinHandle},
+    time::Duration,
 };
 
 use anyhow::{Context, Result, bail};
@@ -9,9 +16,19 @@ use log::{error, info};
 use super::Output;
 use crate::args::{Parse, Parser};
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct Args {
     addr: Option<SocketAddr>,
+    client_timeout: Duration,
+}
+
+impl Default for Args {
+    fn default() -> Self {
+        Self {
+            addr: Option::default(),
+            client_timeout: Duration::from_secs(30),
+        }
+    }
 }
 
 impl Parse for Args {
@@ -22,6 +39,7 @@ impl Parse for Args {
                 None => bail!("Invalid socket address: {arg}"),
             }
         })?;
+        parser.parse_duration(&mut self.client_timeout, "--tcp-client-timeout")?;
 
         Ok(())
     }
@@ -30,6 +48,7 @@ impl Parse for Args {
 pub struct Tcp {
     listener: TcpListener,
     clients: Vec<Client>,
+    client_timeout: Duration,
 
     header: Option<Box<[u8]>>,
 }
@@ -62,8 +81,8 @@ impl Write for Tcp {
     }
 
     fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
-        self.clients
-            .retain_mut(|client| client.write_all(buf).is_ok());
+        let data: ClientData = buf.into();
+        self.clients.retain_mut(|client| client.send(data.clone()));
 
         Ok(())
     }
@@ -82,6 +101,7 @@ impl Tcp {
         Ok(Some(Self {
             listener,
             clients: Vec::default(),
+            client_timeout: args.client_timeout,
             header: Option::default(),
         }))
     }
@@ -91,9 +111,9 @@ impl Tcp {
             Ok((sock, addr)) => {
                 info!("Client accepted: {addr}");
 
-                let mut client = Client::new(sock, addr)?;
+                let client = Client::new(sock, addr, self.client_timeout)?;
                 if let Some(header) = &self.header {
-                    if client.write_all(header).is_err() {
+                    if !client.send(header.into()) {
                         return Ok(());
                     }
                 }
@@ -109,38 +129,66 @@ impl Tcp {
 }
 
 struct Client {
-    sock: TcpStream,
-    addr: SocketAddr,
-}
-
-impl Write for Client {
-    fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
-        unreachable!();
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        unreachable!();
-    }
-
-    fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
-        if let Err(e) = self.sock.write_all(buf) {
-            match e.kind() {
-                ErrorKind::BrokenPipe
-                | ErrorKind::ConnectionReset
-                | ErrorKind::ConnectionAborted => info!("Client closed: {}", self.addr),
-                _ => info!("Client dropped (write error: {e}): {}", self.addr),
-            }
-
-            return Err(io::Error::from(ErrorKind::BrokenPipe));
-        }
-
-        Ok(())
-    }
+    handle: JoinHandle<()>,
+    sender: Sender<ClientData>,
 }
 
 impl Client {
-    pub fn new(sock: TcpStream, addr: SocketAddr) -> io::Result<Self> {
+    fn new(mut sock: TcpStream, addr: SocketAddr, timeout: Duration) -> io::Result<Self> {
         sock.set_nodelay(true)?;
-        Ok(Self { sock, addr })
+        sock.set_write_timeout(Some(timeout))?;
+
+        let (sender, receiver): (Sender<ClientData>, Receiver<ClientData>) = mpsc::channel();
+        let handle = thread::Builder::new()
+            .name("tcp client".to_owned())
+            .spawn(move || {
+                loop {
+                    let Ok(data) = receiver.recv() else {
+                        return;
+                    };
+
+                    if let Err(e) = sock.write_all(&data) {
+                        match e.kind() {
+                            ErrorKind::BrokenPipe
+                            | ErrorKind::ConnectionReset
+                            | ErrorKind::ConnectionAborted => info!("Client disconnected: {addr}"),
+                            ErrorKind::WouldBlock => info!("Client dropped (timed out): {addr}"),
+                            _ => info!("Client dropped (write error: {e}): {addr}"),
+                        }
+
+                        return;
+                    }
+                }
+            })
+            .unwrap();
+
+        Ok(Self { handle, sender })
+    }
+
+    fn send(&self, buf: ClientData) -> bool {
+        !self.handle.is_finished() && self.sender.send(buf).is_ok()
+    }
+}
+
+#[derive(Clone)]
+struct ClientData(Arc<Box<[u8]>>);
+
+impl From<&[u8]> for ClientData {
+    fn from(data: &[u8]) -> Self {
+        Self(Arc::new(data.into()))
+    }
+}
+
+impl From<&Box<[u8]>> for ClientData {
+    fn from(data: &Box<[u8]>) -> Self {
+        Self(Arc::new(data.clone()))
+    }
+}
+
+impl Deref for ClientData {
+    type Target = Arc<Box<[u8]>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }

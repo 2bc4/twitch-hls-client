@@ -43,6 +43,9 @@ Output options:
               Clients may connect or disconnect at any time.
               If there are no clients connected and it is the only output, then
               segment fetching will be paused until a client connects.
+          --tcp-client-timeout <SECONDS>
+              TCP client write timeout in seconds. [default: 30]
+              Set to 0 to disable.
 
 HLS options:
   -s <URL1,URL2>
@@ -83,4 +86,5 @@ HTTP options:
       --http-retries <COUNT>
           Retry HTTP requests <COUNT> times before giving up [default: 3]
       --http-timeout <SECONDS>
-          HTTP request timeout in seconds [default: 10]
+          HTTP request timeout in seconds. [default: 10]
+          Set to 0 to disable.

@@ -67,9 +67,7 @@ impl Parse for Args {
         parser.parse_switch(&mut self.force_https, "--force-https")?;
         parser.parse_switch(&mut self.force_ipv4, "--force-ipv4")?;
         parser.parse(&mut self.retries, "--http-retries")?;
-        parser.parse_fn(&mut self.timeout, "--http-timeout", |a| {
-            Ok(Duration::try_from_secs_f64(a.parse()?)?)
-        })?;
+        parser.parse_duration(&mut self.timeout, "--http-timeout")?;
         parser.parse_cow_string(&mut self.user_agent, "--user-agent")?;
 
         Ok(())

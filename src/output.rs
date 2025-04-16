@@ -7,7 +7,7 @@ pub use player::Player;
 use std::io::{self, ErrorKind::Other, Write};
 
 use anyhow::{Result, ensure};
-use log::debug;
+use log::{debug, info};
 
 use file::{Args as FileArgs, File};
 use player::Args as PlayerArgs;
@@ -76,7 +76,7 @@ impl Output for Writer {
     fn wait_for_output(&mut self) -> io::Result<()> {
         debug_assert!(self.tcp.is_some() && self.player.is_none() && self.file.is_none());
 
-        debug!("Waiting for output...");
+        info!("Waiting for outputs...");
         self.tcp
             .as_mut()
             .expect("Missing TCP output while waiting for output")
