@@ -44,8 +44,7 @@ Output options:
               If there are no clients connected and it is the only output, then
               segment fetching will be paused until a client connects.
           --tcp-client-timeout <SECONDS>
-              TCP client write timeout in seconds. [default: 30]
-              Set to 0 to disable.
+              TCP client write timeout in seconds [default: 30]
 
 HLS options:
   -s <URL1,URL2>
@@ -80,7 +79,7 @@ HLS options:
           Write to the playlist cache and exit.
           Requires --playlist-cache-dir. Cannot be used with --use-cache-only.
       --force-playlist-url <URL>
-          Skip fetching/parsing the variant playlist URL and use this URL instead
+          Skip fetching/parsing the variant playlist URL and use specified URL instead
 
 HTTP options:
       --force-https
@@ -92,5 +91,4 @@ HTTP options:
       --http-retries <COUNT>
           Retry HTTP requests <COUNT> times before giving up [default: 3]
       --http-timeout <SECONDS>
-          HTTP request timeout in seconds. [default: 10]
-          Set to 0 to disable.
+          HTTP request timeout in seconds [default: 10]
