@@ -8,11 +8,12 @@ pub use master_playlist::fetch_playlist;
 pub use media_playlist::MediaPlaylist;
 pub use segment::{Handler, ResetError};
 
-use anyhow::{Context, Result};
 use std::{
     borrow::Cow,
     fmt::{self, Debug, Display, Formatter},
 };
+
+use anyhow::{Context, Result, ensure};
 
 use crate::{
     args::{Parse, Parser},
@@ -39,6 +40,8 @@ pub struct Args {
     codecs: Cow<'static, str>,
     never_proxy: Option<Vec<String>>,
     playlist_cache_dir: Option<String>,
+    use_cache_only: bool,
+    write_cache_only: bool,
     force_playlist_url: Option<Url>,
     channel: String,
     quality: Option<String>,
@@ -55,6 +58,8 @@ impl Default for Args {
             auth_token: Option::default(),
             never_proxy: Option::default(),
             playlist_cache_dir: Option::default(),
+            use_cache_only: bool::default(),
+            write_cache_only: bool::default(),
             force_playlist_url: Option::default(),
             channel: String::default(),
             quality: Option::default(),
@@ -73,6 +78,8 @@ impl Debug for Args {
             .field("codecs", &self.codecs)
             .field("never_proxy", &self.never_proxy)
             .field("playlist_cache_dir", &self.playlist_cache_dir)
+            .field("use_cache_only", &self.use_cache_only)
+            .field("write_cache_only", &self.write_cache_only)
             .field("force_playlist_url", &self.force_playlist_url)
             .field("channel", &self.channel)
             .field("quality", &self.quality)
@@ -90,11 +97,25 @@ impl Parse for Args {
         parser.parse_cow_string(&mut self.codecs, "--codecs")?;
         parser.parse_fn(&mut self.never_proxy, "--never-proxy", Self::split_comma)?;
         parser.parse_opt_string(&mut self.playlist_cache_dir, "--playlist-cache-dir")?;
+        parser.parse_switch(&mut self.use_cache_only, "--use-cache-only")?;
+        parser.parse_switch(&mut self.write_cache_only, "--write-cache-only")?;
         parser.parse_fn(
             &mut self.force_playlist_url,
             "--force-playlist-url",
             |arg| Ok(Some(arg.to_owned().into())),
         )?;
+
+        if self.use_cache_only || self.write_cache_only {
+            ensure!(
+                self.playlist_cache_dir.is_some(),
+                "--playlist-cache-dir not configured"
+            );
+        }
+
+        ensure!(
+            !(self.use_cache_only && self.write_cache_only),
+            "--use-cache-only and --write-cache-only cannot be used together"
+        );
 
         let channel = parser
             .parse_free_required()

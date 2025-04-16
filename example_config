@@ -28,6 +28,8 @@ auth-token=0123456789abcdef
 codecs=av1,h265,h264
 never-proxy=channel1,channel2,channel3
 playlist-cache-dir=/path/to/cache/dir
+use-cache-only=false
+write-cache-only=false
 force-playlist-url=http://example-playlist-url.invalid
 
 # HTTP

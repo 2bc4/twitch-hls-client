@@ -17,6 +17,7 @@ pedantic = { level = "warn", priority = -1 }
 nursery = { level = "warn", priority = -1 }
 module-name-repetitions = "allow"
 ref-option = "allow"
+struct_excessive_bools = "allow"
 
 [profile.release]
 codegen-units = 1

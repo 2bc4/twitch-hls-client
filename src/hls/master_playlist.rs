@@ -5,7 +5,7 @@ use std::{
     str::{self, Utf8Error},
 };
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use getrandom::getrandom;
 use log::{debug, error, info};
 
@@ -24,8 +24,15 @@ pub fn fetch_playlist(mut args: Args, agent: &Agent) -> Result<Option<Connection
 
     let cache = Cache::new(&args.playlist_cache_dir, &args.channel, &args.quality);
     if let Some(conn) = cache.as_ref().and_then(|c| c.get(agent)) {
+        if args.write_cache_only {
+            info!("Playlist URL is already cached, exiting...");
+            return Ok(None);
+        }
+
         info!("Using cached playlist URL");
         return Ok(Some(conn));
+    } else if args.use_cache_only {
+        bail!("Playlist URL not found in cache");
     }
 
     info!("Fetching playlist for channel {}", &args.channel);
@@ -61,6 +68,11 @@ pub fn fetch_playlist(mut args: Args, agent: &Agent) -> Result<Option<Connection
 
     if let Some(cache) = &cache {
         cache.create(&url);
+
+        if args.write_cache_only {
+            info!("Playlist cache written, exiting...");
+            return Ok(None);
+        }
     }
 
     Ok(Some(Connection::new(url, agent.text())))

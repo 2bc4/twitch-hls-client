@@ -73,6 +73,12 @@ HLS options:
       --playlist-cache-dir <PATH>
           Cache the variant playlist URL to a file in the specified directory.
           If the playlist is still available it will be used instead of fetching a new one.
+      --use-cache-only
+          Exit if the variant playlist URL is not already cached.
+          Requires --playlist-cache-dir. Cannot be used with --write-cache-only.
+      --write-cache-only
+          Write to the playlist cache and exit.
+          Requires --playlist-cache-dir. Cannot be used with --use-cache-only.
       --force-playlist-url <URL>
           Skip fetching/parsing the variant playlist URL and use this URL instead
 
