@@ -25,8 +25,8 @@ pub struct Args {
 impl Default for Args {
     fn default() -> Self {
         Self {
-            addr: Option::default(),
             client_timeout: Duration::from_secs(30),
+            addr: Option::default(),
         }
     }
 }
@@ -100,8 +100,8 @@ impl Tcp {
         info!("Listening on: {addr}");
         Ok(Some(Self {
             listener,
-            clients: Vec::default(),
             client_timeout: args.client_timeout,
+            clients: Vec::default(),
             header: Option::default(),
         }))
     }
@@ -113,7 +113,7 @@ impl Tcp {
 
                 let client = Client::new(sock, addr, self.client_timeout)?;
                 if let Some(header) = &self.header {
-                    if !client.send(header.into()) {
+                    if !client.send(header.as_ref().into()) {
                         return Ok(());
                     }
                 }
@@ -165,28 +165,22 @@ impl Client {
         Ok(Self { handle, sender })
     }
 
-    fn send(&self, buf: ClientData) -> bool {
-        !self.handle.is_finished() && self.sender.send(buf).is_ok()
+    fn send(&self, data: ClientData) -> bool {
+        !self.handle.is_finished() && self.sender.send(data).is_ok()
     }
 }
 
 #[derive(Clone)]
-struct ClientData(Arc<Box<[u8]>>);
+struct ClientData(Arc<[u8]>);
 
 impl From<&[u8]> for ClientData {
     fn from(data: &[u8]) -> Self {
-        Self(Arc::new(data.into()))
-    }
-}
-
-impl From<&Box<[u8]>> for ClientData {
-    fn from(data: &Box<[u8]>) -> Self {
-        Self(Arc::new(data.clone()))
+        Self(data.into())
     }
 }
 
 impl Deref for ClientData {
-    type Target = Arc<Box<[u8]>>;
+    type Target = Arc<[u8]>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
