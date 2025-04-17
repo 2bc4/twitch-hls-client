@@ -1,7 +1,6 @@
 use std::{
     io::{self, ErrorKind, Write},
     net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs},
-    ops::Deref,
     sync::{
         Arc,
         mpsc::{self, Receiver, Sender}, //change to mpmc when stabilized
@@ -45,12 +44,13 @@ impl Parse for Args {
     }
 }
 
+type ClientData = Arc<[u8]>;
+
 pub struct Tcp {
     listener: TcpListener,
-    clients: Vec<Client>,
+    clients: Vec<ClientThread>,
     client_timeout: Duration,
-
-    header: Option<Box<[u8]>>,
+    header: Option<ClientData>,
 }
 
 impl Output for Tcp {
@@ -111,9 +111,9 @@ impl Tcp {
             Ok((sock, addr)) => {
                 info!("Client accepted: {addr}");
 
-                let client = Client::new(sock, addr, self.client_timeout)?;
+                let client = ClientThread::spawn(sock, addr, self.client_timeout)?;
                 if let Some(header) = &self.header {
-                    if !client.send(header.as_ref().into()) {
+                    if !client.send(header.clone()) {
                         return Ok(());
                     }
                 }
@@ -121,20 +121,20 @@ impl Tcp {
                 self.clients.push(client);
             }
             Err(e) if e.kind() == ErrorKind::WouldBlock => (),
-            Err(e) => error!("Failed to accept client: {e}"),
+            Err(e) => error!("Failed to accept TCP client: {e}"),
         }
 
         Ok(())
     }
 }
 
-struct Client {
+struct ClientThread {
     handle: JoinHandle<()>,
     sender: Sender<ClientData>,
 }
 
-impl Client {
-    fn new(mut sock: TcpStream, addr: SocketAddr, timeout: Duration) -> io::Result<Self> {
+impl ClientThread {
+    fn spawn(mut sock: TcpStream, addr: SocketAddr, timeout: Duration) -> io::Result<Self> {
         sock.set_nodelay(true)?;
         sock.set_write_timeout(Some(timeout))?;
 
@@ -167,22 +167,5 @@ impl Client {
 
     fn send(&self, data: ClientData) -> bool {
         !self.handle.is_finished() && self.sender.send(data).is_ok()
-    }
-}
-
-#[derive(Clone)]
-struct ClientData(Arc<[u8]>);
-
-impl From<&[u8]> for ClientData {
-    fn from(data: &[u8]) -> Self {
-        Self(data.into())
-    }
-}
-
-impl Deref for ClientData {
-    type Target = Arc<[u8]>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
     }
 }
