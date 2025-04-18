@@ -45,7 +45,7 @@ in
       homepage = "https://github.com/2bc4/twitch-hls-client";
       description = "A minimal command line client for watching/recording Twitch streams";
       license = lib.licenses.gpl3;
-      platforms = lib.platforms.linux;
+      platforms = lib.platforms.all;
       mainProgram = "twitch-hls-client";
     };
   }
