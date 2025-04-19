@@ -66,27 +66,14 @@ $ mpv tcp://127.0.0.1:8080
 You can also use any combination of outputs at the same time.<br/>
 That is the bare minimum, but there are many more options which can be viewed [here](src/usage) or by passing `--help`.
 
-### Ad blocking playlist proxies
-These servers can be used to block ads with `-s`. They work by requesting the master playlist from a country where Twitch doesn't serve ads:
 
-[TTV-LOL-PRO](https://github.com/younesaassila/ttv-lol-pro/discussions/37#discussioncomment-5426032) v1 servers:
-- `https://lb-eu.cdn-perfprod.com/live/[channel]` (Europe)
-- `https://lb-eu2.cdn-perfprod.com/live/[channel]` (Europe 2)
-- `https://lb-eu4.cdn-perfprod.com/live/[channel]` (Europe 4)
-- `https://lb-eu5.cdn-perfprod.com/live/[channel]` (Europe 5)
-- `https://lb-na.cdn-perfprod.com/live/[channel]` (NA)
-- `https://lb-as.cdn-perfprod.com/live/[channel]` (Asia)
-- `https://lb-sa.cdn-perfprod.com/live/[channel]` (SA)
-
-[luminous-ttv](https://github.com/AlyoshaVasilieva/luminous-ttv) servers:
-- `https://eu.luminous.dev/live/[channel]` (Europe)
-- `https://eu2.luminous.dev/live/[channel]` (Europe 2)
-- `https://as.luminous.dev/live/[channel]` (Asia)
-
-### Using your turbo/subscriber token
+### Using turbo/subscriber token
 With `--auth-token` you can set an OAuth token to be used when fetching the master playlist. Twitch won't serve ads if the Twitch account associated with the OAuth token is subscribed to turbo or the specific channel you're watching.
 
 To find your token, navigate to the Twitch website in a browser and open your browser's devtools (press F12). Click the `Application` (Chrome) or `Storage` (Firefox) tab and find `https://www.twitch.tv` under `Cookies` on the left. Your token is the string of characters beside the cookie named `auth-token`.
+
+### Ad blocking
+You can use `-s` to request the master playlist from a proxy server, which bypasses ads by either using a turbo token or requesting the playlist from a country where Twitch doesn't serve ads. A list of known public servers can be found [here](https://github.com/2bc4/twitch-hls-client/wiki/Known-public-playlist-proxy-servers).
 
 ### Config file
 Almost every option can also be set via config file. There is an example config file with all possible values set [here](example_config).
@@ -116,7 +103,7 @@ cargo install twitch-hls-client
 
 Building requires a C/C++ compiler for ring (TLS cryptographic primitives). You should prefer clang over gcc due to a gcc bug resulting in worse TLS performance.
 
-You can trim down and optimize the binary more by building with `build-std` and `panic_immediate_abort`. This can be seen in the [release build action](https://github.com/2bc4/twitch-hls-client/blob/master/.github/workflows/release.yaml#L56).
+You can further trim down and optimize the binary by building with `build-std` and `panic_immediate_abort`. This can be seen in the [release build action](https://github.com/2bc4/twitch-hls-client/blob/master/.github/workflows/release.yaml#L56).
 
 #### NixOS
 
