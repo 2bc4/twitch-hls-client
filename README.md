@@ -38,6 +38,13 @@ Fetching playlist for channel twitchchannel
 Recording to: recording.ts
 ```
 
+The recorded file will be in raw MPEG-TS format.
+While you can view it directly, you may want to remux it to a more suitable container.
+For example with ffmpeg:
+```
+$ ffmpeg -i recording.ts -codec copy recording.mkv
+```
+
 #### TCP server
 Provide an address and port to listen on with `-t`, a channel, and a stream quality:
 
