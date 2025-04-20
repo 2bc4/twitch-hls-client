@@ -1,4 +1,4 @@
-Usage: twitch-hls-client [OPTIONS] [-p <PATH> -r <PATH>] <CHANNEL> <QUALITY>
+Usage: twitch-hls-client [OPTIONS] [-p <PATH> -r <PATH> -t <ADDRESS:PORT>] <CHANNEL> <QUALITY>
 
 Arguments:
   <CHANNEL>
