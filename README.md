@@ -1,5 +1,6 @@
 ## twitch-hls-client
 [![crates.io](https://img.shields.io/crates/v/twitch-hls-client.svg)](https://crates.io/crates/twitch-hls-client)
+[![nixpkgs unstable](https://repology.org/badge/version-for-repo/nix_unstable/twitch-hls-client.svg?header=nixpkgs%20unstable)](https://search.nixos.org/packages?channel=unstable&show=twitch-hls-client)
 [![license](https://img.shields.io/github/license/2bc4/twitch-hls-client.svg)](LICENSE)
 
 `twitch-hls-client` is a minimal command line client for watching/recording Twitch streams
