@@ -3,9 +3,9 @@ use std::{
     net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs},
     sync::{
         Arc,
-        mpsc::{self, Receiver, Sender}, //change to mpmc when stabilized
+        mpsc::{self, Sender}, //change to mpmc when stabilized
     },
-    thread::{self, JoinHandle},
+    thread::Builder as ThreadBuilder,
     time::Duration,
 };
 
@@ -44,13 +44,11 @@ impl Parse for Args {
     }
 }
 
-type ClientData = Arc<[u8]>;
-
 pub struct Tcp {
     listener: TcpListener,
     clients: Vec<ClientThread>,
     client_timeout: Duration,
-    header: Option<ClientData>,
+    header: Option<Arc<[u8]>>,
 }
 
 impl Output for Tcp {
@@ -81,7 +79,7 @@ impl Write for Tcp {
     }
 
     fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
-        let data: ClientData = buf.into();
+        let data: Arc<[u8]> = buf.into();
         self.clients.retain_mut(|client| client.send(data.clone()));
 
         Ok(())
@@ -129,8 +127,7 @@ impl Tcp {
 }
 
 struct ClientThread {
-    handle: JoinHandle<()>,
-    sender: Sender<ClientData>,
+    sender: Sender<Arc<[u8]>>,
 }
 
 impl ClientThread {
@@ -138,8 +135,8 @@ impl ClientThread {
         sock.set_nodelay(true)?;
         sock.set_write_timeout(Some(timeout))?;
 
-        let (sender, receiver): (Sender<ClientData>, Receiver<ClientData>) = mpsc::channel();
-        let handle = thread::Builder::new()
+        let (sender, receiver) = mpsc::channel::<Arc<[u8]>>();
+        ThreadBuilder::new()
             .name("tcp client".to_owned())
             .spawn(move || {
                 loop {
@@ -160,12 +157,12 @@ impl ClientThread {
                     }
                 }
             })
-            .map_err(|_| io::Error::other("Failed to spawn TCP client thread"))?;
+            .map_err(|e| io::Error::other(format!("Failed to spawn TCP client thread: {e}")))?;
 
-        Ok(Self { handle, sender })
+        Ok(Self { sender })
     }
 
-    fn send(&self, data: ClientData) -> bool {
-        !self.handle.is_finished() && self.sender.send(data).is_ok()
+    fn send(&self, data: Arc<[u8]>) -> bool {
+        self.sender.send(data).is_ok()
     }
 }

@@ -1,7 +1,7 @@
 use std::{
     fmt::{self, Display, Formatter},
-    sync::mpsc::{self, Receiver, Sender},
-    thread::{self, JoinHandle},
+    sync::mpsc::{self, Sender},
+    thread::{Builder as ThreadBuilder, JoinHandle},
 };
 
 use anyhow::{Context, Result};
@@ -30,21 +30,20 @@ enum Reason {
 
 pub struct Worker {
     handle: JoinHandle<Result<Reason>>,
-    url_tx: Sender<Url>,
+    sender: Sender<Url>,
 }
 
 impl Worker {
     pub fn spawn(writer: Writer, agent: Agent) -> Result<Self> {
-        let (url_tx, url_rx): (Sender<Url>, Receiver<Url>) = mpsc::channel();
-
-        let handle = thread::Builder::new()
+        let (sender, receiver) = mpsc::channel::<Url>();
+        let handle = ThreadBuilder::new()
             .name("worker".to_owned())
             .spawn(move || -> Result<Reason> {
                 debug!("Starting");
 
                 let mut request = agent.binary(writer);
                 loop {
-                    let Ok(url) = url_rx.recv() else {
+                    let Ok(url) = receiver.recv() else {
                         debug!("Exiting");
                         return Ok(Reason::Killed);
                     };
@@ -53,7 +52,7 @@ impl Worker {
                         Ok(()) => (),
                         Err(e) if StatusError::is_not_found(&e) => {
                             info!("Segment not found, skipping ahead...");
-                            url_rx.try_iter().for_each(drop);
+                            receiver.try_iter().for_each(drop);
                         }
                         Err(e) => return Err(e),
                     }
@@ -65,11 +64,11 @@ impl Worker {
             })
             .context("Failed to spawn worker")?;
 
-        Ok(Self { handle, url_tx })
+        Ok(Self { handle, sender })
     }
 
     pub fn url(&self, url: Url) -> Result<()> {
-        if self.handle.is_finished() || self.url_tx.send(url).is_err() {
+        if self.sender.send(url).is_err() {
             return Err(DeadError.into());
         }
 
@@ -77,7 +76,7 @@ impl Worker {
     }
 
     pub fn join(self) -> Result<Writer> {
-        drop(self.url_tx);
+        drop(self.sender);
 
         match self.handle.join().expect("Worker panicked") {
             Ok(Reason::Wait(writer)) => Ok(writer),
