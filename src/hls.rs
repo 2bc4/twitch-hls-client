@@ -2,7 +2,6 @@ mod cache;
 mod master_playlist;
 mod media_playlist;
 mod segment;
-mod worker;
 
 pub use master_playlist::fetch_playlist;
 pub use media_playlist::MediaPlaylist;

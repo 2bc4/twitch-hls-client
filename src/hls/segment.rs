@@ -3,16 +3,17 @@ use std::{
     fmt::{self, Display, Formatter},
     mem,
     str::FromStr,
-    thread,
+    sync::mpsc::{self, Sender},
+    thread::{self, Builder as ThreadBuilder, JoinHandle},
     time::{self, Instant},
 };
 
 use anyhow::{Context, Result};
 use log::{debug, info};
 
-use super::{MediaPlaylist, media_playlist::QueueRange, worker::Worker};
+use super::{MediaPlaylist, media_playlist::QueueRange};
 use crate::{
-    http::{Agent, Url},
+    http::{Agent, Method, StatusError, Url},
     output::{Output, Writer},
 };
 
@@ -24,6 +25,17 @@ impl std::error::Error for ResetError {}
 impl Display for ResetError {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         f.write_str("Unhandled segment handler reset")
+    }
+}
+
+#[derive(Debug)]
+pub struct DeadError;
+
+impl std::error::Error for DeadError {}
+
+impl Display for DeadError {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        f.write_str("Worker died unexpectantly")
     }
 }
 
@@ -106,7 +118,12 @@ impl Handler {
             .url(mem::take(url))
             .is_err()
         {
-            match self.join_worker() {
+            match self
+                .worker
+                .take()
+                .expect("Missing worker while joining")
+                .join()
+            {
                 Ok(mut writer) => {
                     writer.wait_for_output()?;
                     self.worker = Some(Worker::spawn(writer, self.agent.clone())?);
@@ -119,12 +136,54 @@ impl Handler {
 
         Ok(())
     }
+}
 
-    fn join_worker(&mut self) -> Result<Writer> {
-        self.worker
-            .take()
-            .expect("Missing worker while joining")
-            .join()
+struct Worker {
+    handle: JoinHandle<Result<Writer>>,
+    sender: Sender<Url>,
+}
+
+impl Worker {
+    fn spawn(writer: Writer, agent: Agent) -> Result<Self> {
+        let (sender, receiver) = mpsc::channel::<Url>();
+        let handle = ThreadBuilder::new()
+            .name("hls worker".to_owned())
+            .spawn(move || -> Result<Writer> {
+                debug!("Starting");
+
+                let mut request = agent.binary(writer);
+                loop {
+                    let Ok(url) = receiver.recv() else {
+                        debug!("Exiting");
+                        return Err(DeadError.into());
+                    };
+
+                    match request.call(Method::Get, &url) {
+                        Ok(()) => (),
+                        Err(e) if StatusError::is_not_found(&e) => {
+                            info!("Segment not found, skipping ahead...");
+                            receiver.try_iter().for_each(drop);
+                        }
+                        Err(e) => return Err(e),
+                    }
+
+                    if request.get_ref().should_wait() {
+                        return Ok(request.into_writer());
+                    }
+                }
+            })
+            .context("Failed to spawn worker")?;
+
+        Ok(Self { handle, sender })
+    }
+
+    fn url(&self, url: Url) -> Result<()> {
+        self.sender.send(url).map_err(|_| DeadError.into())
+    }
+
+    fn join(self) -> Result<Writer> {
+        drop(self.sender);
+        self.handle.join().expect("Worker panicked")
     }
 }
 
