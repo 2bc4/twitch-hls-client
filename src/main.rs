@@ -54,8 +54,6 @@ fn main_loop(mut writer: Writer, mut playlist: MediaPlaylist, agent: Agent) -> R
         if let Err(e) = handler.process(&mut playlist, time) {
             if e.downcast_ref::<ResetError>().is_some() {
                 playlist.reset();
-                handler.reset();
-
                 continue;
             }
 

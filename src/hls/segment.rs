@@ -54,10 +54,6 @@ impl Handler {
         })
     }
 
-    pub const fn reset(&mut self) {
-        self.init = true;
-    }
-
     pub fn process(&mut self, playlist: &mut MediaPlaylist, time: Instant) -> Result<()> {
         let last_duration = playlist
             .last_duration()
@@ -111,27 +107,23 @@ impl Handler {
     }
 
     fn dispatch(&mut self, url: &mut Url) -> Result<()> {
-        if self
+        if !self
             .worker
             .as_mut()
             .expect("Missing worker while sending URL")
-            .url(mem::take(url))
-            .is_err()
+            .send(mem::take(url))
         {
-            match self
+            let mut writer = self
                 .worker
                 .take()
                 .expect("Missing worker while joining")
-                .join()
-            {
-                Ok(mut writer) => {
-                    writer.wait_for_output()?;
-                    self.worker = Some(Worker::spawn(writer, self.agent.clone())?);
+                .join()?;
 
-                    return Err(ResetError.into());
-                }
-                Err(e) => return Err(e),
-            }
+            writer.wait_for_output()?;
+            self.worker = Some(Worker::spawn(writer, self.agent.clone())?);
+
+            self.init = true;
+            return Err(ResetError.into());
         }
 
         Ok(())
@@ -177,8 +169,8 @@ impl Worker {
         Ok(Self { handle, sender })
     }
 
-    fn url(&self, url: Url) -> Result<()> {
-        self.sender.send(url).map_err(|_| DeadError.into())
+    fn send(&self, url: Url) -> bool {
+        self.sender.send(url).is_ok()
     }
 
     fn join(self) -> Result<Writer> {
