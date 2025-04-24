@@ -63,9 +63,7 @@ impl Output for Tcp {
 
     fn wait_for_output(&mut self) -> io::Result<()> {
         self.listener.set_nonblocking(false)?;
-        self.accept()?;
-
-        self.listener.set_nonblocking(true)
+        self.accept()
     }
 }
 
@@ -105,21 +103,22 @@ impl Tcp {
     }
 
     fn accept(&mut self) -> io::Result<()> {
-        match self.listener.accept() {
-            Ok((sock, addr)) => {
-                info!("Client accepted: {addr}");
-
-                let client = ClientThread::spawn(sock, addr, self.client_timeout)?;
-                if let Some(header) = &self.header {
-                    if !client.send(header.clone()) {
-                        return Ok(());
+        for incoming in self.listener.incoming() {
+            match incoming {
+                Ok(sock) => {
+                    let client = ClientThread::spawn(sock, self.client_timeout)?;
+                    if let Some(header) = &self.header {
+                        if !client.send(header.clone()) {
+                            return Ok(());
+                        }
                     }
-                }
 
-                self.clients.push(client);
+                    self.clients.push(client);
+                    self.listener.set_nonblocking(true)?;
+                }
+                Err(e) if e.kind() == ErrorKind::WouldBlock => break,
+                Err(e) => error!("Failed to accept TCP client: {e}"),
             }
-            Err(e) if e.kind() == ErrorKind::WouldBlock => (),
-            Err(e) => error!("Failed to accept TCP client: {e}"),
         }
 
         Ok(())
@@ -131,7 +130,10 @@ struct ClientThread {
 }
 
 impl ClientThread {
-    fn spawn(mut sock: TcpStream, addr: SocketAddr, timeout: Duration) -> io::Result<Self> {
+    fn spawn(mut sock: TcpStream, timeout: Duration) -> io::Result<Self> {
+        let addr = sock.peer_addr()?;
+        info!("Client accepted: {addr}");
+
         sock.set_nodelay(true)?;
         sock.set_write_timeout(Some(timeout))?;
 
