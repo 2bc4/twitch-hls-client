@@ -49,9 +49,28 @@ impl Parser {
         Ok(self.resolve(dst, arg, key, T::from_str)?)
     }
 
+    pub fn parse_opt<T: FromStr>(&mut self, dst: &mut Option<T>, key: &'static str) -> Result<()>
+    where
+        <T as FromStr>::Err: Display + Send + Sync + Error + 'static,
+    {
+        self.parse_fn(dst, key, Self::opt_from_str)
+    }
+
+    pub fn parse_opt_cfg<T: FromStr>(
+        &mut self,
+        dst: &mut Option<T>,
+        key: &'static str,
+        cfg_key: &'static str,
+    ) -> Result<()>
+    where
+        <T as FromStr>::Err: Display + Send + Sync + Error + 'static,
+    {
+        self.parse_fn_cfg(dst, key, cfg_key, Self::opt_from_str)
+    }
+
     pub fn parse_free(&mut self, dst: &mut Option<String>, cfg_key: &'static str) -> Result<()> {
-        let arg = self.parser.opt_free_from_fn(Self::opt_string_impl)?;
-        self.resolve(dst, arg, cfg_key, Self::opt_string_impl)
+        let arg = self.parser.opt_free_from_fn(Self::opt_from_str)?;
+        self.resolve(dst, arg, cfg_key, Self::opt_from_str)
     }
 
     pub fn parse_free_required(&mut self) -> Result<String> {
@@ -95,21 +114,6 @@ impl Parser {
     }
 
     /* These types should eventually just be wrapped with a FromStr impl */
-
-    pub fn parse_opt_string(&mut self, dst: &mut Option<String>, key: &'static str) -> Result<()> {
-        let arg = self.parser.opt_value_from_fn(key, Self::opt_string_impl)?;
-        self.resolve(dst, arg, key, Self::opt_string_impl)
-    }
-
-    pub fn parse_opt_string_cfg(
-        &mut self,
-        dst: &mut Option<String>,
-        key: &'static str,
-        cfg_key: &'static str,
-    ) -> Result<()> {
-        let arg = self.parser.opt_value_from_fn(key, Self::opt_string_impl)?;
-        self.resolve(dst, arg, cfg_key, Self::opt_string_impl)
-    }
 
     pub fn parse_cow_string(
         &mut self,
@@ -162,12 +166,13 @@ impl Parser {
         Ok(())
     }
 
-    #[allow(clippy::unnecessary_wraps, reason = "function pointer")]
-    fn opt_string_impl(arg: &str) -> Result<Option<String>> {
-        Ok(Some(arg.to_owned()))
+    fn opt_from_str<T: FromStr>(arg: &str) -> Result<Option<T>>
+    where
+        <T as FromStr>::Err: Display + Send + Sync + Error + 'static,
+    {
+        Ok(Some(arg.parse()?))
     }
 
-    #[allow(clippy::unnecessary_wraps, reason = "function pointer")]
     fn cow_string_impl(arg: &str) -> Result<Cow<'static, str>> {
         Ok(arg.to_owned().into())
     }

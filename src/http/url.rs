@@ -1,6 +1,8 @@
 use std::{
+    convert::Infallible,
     fmt::{self, Display, Formatter},
-    ops::{Deref, DerefMut},
+    ops::Deref,
+    str::FromStr,
 };
 
 use anyhow::{Context, Result, bail};
@@ -29,17 +31,22 @@ impl From<String> for Url {
     }
 }
 
+impl FromStr for Url {
+    type Err = Infallible;
+
+    fn from_str(inner: &str) -> Result<Self, Self::Err> {
+        Ok(Self {
+            scheme: Scheme::new(inner),
+            inner: inner.to_owned(),
+        })
+    }
+}
+
 impl Deref for Url {
     type Target = String;
 
     fn deref(&self) -> &Self::Target {
         &self.inner
-    }
-}
-
-impl DerefMut for Url {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
     }
 }
 

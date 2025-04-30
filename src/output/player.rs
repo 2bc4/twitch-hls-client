@@ -43,7 +43,7 @@ impl Default for Args {
 
 impl Parse for Args {
     fn parse(&mut self, parser: &mut Parser) -> Result<()> {
-        parser.parse_opt_string_cfg(&mut self.path, "-p", "player")?;
+        parser.parse_opt_cfg(&mut self.path, "-p", "player")?;
         parser.parse_cow_string_cfg(&mut self.pargs, "-a", "player-args")?;
         parser.parse_switch_or(&mut self.quiet, "-q", "--quiet")?;
         parser.parse_switch(&mut self.no_kill, "--no-kill")?;

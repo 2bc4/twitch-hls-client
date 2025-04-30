@@ -16,8 +16,9 @@ unwrap-used = "deny"
 pedantic = { level = "warn", priority = -1 }
 nursery = { level = "warn", priority = -1 }
 module-name-repetitions = "allow"
-ref-option = "allow"
-struct_excessive_bools = "allow"
+ref-option = "allow"              # args
+struct_excessive_bools = "allow"  # args
+unnecessary_wraps = "allow"       # args
 
 [profile.release]
 codegen-units = 1

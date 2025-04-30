@@ -91,18 +91,14 @@ impl Parse for Args {
         parser.parse_fn_cfg(&mut self.servers, "-s", "servers", Self::split_comma)?;
         parser.parse_switch(&mut self.print_streams, "--print-streams")?;
         parser.parse_switch(&mut self.no_low_latency, "--no-low-latency")?;
-        parser.parse_opt_string(&mut self.client_id, "--client-id")?;
-        parser.parse_opt_string(&mut self.auth_token, "--auth-token")?;
+        parser.parse_opt(&mut self.client_id, "--client-id")?;
+        parser.parse_opt(&mut self.auth_token, "--auth-token")?;
         parser.parse_cow_string(&mut self.codecs, "--codecs")?;
         parser.parse_fn(&mut self.never_proxy, "--never-proxy", Self::split_comma)?;
-        parser.parse_opt_string(&mut self.playlist_cache_dir, "--playlist-cache-dir")?;
+        parser.parse_opt(&mut self.playlist_cache_dir, "--playlist-cache-dir")?;
         parser.parse_switch(&mut self.use_cache_only, "--use-cache-only")?;
         parser.parse_switch(&mut self.write_cache_only, "--write-cache-only")?;
-        parser.parse_fn(
-            &mut self.force_playlist_url,
-            "--force-playlist-url",
-            |arg| Ok(Some(arg.to_owned().into())),
-        )?;
+        parser.parse_opt(&mut self.force_playlist_url, "--force-playlist-url")?;
 
         if self.use_cache_only || self.write_cache_only {
             ensure!(
@@ -141,7 +137,6 @@ impl Parse for Args {
 }
 
 impl Args {
-    #[allow(clippy::unnecessary_wraps, reason = "function pointer")]
     fn split_comma<T: for<'a> From<&'a str>>(arg: &str) -> Result<Option<Vec<T>>> {
         Ok(Some(arg.split(',').map(T::from).collect()))
     }
