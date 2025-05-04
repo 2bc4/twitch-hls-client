@@ -8,7 +8,7 @@ use std::{
     time::{self, Instant},
 };
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use log::{debug, info};
 
 use super::{MediaPlaylist, media_playlist::QueueRange};
@@ -25,17 +25,6 @@ impl std::error::Error for ResetError {}
 impl Display for ResetError {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         f.write_str("Unhandled segment handler reset")
-    }
-}
-
-#[derive(Debug)]
-pub struct DeadError;
-
-impl std::error::Error for DeadError {}
-
-impl Display for DeadError {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        f.write_str("Worker died unexpectantly")
     }
 }
 
@@ -141,13 +130,10 @@ impl Worker {
         let handle = ThreadBuilder::new()
             .name("hls worker".to_owned())
             .spawn(move || -> Result<Writer> {
-                debug!("Starting");
-
                 let mut request = agent.binary(writer);
                 loop {
                     let Ok(url) = receiver.recv() else {
-                        debug!("Exiting");
-                        return Err(DeadError.into());
+                        bail!("Worker died unexpectantly");
                     };
 
                     match request.call(Method::Get, &url) {
