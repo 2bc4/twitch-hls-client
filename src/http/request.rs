@@ -3,7 +3,7 @@ use std::{
     hash::{DefaultHasher, Hasher},
     io::{
         self,
-        ErrorKind::{InvalidData, InvalidInput, Other, UnexpectedEof},
+        ErrorKind::{InvalidInput, Other, UnexpectedEof},
         Read, Write,
     },
     mem,
@@ -23,7 +23,7 @@ pub struct Request<W: Write> {
 
     stream: Option<Transport>,
     scheme: Scheme,
-    hash: u64,
+    host_hash: u64,
 
     headers_buf: Box<[u8]>,
     retries: u64,
@@ -41,12 +41,8 @@ impl<W: Write> Request<W> {
             agent,
             stream: Option::default(),
             scheme: Scheme::default(),
-            hash: u64::default(),
+            host_hash: u64::default(),
         }
-    }
-
-    pub const fn get_ref(&self) -> &W {
-        &self.writer
     }
 
     pub fn into_writer(self) -> W {
@@ -57,9 +53,13 @@ impl<W: Write> Request<W> {
         let mut request = self.agent.text();
         request.0.stream = self.stream;
         request.0.scheme = self.scheme;
-        request.0.hash = self.hash;
+        request.0.host_hash = self.host_hash;
 
         request
+    }
+
+    pub const fn get_ref(&self) -> &W {
+        &self.writer
     }
 
     pub fn call(&mut self, method: Method, url: &Url) -> Result<()> {
@@ -68,14 +68,14 @@ impl<W: Write> Request<W> {
 
     fn call_impl(&mut self, method: Method, url: &Url, args: Option<Arguments>) -> Result<()> {
         let host = url.host()?;
-        let hash = Self::hash_host(host);
-        if self.stream.is_none() || self.hash != hash || self.scheme != url.scheme {
+        let hash = Self::hash(host);
+        if self.stream.is_none() || self.host_hash != hash || self.scheme != url.scheme {
             self.connect(url, host, hash)?;
         }
 
         let mut retries = 0;
         loop {
-            match self.converse(method, url, args) {
+            match self.converse(method, host, url, args) {
                 Ok(()) => break,
                 Err(e) if retries < self.retries => {
                     match e.downcast_ref::<io::Error>() {
@@ -84,14 +84,13 @@ impl<W: Write> Request<W> {
                         _ => return Err(e),
                     }
 
-                    //Don't log first error
-                    if retries > 0 {
-                        error!("http: {e}, retrying...");
-                    } else {
+                    if retries == 0 {
                         debug!("got {e}");
+                    } else {
+                        error!("http: {e}, retrying...");
                     }
-                    retries += 1;
 
+                    retries += 1;
                     self.connect(url, host, hash)?;
                 }
                 Err(e) => return Err(e),
@@ -102,8 +101,14 @@ impl<W: Write> Request<W> {
         Ok(())
     }
 
-    fn converse(&mut self, method: Method, url: &Url, args: Option<Arguments>) -> Result<()> {
-        let mut stream = self.stream.as_mut().expect("Missing stream");
+    fn converse(
+        &mut self,
+        method: Method,
+        host: &str,
+        url: &Url,
+        args: Option<Arguments>,
+    ) -> Result<()> {
+        let mut stream = self.stream.as_mut().expect("Missing stream while writing");
         write!(
             stream,
             "{method} /{path} HTTP/1.1\r\n\
@@ -115,7 +120,6 @@ impl<W: Write> Request<W> {
              Connection: keep-alive\r\n\
              {args}",
             path = url.path()?,
-            host = url.host()?,
             user_agent = &self.agent.args.user_agent,
             args = args.unwrap_or(format_args!("\r\n"))
         )?;
@@ -164,17 +168,16 @@ impl<W: Write> Request<W> {
         }
     }
 
-    fn connect(&mut self, url: &Url, host: &str, hash: u64) -> Result<()> {
+    fn connect(&mut self, url: &Url, host: &str, host_hash: u64) -> Result<()> {
         debug!("Connecting to {host}...");
-
         self.stream = Some(Transport::new(url, host, &self.agent)?);
         self.scheme = url.scheme;
-        self.hash = hash;
+        self.host_hash = host_hash;
 
         Ok(())
     }
 
-    fn hash_host(host: &str) -> u64 {
+    fn hash(host: &str) -> u64 {
         let mut hasher = DefaultHasher::new();
         hasher.write(host.as_bytes());
 
@@ -304,12 +307,11 @@ impl Write for StringWriter {
     }
 
     fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
-        match str::from_utf8(buf) {
-            Ok(string) => {
-                self.0.push_str(string);
-                Ok(())
-            }
-            Err(_) => Err(io::Error::from(InvalidData)),
-        }
+        self.0.push_str(
+            str::from_utf8(buf)
+                .map_err(|e| io::Error::other(format!("HTTP response wasn't valid utf-8: {e}")))?,
+        );
+
+        Ok(())
     }
 }
