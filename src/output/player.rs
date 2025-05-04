@@ -12,11 +12,11 @@ use super::Output;
 use crate::args::{Parse, Parser};
 
 #[derive(Debug)]
-pub struct PipeClosedError;
+pub struct PlayerClosedError;
 
-impl std::error::Error for PipeClosedError {}
+impl std::error::Error for PlayerClosedError {}
 
-impl Display for PipeClosedError {
+impl Display for PlayerClosedError {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         f.write_str("Unhandled player closed")
     }
@@ -156,7 +156,7 @@ impl Player {
     fn handle_broken_pipe(&mut self, error: io::Error) -> io::Error {
         if error.kind() == BrokenPipe {
             let _ = self.process.try_wait(); //reap pid
-            return io::Error::other(PipeClosedError);
+            return io::Error::other(PlayerClosedError);
         }
 
         error

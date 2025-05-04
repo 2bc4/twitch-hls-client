@@ -2,7 +2,7 @@ mod file;
 mod player;
 mod tcp;
 
-pub use player::Player;
+pub use player::{Player, PlayerClosedError};
 
 use std::io::{self, ErrorKind::Other, Write};
 
