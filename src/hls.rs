@@ -1,10 +1,10 @@
 mod cache;
-mod master_playlist;
-mod media_playlist;
+mod multivariant;
+mod playlist;
 mod segment;
 
-pub use master_playlist::fetch_playlist;
-pub use media_playlist::MediaPlaylist;
+pub use multivariant::connect_stream;
+pub use playlist::Playlist;
 pub use segment::{Handler, ResetError};
 
 use std::{

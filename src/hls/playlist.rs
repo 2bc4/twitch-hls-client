@@ -22,23 +22,23 @@ pub enum QueueRange<'a> {
     Empty,
 }
 
-pub struct MediaPlaylist {
+pub struct Playlist {
     pub header: Option<Url>, //used for av1/hevc streams
 
     conn: Connection,
     segments: VecDeque<Segment>,
-    debug_log_playlist: bool,
+    should_debug_log: bool,
 
     sequence: usize,
     added: usize,
 }
 
-impl MediaPlaylist {
+impl Playlist {
     pub fn new(conn: Connection) -> Result<Self> {
         let mut playlist = Self {
             conn,
             segments: VecDeque::with_capacity(16),
-            debug_log_playlist: logger::is_debug() && env::var_os("DEBUG_NO_PLAYLIST").is_none(),
+            should_debug_log: logger::is_debug() && env::var_os("DEBUG_NO_PLAYLIST").is_none(),
             header: Option::default(),
             sequence: usize::default(),
             added: usize::default(),
@@ -50,7 +50,7 @@ impl MediaPlaylist {
 
     pub fn reload(&mut self) -> Result<()> {
         let playlist = self.conn.text().map_err(map_if_offline)?;
-        if self.debug_log_playlist {
+        if self.should_debug_log {
             debug!("Playlist:\n{playlist}");
         }
 

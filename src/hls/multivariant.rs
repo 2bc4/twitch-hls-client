@@ -16,7 +16,7 @@ use crate::{
     http::{Agent, Connection, Method, StatusError, Url},
 };
 
-pub fn fetch_playlist(mut args: Args, agent: &Agent) -> Result<Option<Connection>> {
+pub fn connect_stream(mut args: Args, agent: &Agent) -> Result<Option<Connection>> {
     if let Some(url) = args.force_playlist_url.take() {
         info!("Using forced playlist URL");
         return Ok(Some(Connection::new(url, agent.text())));
@@ -244,21 +244,6 @@ fn fetch_proxy_playlist(
     Ok(playlist)
 }
 
-fn choose_stream(playlist: &str, quality: &Option<String>, should_print: bool) -> Option<Url> {
-    debug!("Master playlist:\n{playlist}");
-    let (Some(quality), false) = (quality, should_print) else {
-        return None;
-    };
-
-    let mut iter = playlist_iter(playlist);
-    if quality == "best" {
-        return Some(iter.next()?.1.into());
-    }
-
-    iter.find(|(name, _)| name == quality)
-        .map(|(_, url)| url.into())
-}
-
 fn playlist_iter(playlist: &str) -> impl Iterator<Item = (&str, &str)> {
     playlist
         .lines()
@@ -273,6 +258,21 @@ fn playlist_iter(playlist: &str) -> impl Iterator<Item = (&str, &str)> {
                 url,
             ))
         })
+}
+
+fn choose_stream(playlist: &str, quality: &Option<String>, should_print: bool) -> Option<Url> {
+    debug!("Multivariant playlist:\n{playlist}");
+    let (Some(quality), false) = (quality, should_print) else {
+        return None;
+    };
+
+    let mut iter = playlist_iter(playlist);
+    if quality == "best" {
+        return Some(iter.next()?.1.into());
+    }
+
+    iter.find(|(name, _)| name == quality)
+        .map(|(_, url)| url.into())
 }
 
 fn print_streams(playlist: &str) {

@@ -11,7 +11,7 @@ use anyhow::Result;
 use log::{debug, info};
 
 use args::{Parse, Parser};
-use hls::{Handler, MediaPlaylist, OfflineError, ResetError};
+use hls::{Handler, OfflineError, Playlist, ResetError};
 use http::{Agent, Method};
 use logger::Logger;
 use output::{Output, Player, PlayerClosedError, Writer};
@@ -31,7 +31,7 @@ impl Parse for Args {
     }
 }
 
-fn main_loop(mut writer: Writer, mut playlist: MediaPlaylist, agent: Agent) -> Result<()> {
+fn main_loop(mut writer: Writer, mut playlist: Playlist, agent: Agent) -> Result<()> {
     if let Some(url) = playlist.header.take() {
         let mut request = agent.binary(Vec::new());
         request.call(Method::Get, &url)?;
@@ -67,7 +67,7 @@ fn main() -> Result<()> {
         debug!("\n{main_args:#?}\n{http_args:#?}\n{hls_args:#?}\n{output_args:#?}");
 
         let agent = Agent::new(http_args);
-        let conn = match hls::fetch_playlist(hls_args, &agent) {
+        let conn = match hls::connect_stream(hls_args, &agent) {
             Ok(Some(conn)) => conn,
             Ok(None) => return Ok(()),
             Err(e) if e.is::<OfflineError>() => {
@@ -81,7 +81,7 @@ fn main() -> Result<()> {
             return Player::passthrough(&mut output_args.player, &conn.url);
         }
 
-        (Writer::new(&output_args)?, MediaPlaylist::new(conn)?, agent)
+        (Writer::new(&output_args)?, Playlist::new(conn)?, agent)
     };
 
     let error = main_loop(writer, playlist, agent).expect_err("Main loop returned Ok");

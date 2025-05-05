@@ -11,7 +11,7 @@ use std::{
 use anyhow::{Context, Result, bail};
 use log::{debug, info};
 
-use super::{MediaPlaylist, media_playlist::QueueRange};
+use super::playlist::{Playlist, QueueRange};
 use crate::{
     http::{Agent, Method, StatusError, Url},
     output::{Output, Writer},
@@ -43,7 +43,7 @@ impl Handler {
         })
     }
 
-    pub fn process(&mut self, playlist: &mut MediaPlaylist, time: Instant) -> Result<()> {
+    pub fn process(&mut self, playlist: &mut Playlist, time: Instant) -> Result<()> {
         let last_duration = playlist
             .last_duration()
             .context("Failed to find last segment duration")?;
