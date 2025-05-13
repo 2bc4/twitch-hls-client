@@ -62,6 +62,10 @@ impl<W: Write> Request<W> {
         &self.writer
     }
 
+    pub const fn get_mut(&mut self) -> &mut W {
+        &mut self.writer
+    }
+
     pub fn call(&mut self, method: Method, url: &Url) -> Result<()> {
         self.call_impl(method, url, None)
     }

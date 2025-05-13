@@ -13,7 +13,7 @@ use log::{debug, info};
 
 use super::playlist::{Playlist, QueueRange};
 use crate::{
-    http::{Agent, Method, StatusError, Url},
+    http::{Agent, Method, Request, StatusError, Url},
     output::{Output, Writer},
 };
 
@@ -30,15 +30,13 @@ impl Display for ResetError {
 
 pub struct Handler {
     worker: Option<Worker>,
-    agent: Agent,
     init: bool,
 }
 
 impl Handler {
-    pub fn new(writer: Writer, agent: Agent) -> Result<Self> {
+    pub fn new(writer: Writer, agent: &Agent) -> Result<Self> {
         Ok(Self {
-            worker: Some(Worker::spawn(writer, agent.clone())?),
-            agent,
+            worker: Some(Worker::spawn(agent.binary(writer))?),
             init: true,
         })
     }
@@ -102,14 +100,14 @@ impl Handler {
             .expect("Missing worker while sending URL")
             .send(mem::take(url))
         {
-            let mut writer = self
+            let mut request = self
                 .worker
                 .take()
                 .expect("Missing worker while joining")
                 .join()?;
 
-            writer.wait_for_output()?;
-            self.worker = Some(Worker::spawn(writer, self.agent.clone())?);
+            request.get_mut().wait_for_output()?;
+            self.worker = Some(Worker::spawn(request)?);
 
             self.init = true;
             return Err(ResetError.into());
@@ -120,17 +118,16 @@ impl Handler {
 }
 
 struct Worker {
-    handle: JoinHandle<Result<Writer>>,
+    handle: JoinHandle<Result<Request<Writer>>>,
     sender: Sender<Url>,
 }
 
 impl Worker {
-    fn spawn(writer: Writer, agent: Agent) -> Result<Self> {
+    fn spawn(mut request: Request<Writer>) -> Result<Self> {
         let (sender, receiver) = mpsc::channel::<Url>();
         let handle = ThreadBuilder::new()
             .name("hls worker".to_owned())
-            .spawn(move || -> Result<Writer> {
-                let mut request = agent.binary(writer);
+            .spawn(move || -> Result<Request<Writer>> {
                 loop {
                     let Ok(url) = receiver.recv() else {
                         bail!("Worker died unexpectantly");
@@ -146,7 +143,7 @@ impl Worker {
                     }
 
                     if request.get_ref().should_wait() {
-                        return Ok(request.into_writer());
+                        return Ok(request);
                     }
                 }
             })
@@ -159,7 +156,7 @@ impl Worker {
         self.sender.send(url).is_ok()
     }
 
-    fn join(self) -> Result<Writer> {
+    fn join(self) -> Result<Request<Writer>> {
         drop(self.sender);
         self.handle.join().expect("Worker panicked")
     }

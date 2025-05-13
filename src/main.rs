@@ -31,7 +31,7 @@ impl Parse for Args {
     }
 }
 
-fn main_loop(mut writer: Writer, mut playlist: Playlist, agent: Agent) -> Result<()> {
+fn main_loop(mut writer: Writer, mut playlist: Playlist, agent: &Agent) -> Result<()> {
     if let Some(url) = playlist.header.take() {
         let mut request = agent.binary(Vec::new());
         request.call(Method::Get, &url)?;
@@ -84,7 +84,7 @@ fn main() -> Result<()> {
         (Writer::new(&output_args)?, Playlist::new(conn)?, agent)
     };
 
-    let error = main_loop(writer, playlist, agent).expect_err("Main loop returned Ok");
+    let error = main_loop(writer, playlist, &agent).expect_err("Main loop returned Ok");
     if error.is::<OfflineError>() {
         info!("Stream ended, exiting...");
         return Ok(());
