@@ -4,7 +4,7 @@ use std::{
 };
 
 use anyhow::{Context, Result, ensure};
-use log::{debug, info};
+use log::debug;
 
 use super::{
     OfflineError, map_if_offline,
@@ -131,7 +131,7 @@ impl Playlist {
     }
 
     pub fn reset(&mut self) {
-        info!("Resetting playlist...");
+        debug!("Resetting playlist...");
         self.segments.clear();
         self.sequence = 0;
         self.added = 0;
