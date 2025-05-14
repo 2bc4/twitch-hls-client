@@ -32,9 +32,9 @@ impl Parse for Args {
 }
 
 fn main_loop(mut writer: Writer, mut playlist: Playlist, agent: &Agent) -> Result<()> {
-    if let Some(url) = playlist.header.take() {
+    if let Some(url) = &playlist.header {
         let mut request = agent.binary(Vec::new());
-        request.call(Method::Get, &url)?;
+        request.call(Method::Get, url)?;
 
         writer.set_header(&request.into_writer())?;
     }
