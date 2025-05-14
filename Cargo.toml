@@ -1,6 +1,6 @@
 [package]
 name = "twitch-hls-client"
-version = "1.4.0"
+version = "1.4.1"
 edition = "2024"
 rust-version = "1.85"
 authors = ["2bc4 <119853089+2bc4@users.noreply.github.com>"]
@@ -16,9 +16,11 @@ unwrap-used = "deny"
 pedantic = { level = "warn", priority = -1 }
 nursery = { level = "warn", priority = -1 }
 module-name-repetitions = "allow"
-ref-option = "allow"              # args
-struct_excessive_bools = "allow"  # args
-unnecessary_wraps = "allow"       # args
+
+# args
+ref-option = "allow"
+struct_excessive_bools = "allow"
+unnecessary_wraps = "allow"
 
 [profile.release]
 codegen-units = 1
