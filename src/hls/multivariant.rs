@@ -244,20 +244,67 @@ fn fetch_proxy_playlist(
     Ok(playlist)
 }
 
-fn playlist_iter(playlist: &str) -> impl Iterator<Item = (&str, &str)> {
+#[derive(PartialEq, Eq)]
+struct PlaylistItem<'a> {
+    name: &'a str,
+    url: &'a str,
+    resolution: Option<(u16, u16)>,
+}
+
+impl<'a> PlaylistItem<'a> {
+    pub fn parse(media: &'a str, stream_inf: &'a str, url: &'a str) -> Option<Self> {
+        // #EXT-X-MEDIA:TYPE=VIDEO,GROUP-ID="720p30",NAME="720p",AUTOSELECT=YES,DEFAULT=YES
+        let name = media
+            .split_once("NAME=\"")
+            .map(|s| s.1.split('"'))
+            .and_then(|mut s| s.next())
+            .map(|s| s.strip_suffix(" (source)").unwrap_or(s))?;
+        // #EXT-X-STREAM-INF:BANDWIDTH=2373000,RESOLUTION=1280x720,CODECS="avc1.4D401F,mp4a.40.2",VIDEO="720p30",FRAME-RATE=30.000
+        let resolution = stream_inf
+            .split_once("RESOLUTION=")
+            .and_then(|(_, tail)| tail.split_once(','))
+            .and_then(|(head, _)| head.split_once('x'))
+            .and_then(|(width, height)| {
+                if let (Ok(width), Ok(height)) = (width.parse(), height.parse()) {
+                    Some((width, height))
+                } else {
+                    None
+                }
+            });
+
+        Some(Self {
+            name,
+            url,
+            resolution,
+        })
+    }
+}
+
+impl PartialOrd for PlaylistItem<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for PlaylistItem<'_> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.resolution
+            .unwrap_or_default()
+            .cmp(&other.resolution.unwrap_or_default())
+    }
+}
+
+fn playlist_iter(playlist: &str) -> impl Iterator<Item = PlaylistItem> {
     playlist
         .lines()
         .filter(|l| l.starts_with("#EXT-X-MEDIA"))
         .zip(playlist.lines().filter(|l| l.starts_with("http")))
-        .filter_map(|(line, url)| {
-            Some((
-                line.split_once("NAME=\"")
-                    .map(|s| s.1.split('"'))
-                    .and_then(|mut s| s.next())
-                    .map(|s| s.strip_suffix(" (source)").unwrap_or(s))?,
-                url,
-            ))
-        })
+        .zip(
+            playlist
+                .lines()
+                .filter(|l| l.starts_with("#EXT-X-STREAM-INF")),
+        )
+        .filter_map(|((media, url), stream_inf)| PlaylistItem::parse(media, stream_inf, url))
 }
 
 fn choose_stream(playlist: &str, quality: &Option<String>, should_print: bool) -> Option<Url> {
@@ -268,21 +315,28 @@ fn choose_stream(playlist: &str, quality: &Option<String>, should_print: bool) -
 
     let mut iter = playlist_iter(playlist);
     if quality == "best" {
-        return Some(iter.next()?.1.into());
+        return iter.max().map(|it| it.url.into());
     }
 
-    iter.find(|(name, _)| name == quality)
-        .map(|(_, url)| url.into())
+    iter.find(|it| it.name == quality).map(|it| it.url.into())
 }
 
 fn print_streams(playlist: &str) {
-    let mut iter = playlist_iter(playlist);
-    if let Some((name, _)) = iter.next() {
-        print!("Available streams: {name} (best)");
-    }
+    let items = playlist_iter(playlist).collect::<Vec<_>>();
+    let Some((best, _)) = items.iter().enumerate().max_by_key(|it| it.1) else {
+        println!();
+        return;
+    };
 
-    for (name, _) in iter {
-        print!(", {name}");
+    print!("Available streams: ");
+    for (i, item) in items.iter().enumerate() {
+        if i != 0 {
+            print!(", ");
+        }
+        print!("{}", item.name);
+        if i == best {
+            print!(" (best)");
+        }
     }
     println!();
 }
