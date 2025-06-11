@@ -294,7 +294,7 @@ impl Ord for PlaylistItem<'_> {
     }
 }
 
-fn playlist_iter(playlist: &str) -> impl Iterator<Item = PlaylistItem> {
+fn playlist_iter(playlist: &str) -> impl Iterator<Item = PlaylistItem<'_>> {
     playlist
         .lines()
         .filter(|l| l.starts_with("#EXT-X-MEDIA"))
