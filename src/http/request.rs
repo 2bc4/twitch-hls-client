@@ -1,11 +1,7 @@
 use std::{
     fmt::Arguments,
     hash::{DefaultHasher, Hasher},
-    io::{
-        self,
-        ErrorKind::{InvalidInput, Other, UnexpectedEof},
-        Read, Write,
-    },
+    io::{self, Read, Write},
     mem,
     net::{SocketAddr, TcpStream, ToSocketAddrs},
     str,
@@ -26,17 +22,21 @@ pub struct Request<W: Write> {
     host_hash: u64,
 
     headers_buf: Box<[u8]>,
+    decode_buf: Box<[u8]>,
+
     retries: u64,
     agent: Agent,
 }
 
 impl<W: Write> Request<W> {
-    const HEADERS_BUF_SIZE: usize = 2048;
+    const HEADERS_BUF_SIZE: usize = 4 * 1024;
+    const DECODE_BUF_SIZE: usize = 16 * 1024;
 
     pub fn new(writer: W, agent: Agent) -> Self {
         Self {
             writer,
             headers_buf: vec![0u8; Self::HEADERS_BUF_SIZE].into_boxed_slice(),
+            decode_buf: vec![0u8; Self::DECODE_BUF_SIZE].into_boxed_slice(),
             retries: agent.args.retries,
             agent,
             stream: Option::default(),
@@ -83,7 +83,7 @@ impl<W: Write> Request<W> {
                 Ok(()) => break,
                 Err(e) if retries < self.retries => {
                     match e.downcast_ref::<io::Error>() {
-                        Some(i) if i.kind() == Other => return Err(e),
+                        Some(i) if i.kind() == io::ErrorKind::Other => return Err(e),
                         Some(_) => (),
                         _ => return Err(e),
                     }
@@ -131,11 +131,11 @@ impl<W: Write> Request<W> {
 
         let mut written = 0;
         let (headers, remaining) = loop {
-            let consumed = stream.read(&mut self.headers_buf[written..])?;
-            if consumed == 0 {
-                return Err(io::Error::from(UnexpectedEof).into());
+            let read = stream.read(&mut self.headers_buf[written..])?;
+            if read == 0 {
+                return Err(io::Error::from(io::ErrorKind::UnexpectedEof).into());
             }
-            written += consumed;
+            written += read;
 
             if let Some((headers, remaining)) = self
                 .headers_buf
@@ -161,14 +161,14 @@ impl<W: Write> Request<W> {
             return Err(StatusError(code, url.clone()).into());
         }
 
-        match io::copy(
-            &mut Decoder::new(remaining.chain(&mut stream), headers)?,
-            &mut self.writer,
-        ) {
-            Ok(_) => Ok(()),
-            //Chunk decoder returns InvalidInput on some segment servers, can be ignored
-            Err(e) if e.kind() == InvalidInput => Ok(()),
-            Err(e) => Err(e.into()),
+        let mut decoder = Decoder::new(remaining.chain(&mut stream), headers)?;
+        loop {
+            let read = decoder.read(&mut self.decode_buf)?;
+            if read == 0 {
+                break Ok(());
+            }
+
+            self.writer.write_all(&self.decode_buf[..read])?;
         }
     }
 

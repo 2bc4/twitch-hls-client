@@ -1,7 +1,6 @@
 use std::io::{self, Read};
 
 use anyhow::{Result, bail};
-use chunked_transfer::Decoder as ChunkDecoder;
 use flate2::read::GzDecoder;
 use log::debug;
 
@@ -100,5 +99,24 @@ impl<R: Read> Decoder<R> {
                 None => bail!("Failed to resolve encoding of HTTP response"),
             },
         }
+    }
+}
+
+struct ChunkDecoder<R: Read>(chunked_transfer::Decoder<R>);
+
+impl<R: Read> Read for ChunkDecoder<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self.0.read(buf) {
+            Ok(size) => Ok(size),
+            //Chunk decoder doesn't implement decoding trailers, can ignore
+            Err(error) if error.kind() == io::ErrorKind::InvalidInput => Ok(0),
+            Err(error) => Err(error),
+        }
+    }
+}
+
+impl<R: Read> ChunkDecoder<R> {
+    fn new(reader: R) -> Self {
+        Self(chunked_transfer::Decoder::new(reader))
     }
 }
