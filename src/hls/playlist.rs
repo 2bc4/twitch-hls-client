@@ -114,7 +114,7 @@ impl Playlist {
                         }
                     }
                 }
-                "#EXT-X-TWITCH-PREFETCH" => {
+                "#EXT-X-TWITCH-PREFETCH" | "#EXT-X-PREFETCH" => {
                     total_segments += 1;
                     if total_segments > prev_segment_count {
                         self.segments.push_back(Segment::Prefetch(split.1.into()));

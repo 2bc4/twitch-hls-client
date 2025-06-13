@@ -36,7 +36,9 @@ pub fn connect_stream(mut args: Args, agent: &Agent) -> Result<Option<Connection
     }
 
     info!("Fetching playlist for channel {}", &args.channel);
-    let playlist = if let Some(servers) = &args.servers {
+    let playlist = if let Some(channel) = &args.channel.strip_prefix("kick:") {
+        fetch_kick_playlist(channel, agent)?
+    } else if let Some(servers) = &args.servers {
         fetch_proxy_playlist(
             !args.no_low_latency,
             servers,
@@ -174,17 +176,8 @@ fn fetch_twitch_playlist(
         },
         play_session_id = ArrayString::<32>::random()?,
         sig = {
-            const SIGNATURE_LEN: usize = 40;
-            const TOKEN: &str = r#""signature":""#;
-
-            let start = gql_response
-                .find(TOKEN)
+            extract(gql_response, r#""signature":""#, r#"","__typename""#)
                 .context("Failed to find signature in GQL response")?
-                + TOKEN.len();
-
-            gql_response
-                .get(start..start + SIGNATURE_LEN)
-                .context("Invalid signature in GQL response")?
         },
         token = {
             let start = gql_response.find(r#"{"adblock""#).ok_or(OfflineError)?;
@@ -242,6 +235,29 @@ fn fetch_proxy_playlist(
     }
 
     Ok(playlist)
+}
+
+fn fetch_kick_playlist(channel: &str, agent: &Agent) -> Result<String> {
+    let mut request = agent.text();
+    request
+        .text(
+            Method::Get,
+            &format!("{}/{channel}/livestream", constants::KICK_CHANNELS_ENDPOINT).into(),
+        )
+        .map_err(map_if_offline)?;
+
+    let response = request.take();
+    request
+        .text(
+            Method::Get,
+            &extract(&response, r#""playback_url":""#, r#"","thumbnail""#)
+                .context("Failed to find kick playlist URL")?
+                .replace('\\', "")
+                .into(),
+        )
+        .map_err(map_if_offline)?;
+
+    Ok(request.take())
 }
 
 #[derive(PartialEq, Eq)]
@@ -370,6 +386,13 @@ fn choose_client_id<'a>(
     } else {
         Ok(Cow::Borrowed(constants::DEFAULT_CLIENT_ID))
     }
+}
+
+fn extract<'a>(data: &'a str, start: &'a str, end: &'a str) -> Option<&'a str> {
+    let start = data.find(start)? + start.len();
+    let end = data.find(end)?;
+
+    data.get(start..end)
 }
 
 struct ArrayString<const N: usize>([u8; N]);
