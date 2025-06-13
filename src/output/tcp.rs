@@ -1,5 +1,6 @@
 use std::{
     io::{self, ErrorKind, Write},
+    mem,
     net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs},
     sync::{
         Arc,
@@ -46,8 +47,8 @@ impl Parse for Args {
 
 pub struct Tcp {
     listener: TcpListener,
-    clients: Vec<ClientThread>,
     client_timeout: Duration,
+    state: State,
     header: Option<Arc<[u8]>>,
 }
 
@@ -58,7 +59,7 @@ impl Output for Tcp {
     }
 
     fn should_wait(&self) -> bool {
-        self.clients.is_empty()
+        matches!(self.state, State::Paused)
     }
 
     fn wait_for_output(&mut self) -> io::Result<()> {
@@ -77,8 +78,22 @@ impl Write for Tcp {
     }
 
     fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
-        let data: Arc<[u8]> = buf.into();
-        self.clients.retain_mut(|client| client.send(data.clone()));
+        match &mut self.state {
+            State::Paused => (),
+            State::SingleThreaded(client) => {
+                if !client.send(buf) {
+                    self.state = State::Paused;
+                }
+            }
+            State::MultiThreaded(threads) => {
+                let data: Arc<[u8]> = buf.into();
+                threads.retain_mut(|thread| thread.send(data.clone()));
+
+                if threads.is_empty() {
+                    self.state = State::Paused;
+                }
+            }
+        }
 
         Ok(())
     }
@@ -97,7 +112,7 @@ impl Tcp {
         Ok(Some(Self {
             listener,
             client_timeout: args.client_timeout,
-            clients: Vec::default(),
+            state: State::default(),
             header: Option::default(),
         }))
     }
@@ -106,14 +121,27 @@ impl Tcp {
         for incoming in self.listener.incoming() {
             match incoming {
                 Ok(sock) => {
-                    let client = ClientThread::spawn(sock, self.client_timeout)?;
+                    let mut client = Client::new(sock, self.client_timeout)?;
+
                     if let Some(header) = &self.header {
-                        if !client.send(header.clone()) {
+                        if !client.send(&header.clone()) {
                             return Ok(());
                         }
                     }
 
-                    self.clients.push(client);
+                    match &mut self.state {
+                        State::Paused => self.state = State::SingleThreaded(client),
+                        State::SingleThreaded(first) => {
+                            self.state = State::MultiThreaded(vec![
+                                ClientThread::spawn(mem::take(first))?,
+                                ClientThread::spawn(client)?,
+                            ]);
+                        }
+                        State::MultiThreaded(threads) => {
+                            threads.push(ClientThread::spawn(client)?);
+                        }
+                    }
+
                     self.listener.set_nonblocking(true)?;
                 }
                 Err(e) if e.kind() == ErrorKind::WouldBlock => break,
@@ -125,18 +153,65 @@ impl Tcp {
     }
 }
 
-struct ClientThread {
-    sender: Sender<Arc<[u8]>>,
+#[derive(Default)]
+enum State {
+    #[default]
+    Paused,
+
+    SingleThreaded(Client),
+    MultiThreaded(Vec<ClientThread>),
 }
 
-impl ClientThread {
-    fn spawn(mut sock: TcpStream, timeout: Duration) -> io::Result<Self> {
+#[derive(Default)]
+struct Client {
+    sock: Option<TcpStream>,
+    addr: Option<SocketAddr>,
+}
+
+impl Client {
+    fn new(sock: TcpStream, timeout: Duration) -> io::Result<Self> {
         let addr = sock.peer_addr()?;
         info!("Client accepted: {addr}");
 
         sock.set_nodelay(true)?;
         sock.set_write_timeout(Some(timeout))?;
 
+        Ok(Self {
+            sock: Some(sock),
+            addr: Some(addr),
+        })
+    }
+
+    fn send(&mut self, data: &[u8]) -> bool {
+        match self
+            .sock
+            .as_mut()
+            .expect("Missing client socket")
+            .write_all(data)
+        {
+            Ok(()) => true,
+            Err(e) => {
+                let addr = self.addr.as_ref().expect("Missing client address");
+                match e.kind() {
+                    ErrorKind::BrokenPipe
+                    | ErrorKind::ConnectionReset
+                    | ErrorKind::ConnectionAborted => info!("Client disconnected: {addr}"),
+                    ErrorKind::WouldBlock => info!("Client dropped (timed out): {addr}"),
+                    _ => info!("Client dropped (write error: {e}): {addr}"),
+                }
+
+                false
+            }
+        }
+    }
+}
+
+struct ClientThread {
+    sender: Sender<Arc<[u8]>>,
+}
+
+impl ClientThread {
+    fn spawn(mut client: Client) -> io::Result<Self> {
         let (sender, receiver) = mpsc::channel::<Arc<[u8]>>();
         ThreadBuilder::new()
             .name("tcp client".to_owned())
@@ -146,15 +221,7 @@ impl ClientThread {
                         return;
                     };
 
-                    if let Err(e) = sock.write_all(&data) {
-                        match e.kind() {
-                            ErrorKind::BrokenPipe
-                            | ErrorKind::ConnectionReset
-                            | ErrorKind::ConnectionAborted => info!("Client disconnected: {addr}"),
-                            ErrorKind::WouldBlock => info!("Client dropped (timed out): {addr}"),
-                            _ => info!("Client dropped (write error: {e}): {addr}"),
-                        }
-
+                    if !client.send(&data) {
                         return;
                     }
                 }
