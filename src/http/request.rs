@@ -125,7 +125,7 @@ impl<W: Write> Request<W> {
              {args}",
             path = url.path()?,
             user_agent = &self.agent.args.user_agent,
-            args = args.unwrap_or(format_args!("\r\n"))
+            args = args.unwrap_or_else(|| format_args!("\r\n"))
         )?;
         stream.flush()?;
 
