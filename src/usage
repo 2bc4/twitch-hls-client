@@ -26,8 +26,6 @@ Output options:
               Arguments to pass to the player [default: -]
       -q, --quiet
               Silence player output
-          --passthrough
-              Passthrough playlist URL to player and do nothing else
           --no-kill
               Don't kill the player on exit
 
@@ -58,6 +56,12 @@ HLS options:
           Print available streams and exit
       --no-low-latency
           Disable low latency streaming
+      --passthrough <TYPE>
+          Passthrough playlist URL to the player and do nothing else.
+
+          Valid types:
+          "variant": passthrough the variant playlist URL
+          "multivariant": passthrough the multivariant playlist URL
       --client-id <ID>
           Value to be used in the Client-Id header.
           If not specified will use the default client ID.

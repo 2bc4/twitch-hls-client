@@ -11,7 +11,7 @@ use anyhow::Result;
 use log::{debug, info};
 
 use args::{Parse, Parser};
-use hls::{Handler, OfflineError, Playlist, ResetError};
+use hls::{Handler, OfflineError, Playlist, ResetError, Stream};
 use http::{Agent, Method};
 use logger::Logger;
 use output::{Output, Player, PlayerClosedError, Writer};
@@ -19,14 +19,11 @@ use output::{Output, Player, PlayerClosedError, Writer};
 #[derive(Default, Debug)]
 pub struct Args {
     debug: bool,
-    passthrough: bool,
 }
 
 impl Parse for Args {
     fn parse(&mut self, parser: &mut Parser) -> Result<()> {
         parser.parse_switch_or(&mut self.debug, "-d", "--debug")?;
-        parser.parse_switch(&mut self.passthrough, "--passthrough")?;
-
         Ok(())
     }
 }
@@ -67,19 +64,18 @@ fn main() -> Result<()> {
         debug!("\n{main_args:#?}\n{http_args:#?}\n{hls_args:#?}\n{output_args:#?}");
 
         let agent = Agent::new(http_args);
-        let conn = match hls::connect_stream(hls_args, &agent) {
-            Ok(Some(conn)) => conn,
-            Ok(None) => return Ok(()),
+        let conn = match Stream::new(hls_args, &agent) {
+            Ok(Stream::Variant(conn)) => conn,
+            Ok(Stream::Passthrough(url)) => {
+                return Player::passthrough(&mut output_args.player, &url);
+            }
+            Ok(Stream::Exit) => return Ok(()),
             Err(e) if e.is::<OfflineError>() => {
                 info!("{e}, exiting...");
                 return Ok(());
             }
             Err(e) => return Err(e),
         };
-
-        if main_args.passthrough {
-            return Player::passthrough(&mut output_args.player, &conn.url);
-        }
 
         (Writer::new(&output_args)?, Playlist::new(conn)?, agent)
     };

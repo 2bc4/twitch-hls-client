@@ -8,7 +8,6 @@ debug=true
 player=/path/to/player
 player-args=- --profile=low-latency
 quiet=true
-passthrough=false
 no-kill=false
 
 # Recording
@@ -23,6 +22,7 @@ tcp-client-timeout=30
 servers=http://example-proxy-server1.invalid,http://example-proxy-server2.invalid
 print-streams=false
 no-low-latency=false
+passthrough=variant
 client-id=0123456789abcdef
 auth-token=0123456789abcdef
 codecs=av1,h265,h264

@@ -3,7 +3,7 @@ mod multivariant;
 mod playlist;
 mod segment;
 
-pub use multivariant::connect_stream;
+pub use multivariant::Stream;
 pub use playlist::Playlist;
 pub use segment::{Handler, ResetError};
 
@@ -12,7 +12,7 @@ use std::{
     fmt::{self, Debug, Display, Formatter},
 };
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 
 use crate::{
     args::{Parse, Parser},
@@ -34,6 +34,7 @@ pub struct Args {
     servers: Option<Vec<Url>>,
     print_streams: bool,
     no_low_latency: bool,
+    passthrough: Passthrough,
     client_id: Option<String>,
     auth_token: Option<String>,
     codecs: Cow<'static, str>,
@@ -53,6 +54,7 @@ impl Default for Args {
             servers: Option::default(),
             print_streams: bool::default(),
             no_low_latency: bool::default(),
+            passthrough: Passthrough::default(),
             client_id: Option::default(),
             auth_token: Option::default(),
             never_proxy: Option::default(),
@@ -72,6 +74,7 @@ impl Debug for Args {
             .field("servers", &self.servers)
             .field("print_streams", &self.print_streams)
             .field("no_low_latency", &self.no_low_latency)
+            .field("passthrough", &self.passthrough)
             .field("client_id", &Self::hide_option(&self.client_id))
             .field("auth_token", &Self::hide_option(&self.auth_token))
             .field("codecs", &self.codecs)
@@ -91,6 +94,11 @@ impl Parse for Args {
         parser.parse_fn_cfg(&mut self.servers, "-s", "servers", Self::split_comma)?;
         parser.parse_switch(&mut self.print_streams, "--print-streams")?;
         parser.parse_switch(&mut self.no_low_latency, "--no-low-latency")?;
+        parser.parse_fn(&mut self.passthrough, "--passthrough", |arg| match arg {
+            "variant" => Ok(Passthrough::Variant),
+            "multivariant" => Ok(Passthrough::Multivariant),
+            _ => bail!("Invalid passthrough type"),
+        })?;
         parser.parse_opt(&mut self.client_id, "--client-id")?;
         parser.parse_opt(&mut self.auth_token, "--auth-token")?;
         parser.parse_cow_string(&mut self.codecs, "--codecs")?;
@@ -147,6 +155,15 @@ impl Args {
             None => None,
         }
     }
+}
+
+#[derive(Debug, Default)]
+enum Passthrough {
+    Variant,
+    Multivariant,
+
+    #[default]
+    Disabled,
 }
 
 fn map_if_offline(error: anyhow::Error) -> anyhow::Error {
