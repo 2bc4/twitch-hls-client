@@ -174,10 +174,6 @@ You can further trim down and optimize the binary by building with `build-std` a
 
 </details>
 
-#### Optional build time features
-- `colors` - Enable terminal colors (enabled by default)
-- `debug-logging` - Enable debug logging support
-
 ### Reducing player latency with mpv
 Following [this section](https://mpv.io/manual/master/#low-latency-playback) in the mpv manual is recommended.
 

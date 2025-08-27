@@ -1,15 +1,14 @@
 use std::{
     env,
     io::{self, IsTerminal},
+    time::SystemTime,
 };
 
 use anyhow::Result;
 use log::{Level, LevelFilter, Log, Metadata, Record};
 
 pub struct Logger {
-    #[allow(dead_code)]
     enable_debug: bool,
-
     enable_colors: bool,
 }
 
@@ -21,21 +20,18 @@ impl Log for Logger {
     fn log(&self, record: &Record<'_>) {
         let level = record.level();
         match level {
-            #[cfg(feature = "debug-logging")]
             Level::Error | Level::Info | Level::Debug if self.enable_debug => {
-                use std::time::{Duration, SystemTime};
-
                 let thread = std::thread::current();
                 println!(
-                    "{} {} ({}) {}: {}",
-                    SystemTime::now()
+                    "{time} {tag} ({thread}) {module}: {log}",
+                    time = SystemTime::now()
                         .duration_since(SystemTime::UNIX_EPOCH)
-                        .unwrap_or(Duration::ZERO)
+                        .unwrap_or_default()
                         .as_millis(),
-                    level_tag(level, self.enable_colors),
-                    thread.name().unwrap_or("<unknown>"),
-                    record.module_path().unwrap_or("<unknown>"),
-                    record.args()
+                    tag = level_tag(level, self.enable_colors),
+                    thread = thread.name().unwrap_or("<unknown>"),
+                    module = record.module_path().unwrap_or("<unknown>"),
+                    log = record.args(),
                 );
             }
             Level::Error => eprintln!("{} {}", level_tag(level, self.enable_colors), record.args()),
@@ -60,23 +56,12 @@ impl Logger {
             LevelFilter::Info
         });
 
-        #[cfg(not(feature = "debug-logging"))]
-        if enable_debug {
-            log::info!("Debug logging was disabled at build time");
-        }
-
         Ok(())
     }
 }
 
-#[cfg(feature = "debug-logging")]
 pub fn is_debug() -> bool {
     log::max_level() == LevelFilter::Debug
-}
-
-#[cfg(not(feature = "debug-logging"))]
-pub const fn is_debug() -> bool {
-    false
 }
 
 fn level_tag_no_color(level: Level) -> &'static str {
@@ -88,7 +73,6 @@ fn level_tag_no_color(level: Level) -> &'static str {
     }
 }
 
-#[cfg(feature = "colors")]
 fn level_tag(level: Level, enable_colors: bool) -> &'static str {
     if enable_colors {
         match level {
@@ -100,9 +84,4 @@ fn level_tag(level: Level, enable_colors: bool) -> &'static str {
     } else {
         level_tag_no_color(level)
     }
-}
-
-#[cfg(not(feature = "colors"))]
-fn level_tag(level: Level, _enable_colors: bool) -> &'static str {
-    level_tag_no_color(level)
 }
