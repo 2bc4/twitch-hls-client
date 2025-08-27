@@ -77,7 +77,7 @@ To find your token, navigate to the Twitch website in a browser and open your br
 You can use `-s` to request the master playlist from a proxy server, which bypasses ads by either using a turbo token or requesting the playlist from a country where Twitch doesn't serve ads. A list of known public servers can be found [here](https://github.com/2bc4/twitch-hls-client/wiki/Known-public-playlist-proxy-servers).
 
 ### Config file
-Almost every option can also be set via config file. There is an example config file with all possible values set [here](example_config).
+Almost every option can also be set via config file. There is an example config file with all possible values set [here](example-config).
 
 Depending on your platform this will look for the config file at the following locations (can be overridden with `-c`):
 
