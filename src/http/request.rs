@@ -81,17 +81,9 @@ impl<W: Write> Request<W> {
         loop {
             match self.converse(method, host, url, args) {
                 Ok(()) => break,
-                Err(e) if retries < self.retries => {
-                    match e.downcast_ref::<io::Error>() {
-                        Some(i) if i.kind() == io::ErrorKind::Other => return Err(e),
-                        Some(_) => (),
-                        _ => return Err(e),
-                    }
-
-                    if retries == 0 {
-                        debug!("got {e}");
-                    } else {
-                        error!("http: {e}, retrying...");
+                Err(error) if retries < self.retries && Self::should_retry(&error) => {
+                    if retries > 0 {
+                        error!("http: {error}, retrying...");
                     }
 
                     retries += 1;
@@ -129,15 +121,16 @@ impl<W: Write> Request<W> {
         )?;
         stream.flush()?;
 
+        //Read response headers and separate headers from body if needed
         let mut written = 0;
-        let (headers, remaining) = loop {
+        let (headers, body) = loop {
             let read = stream.read(&mut self.headers_buf[written..])?;
             if read == 0 {
                 return Err(io::Error::from(io::ErrorKind::UnexpectedEof).into());
             }
             written += read;
 
-            if let Some((headers, remaining)) = self
+            if let Some((headers, body)) = self
                 .headers_buf
                 .windows(4)
                 .position(|w| w == b"\r\n\r\n")
@@ -146,7 +139,7 @@ impl<W: Write> Request<W> {
                 })
             {
                 headers.make_ascii_lowercase();
-                break (str::from_utf8(headers)?, remaining);
+                break (str::from_utf8(headers)?, body);
             }
         };
         debug!("Response:\n{headers}");
@@ -161,7 +154,7 @@ impl<W: Write> Request<W> {
             return Err(StatusError(code, url.clone()).into());
         }
 
-        let mut decoder = Decoder::new(remaining.chain(&mut stream), headers)?;
+        let mut decoder = Decoder::new(body.chain(&mut stream), headers)?;
         loop {
             let read = decoder.read(&mut self.decode_buf)?;
             if read == 0 {
@@ -186,6 +179,14 @@ impl<W: Write> Request<W> {
         hasher.write(host.as_bytes());
 
         hasher.finish()
+    }
+
+    //Retry if not 404 or io::ErrorKind::Other (used for internal errors)
+    fn should_retry(error: &anyhow::Error) -> bool {
+        error.is::<StatusError>() && !StatusError::is_not_found(error)
+            || error
+                .downcast_ref::<io::Error>()
+                .is_some_and(|e| e.kind() != io::ErrorKind::Other)
     }
 }
 
