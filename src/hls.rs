@@ -94,11 +94,7 @@ impl Parse for Args {
         parser.parse_fn_cfg(&mut self.servers, "-s", "servers", Self::split_comma)?;
         parser.parse_switch(&mut self.print_streams, "--print-streams")?;
         parser.parse_switch(&mut self.no_low_latency, "--no-low-latency")?;
-        parser.parse_fn(&mut self.passthrough, "--passthrough", |arg| match arg {
-            "variant" => Ok(Passthrough::Variant),
-            "multivariant" => Ok(Passthrough::Multivariant),
-            _ => bail!("Invalid passthrough type"),
-        })?;
+        parser.parse_fn(&mut self.passthrough, "--passthrough", Passthrough::new)?;
         parser.parse_opt(&mut self.client_id, "--client-id")?;
         parser.parse_opt(&mut self.auth_token, "--auth-token")?;
         parser.parse_cow_string(&mut self.codecs, "--codecs")?;
@@ -164,6 +160,17 @@ enum Passthrough {
 
     #[default]
     Disabled,
+}
+
+impl Passthrough {
+    fn new(arg: &str) -> Result<Self> {
+        match arg {
+            "variant" => Ok(Self::Variant),
+            "multivariant" => Ok(Self::Multivariant),
+            "disabled" => Ok(Self::Disabled),
+            _ => bail!("Invalid passthrough mode"),
+        }
+    }
 }
 
 fn map_if_offline(error: anyhow::Error) -> anyhow::Error {

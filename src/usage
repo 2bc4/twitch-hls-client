@@ -56,12 +56,13 @@ HLS options:
           Print available streams and exit
       --no-low-latency
           Disable low latency streaming
-      --passthrough <TYPE>
+      --passthrough <MODE>
           Passthrough playlist URL to the player and do nothing else.
 
-          Valid types:
+          Valid modes:
           "variant": passthrough the variant playlist URL
           "multivariant": passthrough the multivariant playlist URL
+          "disabled": disable passthrough
       --client-id <ID>
           Value to be used in the Client-Id header.
           If not specified will use the default client ID.
