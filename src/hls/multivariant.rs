@@ -235,8 +235,8 @@ fn fetch_proxy_playlist(
         )
         .into();
 
-        match request.text(Method::Get, &url) {
-            Ok(_) => {
+        match request.text_no_retry(Method::Get, &url) {
+            Ok(()) => {
                 let playlist = request.take();
                 if playlist.is_empty() {
                     return Err(OfflineError);

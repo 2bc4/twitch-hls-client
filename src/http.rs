@@ -8,7 +8,7 @@ pub use url::{Scheme, Url};
 use std::{
     borrow::Cow,
     fmt::{self, Display, Formatter},
-    io::{self, Write},
+    io::Write,
     sync::Arc,
     time::Duration,
 };
@@ -130,12 +130,12 @@ impl Agent {
     }
 
     pub fn exists(&self, url: &Url) -> Option<TextRequest> {
-        let mut request = self.binary(io::sink());
+        let mut request = self.text();
 
         request
-            .call(Method::Get, url)
+            .text_no_retry(Method::Get, url)
             .is_ok()
-            .then(|| request.into_text_request())
+            .then_some(request)
     }
 }
 

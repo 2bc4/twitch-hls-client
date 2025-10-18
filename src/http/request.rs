@@ -49,15 +49,6 @@ impl<W: Write> Request<W> {
         self.writer
     }
 
-    pub fn into_text_request(self) -> TextRequest {
-        let mut request = self.agent.text();
-        request.0.stream = self.stream;
-        request.0.scheme = self.scheme;
-        request.0.host_hash = self.host_hash;
-
-        request
-    }
-
     pub const fn get_ref(&self) -> &W {
         &self.writer
     }
@@ -203,6 +194,16 @@ impl TextRequest {
 
     pub fn text(&mut self, method: Method, url: &Url) -> Result<&str> {
         self.text_impl(method, url, None)
+    }
+
+    pub fn text_no_retry(&mut self, method: Method, url: &Url) -> Result<()> {
+        let retries = self.0.retries;
+        self.0.retries = 0;
+
+        self.text_impl(method, url, None)?;
+
+        self.0.retries = retries;
+        Ok(())
     }
 
     pub fn text_fmt(&mut self, method: Method, url: &Url, args: Arguments) -> Result<&str> {
