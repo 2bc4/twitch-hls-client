@@ -4,7 +4,7 @@ mod tcp;
 
 pub use player::{Player, PlayerClosedError};
 
-use std::io::{self, ErrorKind::Other, Write};
+use std::io::{self, Write};
 
 use anyhow::{Result, ensure};
 use log::{debug, info};
@@ -15,15 +15,15 @@ use tcp::{Args as TcpArgs, Tcp};
 
 use crate::args::{Parse, Parser};
 
-pub trait Output {
+pub trait Output: Write + Send {
     fn set_header(&mut self, header: &[u8]) -> io::Result<()>;
 
     fn should_wait(&self) -> bool {
-        unreachable!();
+        false
     }
 
     fn wait_for_output(&mut self) -> io::Result<()> {
-        unreachable!();
+        Ok(())
     }
 }
 
@@ -44,43 +44,32 @@ impl Parse for Args {
     }
 }
 
+#[derive(Default)]
 pub struct Writer {
-    player: Option<Player>,
-    tcp: Option<Tcp>,
-    file: Option<File>,
+    outputs: Vec<Box<dyn Output>>,
 }
 
 impl Output for Writer {
     fn set_header(&mut self, header: &[u8]) -> io::Result<()> {
         debug!("Outputting segment header");
-        self.handle_player(|player| player.set_header(header))?;
-
-        if let Some(tcp) = &mut self.tcp {
-            tcp.set_header(header)?;
-        }
-
-        if let Some(file) = &mut self.file {
-            file.set_header(header)?;
-        }
-
-        Ok(())
+        self.handle_outputs(|output| output.set_header(header))
     }
 
     fn should_wait(&self) -> bool {
-        match (&self.player, &self.tcp, &self.file) {
-            (None, Some(tcp), None) => tcp.should_wait(),
-            _ => false,
+        if let Some(output) = self.outputs.first()
+            && self.outputs.len() == 1
+        {
+            return output.should_wait();
         }
+
+        false
     }
 
     fn wait_for_output(&mut self) -> io::Result<()> {
-        debug_assert!(self.tcp.is_some() && self.player.is_none() && self.file.is_none());
-
         info!("Waiting for outputs...");
-        self.tcp
-            .as_mut()
-            .expect("Missing TCP output while waiting for output")
-            .wait_for_output()?;
+        for output in &mut self.outputs {
+            output.wait_for_output()?;
+        }
 
         Ok(())
     }
@@ -92,66 +81,59 @@ impl Write for Writer {
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        if let Some(tcp) = &mut self.tcp {
-            tcp.flush()?;
-        }
-
-        if let Some(file) = &mut self.file {
-            file.flush()?;
-        }
+        self.handle_outputs(Write::flush)?;
 
         debug!("Finished writing segment");
         Ok(())
     }
 
     fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
-        debug_assert!(self.player.is_some() || self.tcp.is_some() || self.file.is_some());
-
-        self.handle_player(|player| player.write_all(buf))?;
-
-        if let Some(tcp) = &mut self.tcp {
-            tcp.write_all(buf)?;
-        }
-
-        if let Some(file) = &mut self.file {
-            file.write_all(buf)?;
-        }
-
-        Ok(())
+        self.handle_outputs(|output| output.write_all(buf))
     }
 }
 
 impl Writer {
     pub fn new(args: &Args) -> Result<Self> {
-        let writer = Self {
-            player: Player::spawn(&args.player)?,
-            tcp: Tcp::new(&args.tcp)?,
-            file: File::new(&args.file)?,
-        };
+        let mut writer = Self::default();
 
-        ensure!(
-            writer.player.is_some() || writer.tcp.is_some() || writer.file.is_some(),
-            "No output configured"
-        );
+        writer.add_output(Player::new(&args.player)?);
+        writer.add_output(Tcp::new(&args.tcp)?);
+        writer.add_output(File::new(&args.file)?);
+
+        ensure!(!writer.outputs.is_empty(), "No output configured");
 
         Ok(writer)
     }
 
-    fn handle_player<F>(&mut self, f: F) -> io::Result<()>
+    fn add_output(&mut self, output: Option<impl Output + 'static>) {
+        if let Some(output) = output {
+            self.outputs.push(Box::new(output));
+        }
+    }
+
+    fn handle_outputs<F>(&mut self, mut f: F) -> io::Result<()>
     where
-        F: FnOnce(&mut Player) -> io::Result<()>,
+        F: FnMut(&mut Box<dyn Output>) -> io::Result<()>,
     {
-        if let Some(player) = &mut self.player {
-            if let Err(e) = f(player) {
-                if e.kind() == Other && self.tcp.is_some() || self.file.is_some() {
-                    self.player = None;
-                    return Ok(());
+        let has_multiple = self.outputs.len() > 1;
+
+        let mut result = Ok(());
+        self.outputs.retain_mut(|output| {
+            if let Err(error) = f(output) {
+                //Allow player to close without exiting program when there's multiple outputs
+                #[allow(clippy::redundant_closure_for_method_calls)] //no
+                if has_multiple && error.get_ref().is_some_and(|e| e.is::<PlayerClosedError>()) {
+                    return false;
                 }
 
-                return Err(e);
+                result = Err(error);
+                return false;
             }
-        }
 
-        Ok(())
+            true
+        });
+
+        assert!(!self.outputs.is_empty() || self.outputs.is_empty() && result.is_err());
+        result
     }
 }

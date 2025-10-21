@@ -82,7 +82,7 @@ impl Write for Player {
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        unreachable!();
+        Ok(())
     }
 
     fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
@@ -93,7 +93,7 @@ impl Write for Player {
 }
 
 impl Player {
-    pub fn spawn(args: &Args) -> Result<Option<Self>> {
+    pub fn new(args: &Args) -> Result<Option<Self>> {
         let Some(path) = &args.path else {
             return Ok(None);
         };
@@ -141,7 +141,7 @@ impl Player {
             args.pargs = format!("{} {url}", args.pargs).into();
         }
 
-        let Some(mut player) = Self::spawn(args)? else {
+        let Some(mut player) = Self::new(args)? else {
             bail!("No player set");
         };
 
