@@ -130,10 +130,10 @@ impl Parse for Args {
             self.quality = None;
         }
 
-        if let Some(never_proxy) = &self.never_proxy {
-            if never_proxy.iter().any(|a| a.eq(&self.channel)) {
-                self.servers = None;
-            }
+        if let Some(never_proxy) = &self.never_proxy
+            && never_proxy.iter().any(|a| a.eq(&self.channel))
+        {
+            self.servers = None;
         }
 
         Ok(())

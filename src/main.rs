@@ -86,11 +86,11 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    if let Some(error) = error.downcast_ref::<io::Error>().and_then(|e| e.get_ref()) {
-        if error.is::<PlayerClosedError>() {
-            info!("Player closed, exiting...");
-            return Ok(());
-        }
+    if let Some(error) = error.downcast_ref::<io::Error>().and_then(|e| e.get_ref())
+        && error.is::<PlayerClosedError>()
+    {
+        info!("Player closed, exiting...");
+        return Ok(());
     }
 
     Err(error)

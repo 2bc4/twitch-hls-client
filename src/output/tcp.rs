@@ -123,10 +123,10 @@ impl Tcp {
                 Ok(sock) => {
                     let mut client = Client::new(sock, self.client_timeout)?;
 
-                    if let Some(header) = &self.header {
-                        if !client.send(&header.clone()) {
-                            return Ok(());
-                        }
+                    if let Some(header) = &self.header
+                        && !client.send(&header.clone())
+                    {
+                        return Ok(());
                     }
 
                     match &mut self.state {

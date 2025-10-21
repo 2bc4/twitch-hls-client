@@ -60,10 +60,10 @@ pub struct Player {
 
 impl Drop for Player {
     fn drop(&mut self) {
-        if !self.no_kill {
-            if let Err(e) = self.process.kill() {
-                error!("Failed to kill player: {e}");
-            }
+        if !self.no_kill
+            && let Err(e) = self.process.kill()
+        {
+            error!("Failed to kill player: {e}");
         }
     }
 }

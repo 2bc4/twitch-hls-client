@@ -107,11 +107,11 @@ impl Playlist {
                 }
                 "#EXTINF" => {
                     total_segments += 1;
-                    if total_segments > prev_segment_count {
-                        if let Some(url) = lines.next() {
-                            self.segments
-                                .push_back(Segment::Normal(split.1.parse()?, url.into()));
-                        }
+                    if total_segments > prev_segment_count
+                        && let Some(url) = lines.next()
+                    {
+                        self.segments
+                            .push_back(Segment::Normal(split.1.parse()?, url.into()));
                     }
                 }
                 "#EXT-X-TWITCH-PREFETCH" | "#EXT-X-PREFETCH" => {
