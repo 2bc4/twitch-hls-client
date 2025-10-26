@@ -145,14 +145,19 @@ impl<W: Write> Request<W> {
             return Err(StatusError(code, url.clone()).into());
         }
 
-        let mut decoder = Decoder::new(body.chain(&mut stream), headers)?;
-        loop {
-            let read = decoder.read(&mut self.decode_buf)?;
-            if read == 0 {
-                break Ok(());
-            }
+        match method {
+            Method::Get | Method::Post => {
+                let mut decoder = Decoder::new(body.chain(&mut stream), headers)?;
+                loop {
+                    let read = decoder.read(&mut self.decode_buf)?;
+                    if read == 0 {
+                        break Ok(());
+                    }
 
-            self.writer.write_all(&self.decode_buf[..read])?;
+                    self.writer.write_all(&self.decode_buf[..read])?;
+                }
+            }
+            Method::Head => Ok(()),
         }
     }
 

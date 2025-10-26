@@ -78,6 +78,7 @@ impl Parse for Args {
 pub enum Method {
     Get,
     Post,
+    Head,
 }
 
 impl Display for Method {
@@ -85,6 +86,7 @@ impl Display for Method {
         match self {
             Self::Get => f.write_str("GET"),
             Self::Post => f.write_str("POST"),
+            Self::Head => f.write_str("HEAD"),
         }
     }
 }
@@ -133,7 +135,7 @@ impl Agent {
         let mut request = self.text();
 
         request
-            .text_no_retry(Method::Get, url)
+            .text_no_retry(Method::Head, url)
             .is_ok()
             .then_some(request)
     }
