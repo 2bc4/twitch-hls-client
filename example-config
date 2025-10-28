@@ -39,4 +39,4 @@ user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:130.0) Gecko/20100101 Fi
 http-retries=3
 http-timeout=10
 socks5=127.0.0.1:1080
-socks5-whitelist=gql.twitch.tv,usher.ttvnw.net
+socks5-restrict=gql.twitch.tv,usher.ttvnw.net
