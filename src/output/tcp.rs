@@ -10,7 +10,7 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use log::{error, info};
 
 use super::Output;
@@ -34,10 +34,11 @@ impl Default for Args {
 impl Parse for Args {
     fn parse(&mut self, parser: &mut Parser) -> Result<()> {
         parser.parse_fn_cfg(&mut self.addr, "-t", "tcp-server", |arg| {
-            match arg.to_socket_addrs()?.next() {
-                Some(addr) => Ok(Some(addr)),
-                None => bail!("Invalid socket address: {arg}"),
-            }
+            Ok(Some(
+                arg.to_socket_addrs()?
+                    .next()
+                    .context("Invalid socket address")?,
+            ))
         })?;
         parser.parse_duration(&mut self.client_timeout, "--tcp-client-timeout")?;
 

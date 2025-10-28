@@ -56,8 +56,8 @@ impl Output for Writer {
     }
 
     fn should_wait(&self) -> bool {
-        if let Some(output) = self.outputs.first()
-            && self.outputs.len() == 1
+        if self.outputs.len() == 1
+            && let Some(output) = self.outputs.first()
         {
             return output.should_wait();
         }
@@ -122,18 +122,17 @@ impl Writer {
             if let Err(error) = f(output) {
                 //Allow player to close without exiting program when there's multiple outputs
                 #[allow(clippy::redundant_closure_for_method_calls)] //no
-                if has_multiple && error.get_ref().is_some_and(|e| e.is::<PlayerClosedError>()) {
-                    return false;
+                if !(has_multiple && error.get_ref().is_some_and(|e| e.is::<PlayerClosedError>())) {
+                    result = Err(error);
                 }
 
-                result = Err(error);
                 return false;
             }
 
             true
         });
+        debug_assert!(!self.outputs.is_empty() || self.outputs.is_empty() && result.is_err());
 
-        assert!(!self.outputs.is_empty() || self.outputs.is_empty() && result.is_err());
         result
     }
 }
