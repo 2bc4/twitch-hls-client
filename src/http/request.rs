@@ -257,12 +257,10 @@ impl Write for Transport {
 
 impl Transport {
     fn new(url: &Url, host: &str, agent: &Agent) -> Result<Self> {
-        if agent.args.force_https {
-            ensure!(
-                url.scheme == Scheme::Https,
-                "URL protocol is not HTTPS and --force-https is enabled: {url}",
-            );
-        }
+        ensure!(
+            !agent.args.force_https || url.scheme == Scheme::Https,
+            "URL protocol is not HTTPS and --force-https is enabled: {url}",
+        );
 
         let sock = if let Some(addrs) = &agent.args.socks5
             && agent
