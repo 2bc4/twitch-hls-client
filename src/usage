@@ -84,7 +84,7 @@ HLS options:
           Write to the playlist cache and exit.
           Requires --playlist-cache-dir. Cannot be used with --use-cache-only.
       --force-playlist-url <URL>
-          Skip fetching/parsing the variant playlist URL and use specified URL instead
+          Skip fetching/parsing the variant playlist URL and use the specified URL instead
 
 HTTP options:
       --force-https
@@ -97,3 +97,7 @@ HTTP options:
           Retry HTTP requests <COUNT> times before giving up [default: 3]
       --http-timeout <SECONDS>
           HTTP request timeout in seconds [default: 10]
+      --socks5 <ADDRESS:PORT>
+          Proxy requests through a SOCKS5 proxy server
+      --socks5-restrict <HOST1,HOST2>
+          Proxy only the specified host(s). If not specified all requests will be proxied.

@@ -70,13 +70,20 @@ impl Default for Args {
 
 impl Debug for Args {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        let hide_option = |arg: &Option<String>| -> Option<&'static str> {
+            match arg {
+                Some(_) => Some("<hidden>"),
+                None => None,
+            }
+        };
+
         f.debug_struct("Args")
             .field("servers", &self.servers)
             .field("print_streams", &self.print_streams)
             .field("no_low_latency", &self.no_low_latency)
             .field("passthrough", &self.passthrough)
-            .field("client_id", &Self::hide_option(&self.client_id))
-            .field("auth_token", &Self::hide_option(&self.auth_token))
+            .field("client_id", &hide_option(&self.client_id))
+            .field("auth_token", &hide_option(&self.auth_token))
             .field("codecs", &self.codecs)
             .field("never_proxy", &self.never_proxy)
             .field("playlist_cache_dir", &self.playlist_cache_dir)
@@ -91,14 +98,14 @@ impl Debug for Args {
 
 impl Parse for Args {
     fn parse(&mut self, parser: &mut Parser) -> Result<()> {
-        parser.parse_fn_cfg(&mut self.servers, "-s", "servers", Self::split_comma)?;
+        parser.parse_comma_list_cfg(&mut self.servers, "-s", "servers")?;
         parser.parse_switch(&mut self.print_streams, "--print-streams")?;
         parser.parse_switch(&mut self.no_low_latency, "--no-low-latency")?;
         parser.parse_fn(&mut self.passthrough, "--passthrough", Passthrough::new)?;
         parser.parse_opt(&mut self.client_id, "--client-id")?;
         parser.parse_opt(&mut self.auth_token, "--auth-token")?;
         parser.parse_cow_string(&mut self.codecs, "--codecs")?;
-        parser.parse_fn(&mut self.never_proxy, "--never-proxy", Self::split_comma)?;
+        parser.parse_comma_list(&mut self.never_proxy, "--never-proxy")?;
         parser.parse_opt(&mut self.playlist_cache_dir, "--playlist-cache-dir")?;
         parser.parse_switch(&mut self.use_cache_only, "--use-cache-only")?;
         parser.parse_switch(&mut self.write_cache_only, "--write-cache-only")?;
@@ -137,19 +144,6 @@ impl Parse for Args {
         }
 
         Ok(())
-    }
-}
-
-impl Args {
-    fn split_comma<T: for<'a> From<&'a str>>(arg: &str) -> Result<Option<Vec<T>>> {
-        Ok(Some(arg.split(',').map(T::from).collect()))
-    }
-
-    const fn hide_option(arg: &Option<String>) -> Option<&'static str> {
-        match arg {
-            Some(_) => Some("<hidden>"),
-            None => None,
-        }
     }
 }
 

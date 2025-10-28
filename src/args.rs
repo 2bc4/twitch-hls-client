@@ -141,6 +141,23 @@ impl Parser {
         self.resolve(dst, arg, key, f)
     }
 
+    pub fn parse_comma_list<T: for<'a> From<&'a str>>(
+        &mut self,
+        dst: &mut Option<Vec<T>>,
+        key: &'static str,
+    ) -> Result<()> {
+        self.parse_fn(dst, key, Self::comma_list_impl)
+    }
+
+    pub fn parse_comma_list_cfg<T: for<'a> From<&'a str>>(
+        &mut self,
+        dst: &mut Option<Vec<T>>,
+        key: &'static str,
+        cfg_key: &'static str,
+    ) -> Result<()> {
+        self.parse_fn_cfg(dst, key, cfg_key, Self::comma_list_impl)
+    }
+
     fn resolve<T, E>(
         &self,
         dst: &mut T,
@@ -175,6 +192,10 @@ impl Parser {
 
     fn cow_string_impl(arg: &str) -> Result<Cow<'static, str>> {
         Ok(arg.to_owned().into())
+    }
+
+    fn comma_list_impl<T: for<'a> From<&'a str>>(arg: &str) -> Result<Option<Vec<T>>> {
+        Ok(Some(arg.split(',').map(T::from).collect()))
     }
 
     #[cfg(all(unix, not(target_os = "macos")))]

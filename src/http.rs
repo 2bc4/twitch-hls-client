@@ -1,5 +1,6 @@
 mod decoder;
 mod request;
+mod socks5;
 mod url;
 
 pub use request::{Request, TextRequest};
@@ -9,6 +10,7 @@ use std::{
     borrow::Cow,
     fmt::{self, Display, Formatter},
     io::Write,
+    net::{SocketAddr, ToSocketAddrs},
     sync::Arc,
     time::Duration,
 };
@@ -48,6 +50,8 @@ pub struct Args {
     retries: u64,
     timeout: Duration,
     user_agent: Cow<'static, str>,
+    socks5: Option<Vec<SocketAddr>>,
+    socks5_restrict: Option<Vec<String>>,
 }
 
 impl Default for Args {
@@ -58,6 +62,8 @@ impl Default for Args {
             user_agent: constants::USER_AGENT.into(),
             force_https: bool::default(),
             force_ipv4: bool::default(),
+            socks5: Option::default(),
+            socks5_restrict: Option::default(),
         }
     }
 }
@@ -69,6 +75,10 @@ impl Parse for Args {
         parser.parse(&mut self.retries, "--http-retries")?;
         parser.parse_duration(&mut self.timeout, "--http-timeout")?;
         parser.parse_cow_string(&mut self.user_agent, "--user-agent")?;
+        parser.parse_fn(&mut self.socks5, "--socks5", |arg| {
+            Ok(Some(arg.to_socket_addrs()?.collect()))
+        })?;
+        parser.parse_comma_list(&mut self.socks5_restrict, "--socks5-restrict")?;
 
         Ok(())
     }
