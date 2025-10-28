@@ -47,16 +47,16 @@ jobs:
         if: ${{ contains(matrix.os, 'ubuntu') }}
         run: sudo apt-get install -y musl-tools musl-dev
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@nightly
+        uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
           components: rust-src
       - name: Build
         shell: bash
-        run: RUSTFLAGS='-Ctarget-cpu=${{ matrix.target-cpu }} -Zlocation-detail=none -Zunstable-options -Cpanic=immediate_abort' cargo +nightly build -Zbuild-std=std,panic_abort -Zbuild-std-features= --release --target=${{ matrix.target }}
+        run: RUSTFLAGS='-Ctarget-cpu=${{ matrix.target-cpu }}' cargo build --release --target=${{ matrix.target }}
       - name: Smoke test
         shell: bash
-        run: RUSTFLAGS='-Ctarget-cpu=${{ matrix.target-cpu }} -Zlocation-detail=none -Zunstable-options -Cpanic=immediate_abort' cargo +nightly run -Zbuild-std=std,panic_abort -Zbuild-std-features= --release --target=${{ matrix.target }} -- -V
+        run: RUSTFLAGS='-Ctarget-cpu=${{ matrix.target-cpu }}' cargo run --release --target=${{ matrix.target }} -- -V
       - name: Move binary
         shell: bash
         run: mv "target/${{ matrix.target }}/release/${{ matrix.bin-name }}" .
