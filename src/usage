@@ -98,6 +98,8 @@ HTTP options:
       --http-timeout <SECONDS>
           HTTP request timeout in seconds [default: 10]
       --socks5 <ADDRESS:PORT>
-          Proxy requests through a SOCKS5 proxy server
+          Proxy requests through a SOCKS5 proxy server.
+          Username/password auth is currently unsupported.
       --socks5-restrict <HOST1,HOST2>
-          Proxy only the specified host(s). If not specified all requests will be proxied.
+          Proxy only the specified host(s).
+          If not specified all requests will be proxied.
