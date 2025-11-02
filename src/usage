@@ -1,4 +1,4 @@
-Usage: twitch-hls-client [OPTIONS] [-p <PATH> -r <PATH> -t <ADDRESS:PORT>] <CHANNEL> <QUALITY>
+Usage: twitch-hls-client [OPTIONS] [-p <PATH> -r <PATH> -t <HOST:PORT>] <CHANNEL> <QUALITY>
 
 Arguments:
   <CHANNEL>
@@ -36,8 +36,8 @@ Output options:
               Allow overwriting file when recording
 
     TCP server options:
-      -t <ADDRESS:PORT>
-              Listen on <ADDRESS:PORT> and output stream to connected TCP clients.
+      -t <HOST:PORT>
+              Listen on <HOST:PORT> and output stream to connected TCP clients.
               Clients may connect or disconnect at any time.
               If there are no clients connected and it is the only output, then
               segment fetching will be paused until a client connects.
@@ -97,7 +97,7 @@ HTTP options:
           Retry HTTP requests <COUNT> times before giving up [default: 3]
       --http-timeout <SECONDS>
           HTTP request timeout in seconds [default: 10]
-      --socks5 <ADDRESS:PORT>
+      --socks5 <HOST:PORT>
           Proxy requests through a SOCKS5 proxy server.
           Username/password auth is currently unsupported.
       --socks5-restrict <HOST1,HOST2>
