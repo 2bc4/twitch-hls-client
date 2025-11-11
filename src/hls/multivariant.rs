@@ -99,7 +99,7 @@ fn fetch_twitch_gql(
     channel: &str,
     agent: &Agent,
 ) -> Result<String> {
-    const GQL_LEN_WITHOUT_CHANNEL: usize = 249;
+    const GQL_LEN_WITHOUT_CHANNEL: usize = 267;
 
     let mut client_id_buf = ArrayString::<30>::new();
     let client_id = choose_client_id(&mut client_id_buf, client_id, &auth_token, agent)?;
@@ -118,7 +118,7 @@ fn fetch_twitch_gql(
              {{\
                 \"extensions\":{{\
                     \"persistedQuery\":{{\
-                        \"sha256Hash\":\"0828119ded1c13477966434e15800ff57ddacf13ba1911c129dc2200705b0712\",\
+                        \"sha256Hash\":\"ed230aa1e33e07eebb8928504583da78a5173989fadfb1ac94be06a04f3cdbe9\",\
                         \"version\":1\
                     }}\
                 }},\
@@ -128,6 +128,7 @@ fn fetch_twitch_gql(
                     \"isVod\":false,\
                     \"login\":\"{channel}\",\
                     \"playerType\":\"site\",\
+                    \"platform\":\"site\",\
                     \"vodID\":\"\"\
                 }}\
              }}",
@@ -159,13 +160,15 @@ fn fetch_twitch_playlist(
 ) -> Result<(Url, String)> {
     let url = format!(
         "{base_url}{channel}.m3u8\
-        ?acmb=e30%3D\
-        &allow_source=true\
+        ?allow_source=true\
         &allow_audio_only=true\
         &cdm=wv\
         &fast_bread={low_latency}\
-        &playlist_include_framerate=true\
         &player_backend=mediaplayer\
+        &playlist_include_framerate=true\
+        &enable_score=true\
+        &multigroup_video=false\
+        &include_unavailable=false\
         &reassignments_supported=true\
         &supported_codecs={codecs}\
         &transcode_mode=cbr_v1\
@@ -175,10 +178,6 @@ fn fetch_twitch_playlist(
         &token={token}\
         &player_version={player_version}\
         &warp={low_latency}\
-        &browser_family=firefox\
-        &browser_version={browser_version}\
-        &os_name=Windows\
-        &os_version=NT+10.0\
         &platform=web",
         base_url = constants::TWITCH_HLS_BASE,
         p = {
@@ -189,7 +188,7 @@ fn fetch_twitch_playlist(
         },
         play_session_id = ArrayString::<32>::random()?,
         sig = {
-            extract(gql_response, r#""signature":""#, r#"","__typename""#)
+            extract(gql_response, r#""signature":""#, r#"","authorization""#)
                 .context("Failed to find signature in GQL response")?
         },
         token = {
@@ -199,7 +198,6 @@ fn fetch_twitch_playlist(
             &gql_response[start..end]
         },
         player_version = constants::PLAYER_VERSION,
-        browser_version = &constants::USER_AGENT[(constants::USER_AGENT.len() - 5)..],
     )
     .into();
 
