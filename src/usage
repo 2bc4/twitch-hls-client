@@ -23,7 +23,8 @@ Output options:
       -p <PATH>
               Path to player
       -a <ARGUMENTS>
-              Arguments to pass to the player [default: -]
+              Arguments to pass to the player. [default: -]
+              The keyword '[channel]' will be substituted with the channel argument at runtime.
       -q, --quiet
               Silence player output
           --no-kill
@@ -50,7 +51,7 @@ HLS options:
           If not specified will fetch the master playlist directly from Twitch.
 
           Can be multiple comma separated servers, will try each in order until successful.
-          If URL includes the keyword "[channel]" it will be replaced with the channel argument at runtime.
+          The keyword '[channel]' will be substituted with the channel argument at runtime.
           Note: This does not support standard HTTP proxies (ie. proxies using the CONNECT request)
       --print-streams
           Print available streams and exit
@@ -60,9 +61,9 @@ HLS options:
           Passthrough playlist URL to the player and do nothing else.
 
           Valid modes:
-          "variant": passthrough the variant playlist URL
-          "multivariant": passthrough the multivariant playlist URL
-          "disabled": disable passthrough
+          'variant': passthrough the variant playlist URL
+          'multivariant': passthrough the multivariant playlist URL
+          'disabled': disable passthrough
       --client-id <ID>
           Value to be used in the Client-Id header.
           If not specified will use the default client ID.
