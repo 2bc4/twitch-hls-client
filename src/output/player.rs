@@ -165,5 +165,5 @@ impl Player {
 }
 
 fn prepare_player_args(arg_str: &str, channel: &str) -> String {
-    arg_str.replace("{channel}", channel)
+    arg_str.replace("[channel]", channel)
 }
