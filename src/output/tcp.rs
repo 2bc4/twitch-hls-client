@@ -127,7 +127,8 @@ impl Tcp {
                     if let Some(header) = &self.header
                         && !client.send(&header.clone())
                     {
-                        return Ok(());
+                        info!("Failed to send segment header to client, dropping");
+                        continue;
                     }
 
                     match &mut self.state {
