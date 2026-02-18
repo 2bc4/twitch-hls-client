@@ -23,7 +23,7 @@ pub enum Stream {
 }
 
 impl Stream {
-    pub fn new(mut args: Args, agent: &Agent) -> Result<Self> {
+    pub fn new(args: &mut Args, agent: &Agent) -> Result<Self> {
         if let Some(url) = args.force_playlist_url.take() {
             info!("Using forced playlist URL");
             return Ok(Self::Variant(Connection::new(url, agent.text())));

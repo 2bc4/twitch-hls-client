@@ -58,16 +58,16 @@ fn main_loop(mut writer: Writer, mut playlist: Playlist, agent: &Agent) -> Resul
 
 fn main() -> Result<()> {
     let (writer, playlist, agent) = {
-        let (main_args, http_args, hls_args, mut output_args) = args::parse()?;
+        let (main_args, http_args, mut hls_args, mut output_args) = args::parse()?;
 
         Logger::init(main_args.debug)?;
         debug!("\n{main_args:#?}\n{http_args:#?}\n{hls_args:#?}\n{output_args:#?}");
 
         let agent = Agent::new(http_args);
-        let conn = match Stream::new(hls_args, &agent) {
+        let conn = match Stream::new(&mut hls_args, &agent) {
             Ok(Stream::Variant(conn)) => conn,
             Ok(Stream::Passthrough(url)) => {
-                return Player::passthrough(&mut output_args.player, &url);
+                return Player::passthrough(&mut output_args.player, &url, hls_args.channel());
             }
             Ok(Stream::Exit) => return Ok(()),
             Err(e) if e.is::<OfflineError>() => {
@@ -77,7 +77,11 @@ fn main() -> Result<()> {
             Err(e) => return Err(e),
         };
 
-        (Writer::new(&output_args)?, Playlist::new(conn)?, agent)
+        (
+            Writer::new(&output_args, hls_args.channel())?,
+            Playlist::new(conn)?,
+            agent,
+        )
     };
 
     let error = main_loop(writer, playlist, &agent).expect_err("Main loop returned Ok");

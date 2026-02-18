@@ -93,10 +93,10 @@ impl Write for Writer {
 }
 
 impl Writer {
-    pub fn new(args: &Args) -> Result<Self> {
+    pub fn new(args: &Args, channel: &str) -> Result<Self> {
         let mut writer = Self::default();
 
-        writer.add_output(Player::new(&args.player)?);
+        writer.add_output(Player::new(&args.player, channel)?);
         writer.add_output(Tcp::new(&args.tcp)?);
         writer.add_output(File::new(&args.file)?);
 

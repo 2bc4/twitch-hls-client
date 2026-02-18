@@ -147,6 +147,12 @@ impl Parse for Args {
     }
 }
 
+impl Args {
+    pub fn channel(&self) -> &str {
+        &self.channel
+    }
+}
+
 #[derive(Debug, Default)]
 enum Passthrough {
     Variant,

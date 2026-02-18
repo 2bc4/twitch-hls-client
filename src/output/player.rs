@@ -93,15 +93,16 @@ impl Write for Player {
 }
 
 impl Player {
-    pub fn new(args: &Args) -> Result<Option<Self>> {
+    pub fn new(args: &Args, channel: &str) -> Result<Option<Self>> {
         let Some(path) = &args.path else {
             return Ok(None);
         };
 
         info!("Opening player: {path} {}", args.pargs);
         let mut command = Command::new(path);
+        let player_args = prepare_player_args(&args.pargs, channel);
         command
-            .args(args.pargs.split_whitespace())
+            .args(player_args.split_whitespace())
             .stdin(Stdio::piped());
 
         if args.quiet {
@@ -121,7 +122,7 @@ impl Player {
         }))
     }
 
-    pub fn passthrough(args: &mut Args, url: &str) -> Result<()> {
+    pub fn passthrough(args: &mut Args, url: &str, channel: &str) -> Result<()> {
         info!("Passing through playlist URL to player");
         if args.pargs.split_whitespace().any(|a| a == "-") {
             args.pargs = args
@@ -141,7 +142,7 @@ impl Player {
             args.pargs = format!("{} {url}", args.pargs).into();
         }
 
-        let Some(mut player) = Self::new(args)? else {
+        let Some(mut player) = Self::new(args, channel)? else {
             bail!("No player set");
         };
 
@@ -161,4 +162,8 @@ impl Player {
 
         error
     }
+}
+
+fn prepare_player_args(arg_str: &str, channel: &str) -> String {
+    arg_str.replace("{channel}", channel)
 }
