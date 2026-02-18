@@ -16,12 +16,12 @@ pub trait Parse {
 }
 
 pub fn parse() -> Result<(MainArgs, HttpArgs, HlsArgs, OutputArgs)> {
-    let mut parser = Parser::new()?;
-
     let mut main = MainArgs::default();
     let mut http = HttpArgs::default();
-    let mut hls = HlsArgs::default();
     let mut output = OutputArgs::default();
+    let mut hls = HlsArgs::default();
+
+    let mut parser = Parser::new()?;
 
     main.parse(&mut parser)?;
     http.parse(&mut parser)?;
@@ -236,12 +236,16 @@ impl Parser {
     fn new() -> Result<Self> {
         let mut parser = Arguments::from_env();
         if parser.contains("-h") || parser.contains("--help") {
-            print!(include_str!("usage"));
+            print!(
+                include_str!("usage"),
+                default_user_agent = constants::USER_AGENT,
+            );
+
             process::exit(0);
         }
 
         if parser.contains("-V") || parser.contains("--version") {
-            println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"),);
+            println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
             process::exit(0);
         }
 

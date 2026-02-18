@@ -93,7 +93,7 @@ HTTP options:
       --force-ipv4
           Only use IPv4 addresses when resolving host names
       --user-agent <USERAGENT>
-          User agent used in HTTP requests [default: a recent version of Firefox on Windows 10]
+          User agent used in HTTP requests [default: {default_user_agent}]
       --http-retries <COUNT>
           Retry HTTP requests <COUNT> times before giving up [default: 3]
       --http-timeout <SECONDS>
