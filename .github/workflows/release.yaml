@@ -25,10 +25,22 @@ jobs:
             zip-name: x86_64-pc-windows-msvc
 
           - target: x86_64-pc-windows-msvc
+            target-cpu: x86-64-v2
+            os: windows-latest
+            bin-name: twitch-hls-client.exe
+            zip-name: x86_64-v2-pc-windows-msvc
+
+          - target: x86_64-pc-windows-msvc
             target-cpu: x86-64-v3
             os: windows-latest
             bin-name: twitch-hls-client.exe
             zip-name: x86_64-v3-pc-windows-msvc
+
+          - target: x86_64-pc-windows-msvc
+            target-cpu: x86-64-v4
+            os: windows-latest
+            bin-name: twitch-hls-client.exe
+            zip-name: x86_64-v4-pc-windows-msvc
 
           - target: x86_64-unknown-linux-musl
             target-cpu: x86-64
@@ -37,10 +49,22 @@ jobs:
             zip-name: x86_64-unknown-linux-musl
 
           - target: x86_64-unknown-linux-musl
+            target-cpu: x86-64-v2
+            os: ubuntu-latest
+            bin-name: twitch-hls-client
+            zip-name: x86_64-v2-unknown-linux-musl
+
+          - target: x86_64-unknown-linux-musl
             target-cpu: x86-64-v3
             os: ubuntu-latest
             bin-name: twitch-hls-client
             zip-name: x86_64-v3-unknown-linux-musl
+
+          - target: x86_64-unknown-linux-musl
+            target-cpu: x86-64-v4
+            os: ubuntu-latest
+            bin-name: twitch-hls-client
+            zip-name: x86_64-v4-unknown-linux-musl
     steps:
       - uses: actions/checkout@v4
       - name: Install Linux dependencies
