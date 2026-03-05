@@ -3,13 +3,15 @@
 [![nixpkgs unstable](https://repology.org/badge/version-for-repo/nix_unstable/twitch-hls-client.svg?header=nixpkgs%20unstable)](https://search.nixos.org/packages?channel=unstable&show=twitch-hls-client)
 [![license](https://img.shields.io/github/license/2bc4/twitch-hls-client.svg)](LICENSE)
 
-`twitch-hls-client` is a minimal command line client for watching/recording Twitch streams
+`twitch-hls-client` is a minimal command line client for watching Twitch streams
 
 ### Features
 - Playback of low latency and normal latency streams
-- Ad blocking with playlist proxies or with a turbo/subscriber token
+- Ad blocking via playlist proxy, socks5 proxy, or turbo/subscriber token
 - Generally lower latency than the Twitch web player
-- Tiny (at most uses 3-4MB of memory depending on platform)
+- Output to video player/pipe, file, or TCP
+- (Limited) Kick stream support by prefixing channel username with `kick:`
+- Tiny (at most uses 5MB of memory depending on platform)
 
 ### Usage
 #### Watching
