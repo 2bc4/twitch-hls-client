@@ -91,22 +91,22 @@ Depending on your platform this will look for the config file at the following l
 |Other      |`./twitch-hls-client/config`                                  |
 
 ### Installing
-There are standalone binaries built by GitHub for Linux and Windows [here](https://github.com/2bc4/twitch-hls-client/releases/latest).
+There are standalone binaries built by GitHub for Linux and Windows [here](https://github.com/2bc4/twitch-hls-client/releases/latest). (x86-64-v1, v2, v3, and v4 builds)
 
+#### Arch Linux
+Install from the [AUR](https://aur.archlinux.org/packages/twitch-hls-client):
 
-### Building
-Install the [Rust toolchain](https://rustup.rs) and then run:
-```
-cargo install --git https://github.com/2bc4/twitch-hls-client.git
-```
-Or from [crates.io](https://crates.io/crates/twitch-hls-client):
-```
-cargo install twitch-hls-client
+With an AUR helper such as `paru`:
+```bash
+paru -S twitch-hls-client
 ```
 
-Building requires a C/C++ compiler for ring (TLS cryptographic primitives). You should prefer clang over gcc due to a gcc bug resulting in worse TLS performance.
-
-You can further trim down and optimize the binary by building with `build-std` and `panic=immediate-abort`. This can be seen in the [release build action](https://github.com/2bc4/twitch-hls-client/blob/master/.github/workflows/release.yaml#L80).
+Or manually:
+```bash
+git clone https://aur.archlinux.org/twitch-hls-client.git
+cd twitch-hls-client
+makepkg -si
+```
 
 #### NixOS
 
@@ -175,6 +175,20 @@ You can further trim down and optimize the binary by building with `build-std` a
 ```
 
 </details>
+
+### Building
+Install the [Rust toolchain](https://rustup.rs) and then run:
+```
+cargo install --git https://github.com/2bc4/twitch-hls-client.git
+```
+Or from [crates.io](https://crates.io/crates/twitch-hls-client):
+```
+cargo install twitch-hls-client
+```
+
+Building requires a C/C++ compiler for ring (TLS cryptographic primitives). You should prefer clang over gcc due to a gcc bug resulting in worse TLS performance.
+
+You can further trim down and optimize the binary by building with `build-std` and `panic=immediate-abort`. This can be seen in the [release build action](https://github.com/2bc4/twitch-hls-client/blob/master/.github/workflows/release.yaml#L80).
 
 ### Reducing player latency with mpv
 Following [this section](https://mpv.io/manual/master/#low-latency-playback) in the mpv manual is recommended.
