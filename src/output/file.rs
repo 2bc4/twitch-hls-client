@@ -7,22 +7,7 @@ use anyhow::Result;
 use log::info;
 
 use super::Output;
-use crate::args::{Parse, Parser};
-
-#[derive(Default, Debug)]
-pub struct Args {
-    path: Option<String>,
-    overwrite: bool,
-}
-
-impl Parse for Args {
-    fn parse(&mut self, parser: &mut Parser) -> Result<()> {
-        parser.parse_opt_cfg(&mut self.path, "-r", "record")?;
-        parser.parse_switch(&mut self.overwrite, "--overwrite")?;
-
-        Ok(())
-    }
-}
+use crate::config::Config;
 
 pub struct File {
     file: fs::File,
@@ -49,13 +34,15 @@ impl Write for File {
 }
 
 impl File {
-    pub fn new(args: &Args) -> Result<Option<Self>> {
-        let Some(path) = &args.path else {
+    pub fn new() -> Result<Option<Self>> {
+        let cfg = Config::get();
+
+        let Some(path) = &cfg.record_path else {
             return Ok(None);
         };
 
         info!("Recording to: {path}");
-        if args.overwrite {
+        if cfg.overwrite {
             return Ok(Some(Self {
                 file: fs::File::create(path)?,
             }));

@@ -5,6 +5,7 @@ use std::{
     mem,
     net::{SocketAddr, TcpStream, ToSocketAddrs},
     str,
+    time::Duration,
 };
 
 use anyhow::{Context, Result, bail, ensure};
@@ -12,6 +13,7 @@ use log::{debug, error};
 use rustls::{ClientConnection, StreamOwned};
 
 use super::{Agent, Method, Scheme, StatusError, Url, decoder::Decoder, socks5};
+use crate::config::Config;
 
 pub struct Request<W: Write> {
     writer: W,
@@ -22,25 +24,27 @@ pub struct Request<W: Write> {
 
     headers_buf: Box<[u8]>,
     decode_buf: Box<[u8]>,
-
+    no_retry: bool,
     retries: u64,
+
     agent: Agent,
 }
 
 impl<W: Write> Request<W> {
     const HEADERS_BUF_SIZE: usize = 4 * 1024;
-    const DECODE_BUF_SIZE: usize = 16 * 1024;
+    const DECODE_BUF_SIZE: usize = 16 * 1024; //rustls with default settings returns up to 16kb
 
     pub fn new(writer: W, agent: Agent) -> Self {
         Self {
             writer,
             headers_buf: vec![0u8; Self::HEADERS_BUF_SIZE].into_boxed_slice(),
             decode_buf: vec![0u8; Self::DECODE_BUF_SIZE].into_boxed_slice(),
-            retries: agent.args.retries,
+            retries: Config::get().retries,
             agent,
             stream: Option::default(),
             scheme: Scheme::default(),
             host_hash: u64::default(),
+            no_retry: bool::default(),
         }
     }
 
@@ -71,7 +75,9 @@ impl<W: Write> Request<W> {
         loop {
             match self.converse(method, host, url, args) {
                 Ok(()) => break,
-                Err(error) if retries < self.retries && Self::should_retry(&error) => {
+                Err(error)
+                    if !self.no_retry && retries < self.retries && Self::should_retry(&error) =>
+                {
                     if retries > 0 {
                         error!("http: {error}, retrying...");
                     }
@@ -106,7 +112,7 @@ impl<W: Write> Request<W> {
              Connection: keep-alive\r\n\
              {args}",
             path = url.path()?,
-            user_agent = &self.agent.args.user_agent,
+            user_agent = Config::get().user_agent,
             args = args.unwrap_or_else(|| format_args!("\r\n"))
         )?;
         stream.flush()?;
@@ -200,12 +206,10 @@ impl TextRequest {
     }
 
     pub fn text_no_retry(&mut self, method: Method, url: &Url) -> Result<()> {
-        let retries = self.0.retries;
-        self.0.retries = 0;
-
+        self.0.no_retry = true;
         self.text_impl(method, url, None)?;
+        self.0.no_retry = false;
 
-        self.0.retries = retries;
         Ok(())
     }
 
@@ -257,27 +261,33 @@ impl Write for Transport {
 
 impl Transport {
     fn new(url: &Url, host: &str, agent: &Agent) -> Result<Self> {
+        let cfg = Config::get();
+
         ensure!(
-            !agent.args.force_https || url.scheme == Scheme::Https,
+            !cfg.force_https || url.scheme == Scheme::Https,
             "URL protocol is not HTTPS and --force-https is enabled: {url}",
         );
 
-        let sock = if let Some(addrs) = &agent.args.socks5
-            && agent
-                .args
+        let sock = if let Some(addrs) = &cfg.socks5
+            && cfg
                 .socks5_restrict
                 .as_ref()
                 .is_none_or(|w| w.iter().any(|w| w == host))
         {
             debug!("Connecting to {host} via socks5 proxy...");
-            socks5::connect(Self::connect(addrs, agent)?, host, url.port()?)?
+            socks5::connect(
+                Self::connect(addrs, cfg.force_ipv4, cfg.timeout)?,
+                host,
+                url.port()?,
+            )?
         } else {
             debug!("Connecting to {host}...");
             Self::connect(
                 &(host, url.port()?)
                     .to_socket_addrs()?
                     .collect::<Vec<SocketAddr>>(),
-                agent,
+                cfg.force_ipv4,
+                cfg.timeout,
             )?
         };
 
@@ -291,19 +301,19 @@ impl Transport {
         }
     }
 
-    fn connect(addrs: &[SocketAddr], agent: &Agent) -> Result<TcpStream> {
+    fn connect(addrs: &[SocketAddr], force_ipv4: bool, timeout: Duration) -> Result<TcpStream> {
         ensure!(!addrs.is_empty(), "Failed to resolve socket address");
 
         let mut io_error = None;
         for addr in addrs
             .iter()
-            .filter(|a| !agent.args.force_ipv4 || SocketAddr::is_ipv4(a))
+            .filter(|a| !force_ipv4 || SocketAddr::is_ipv4(a))
         {
-            match TcpStream::connect_timeout(addr, agent.args.timeout) {
+            match TcpStream::connect_timeout(addr, timeout) {
                 Ok(sock) => {
                     sock.set_nodelay(true)?;
-                    sock.set_read_timeout(Some(agent.args.timeout))?;
-                    sock.set_write_timeout(Some(agent.args.timeout))?;
+                    sock.set_read_timeout(Some(timeout))?;
+                    sock.set_write_timeout(Some(timeout))?;
 
                     return Ok(sock);
                 }

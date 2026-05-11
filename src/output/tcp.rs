@@ -1,7 +1,7 @@
 use std::{
     io::{self, ErrorKind, Write},
     mem,
-    net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs},
+    net::{SocketAddr, TcpListener, TcpStream},
     sync::{
         Arc,
         mpsc::{self, Sender}, //change to mpmc when stabilized
@@ -14,37 +14,7 @@ use anyhow::{Context, Result};
 use log::{error, info};
 
 use super::Output;
-use crate::args::{Parse, Parser};
-
-#[derive(Debug)]
-pub struct Args {
-    addr: Option<SocketAddr>,
-    client_timeout: Duration,
-}
-
-impl Default for Args {
-    fn default() -> Self {
-        Self {
-            client_timeout: Duration::from_secs(30),
-            addr: Option::default(),
-        }
-    }
-}
-
-impl Parse for Args {
-    fn parse(&mut self, parser: &mut Parser) -> Result<()> {
-        parser.parse_fn_cfg(&mut self.addr, "-t", "tcp-server", |arg| {
-            Ok(Some(
-                arg.to_socket_addrs()?
-                    .next()
-                    .context("Invalid socket address")?,
-            ))
-        })?;
-        parser.parse_duration(&mut self.client_timeout, "--tcp-client-timeout")?;
-
-        Ok(())
-    }
-}
+use crate::config::Config;
 
 pub struct Tcp {
     listener: TcpListener,
@@ -101,8 +71,10 @@ impl Write for Tcp {
 }
 
 impl Tcp {
-    pub fn new(args: &Args) -> Result<Option<Self>> {
-        let Some(addr) = &args.addr else {
+    pub fn new() -> Result<Option<Self>> {
+        let cfg = Config::get();
+
+        let Some(addr) = &cfg.tcp_addr else {
             return Ok(None);
         };
 
@@ -112,7 +84,7 @@ impl Tcp {
         info!("Listening on: {addr}");
         Ok(Some(Self {
             listener,
-            client_timeout: args.client_timeout,
+            client_timeout: cfg.tcp_client_timeout,
             state: State::default(),
             header: Option::default(),
         }))

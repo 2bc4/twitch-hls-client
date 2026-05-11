@@ -9,11 +9,10 @@ use std::io::{self, Write};
 use anyhow::{Result, ensure};
 use log::{debug, info};
 
-use file::{Args as FileArgs, File};
-use player::Args as PlayerArgs;
-use tcp::{Args as TcpArgs, Tcp};
+use file::File;
+use tcp::Tcp;
 
-use crate::args::{Parse, Parser};
+use crate::config::Config;
 
 pub trait Output: Write + Send {
     fn set_header(&mut self, header: &[u8]) -> io::Result<()>;
@@ -23,23 +22,6 @@ pub trait Output: Write + Send {
     }
 
     fn wait_for_output(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
-
-#[derive(Default, Debug)]
-pub struct Args {
-    pub player: PlayerArgs,
-    tcp: TcpArgs,
-    file: FileArgs,
-}
-
-impl Parse for Args {
-    fn parse(&mut self, parser: &mut Parser) -> Result<()> {
-        self.player.parse(parser)?;
-        self.tcp.parse(parser)?;
-        self.file.parse(parser)?;
-
         Ok(())
     }
 }
@@ -93,14 +75,13 @@ impl Write for Writer {
 }
 
 impl Writer {
-    pub fn new(args: &Args, channel: &str) -> Result<Self> {
+    pub fn new() -> Result<Self> {
+        ensure!(Config::get().has_output(), "No output configured");
+
         let mut writer = Self::default();
-
-        writer.add_output(Player::new(&args.player, channel)?);
-        writer.add_output(Tcp::new(&args.tcp)?);
-        writer.add_output(File::new(&args.file)?);
-
-        ensure!(!writer.outputs.is_empty(), "No output configured");
+        writer.add_output(Player::new()?);
+        writer.add_output(Tcp::new()?);
+        writer.add_output(File::new()?);
 
         Ok(writer)
     }

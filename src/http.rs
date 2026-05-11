@@ -7,22 +7,14 @@ pub use request::{Request, TextRequest};
 pub use url::{Scheme, Url};
 
 use std::{
-    borrow::Cow,
     fmt::{self, Display, Formatter},
     io::Write,
-    net::{SocketAddr, ToSocketAddrs},
     sync::Arc,
-    time::Duration,
 };
 
 use anyhow::Result;
 use log::{debug, error};
 use rustls::{ClientConfig, RootCertStore};
-
-use crate::{
-    args::{Parse, Parser},
-    constants,
-};
 
 #[derive(Debug)]
 pub struct StatusError(u16, Url);
@@ -40,47 +32,6 @@ impl StatusError {
         error
             .downcast_ref::<Self>()
             .is_some_and(|Self(code, _)| *code == 404)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Args {
-    force_https: bool,
-    force_ipv4: bool,
-    retries: u64,
-    timeout: Duration,
-    user_agent: Cow<'static, str>,
-    socks5: Option<Vec<SocketAddr>>,
-    socks5_restrict: Option<Vec<String>>,
-}
-
-impl Default for Args {
-    fn default() -> Self {
-        Self {
-            retries: 3,
-            timeout: Duration::from_secs(10),
-            user_agent: constants::USER_AGENT.into(),
-            force_https: bool::default(),
-            force_ipv4: bool::default(),
-            socks5: Option::default(),
-            socks5_restrict: Option::default(),
-        }
-    }
-}
-
-impl Parse for Args {
-    fn parse(&mut self, parser: &mut Parser) -> Result<()> {
-        parser.parse_switch(&mut self.force_https, "--force-https")?;
-        parser.parse_switch(&mut self.force_ipv4, "--force-ipv4")?;
-        parser.parse(&mut self.retries, "--http-retries")?;
-        parser.parse_duration(&mut self.timeout, "--http-timeout")?;
-        parser.parse_cow_string(&mut self.user_agent, "--user-agent")?;
-        parser.parse_fn(&mut self.socks5, "--socks5", |arg| {
-            Ok(Some(arg.to_socket_addrs()?.collect()))
-        })?;
-        parser.parse_comma_list(&mut self.socks5_restrict, "--socks5-restrict")?;
-
-        Ok(())
     }
 }
 
@@ -103,12 +54,11 @@ impl Display for Method {
 
 #[derive(Clone)]
 pub struct Agent {
-    args: Arc<Args>,
     tls_config: Arc<ClientConfig>,
 }
 
 impl Agent {
-    pub fn new(args: Args) -> Self {
+    pub fn new() -> Self {
         let mut roots = RootCertStore::empty();
         let res = rustls_native_certs::load_native_certs();
 
@@ -117,14 +67,12 @@ impl Agent {
         }
 
         for cert in res.certs {
-            //Ignore parsing errors, OS can have broken certs
             if let Err(e) = roots.add(cert) {
                 debug!("Invalid certificate: {e}");
             }
         }
 
         Self {
-            args: Arc::new(args),
             tls_config: Arc::new(
                 ClientConfig::builder()
                     .with_root_certificates(Arc::new(roots))

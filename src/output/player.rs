@@ -1,5 +1,4 @@
 use std::{
-    borrow::Cow,
     fmt::{self, Display, Formatter},
     io::{self, ErrorKind::BrokenPipe, Write},
     process::{Child, ChildStdin, Command, Stdio},
@@ -9,7 +8,7 @@ use anyhow::{Context, Result, bail};
 use log::{error, info};
 
 use super::Output;
-use crate::args::{Parse, Parser};
+use crate::config::Config;
 
 #[derive(Debug)]
 pub struct PlayerClosedError;
@@ -22,45 +21,14 @@ impl Display for PlayerClosedError {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct Args {
-    path: Option<String>,
-    pargs: Cow<'static, str>,
-    quiet: bool,
-    no_kill: bool,
-}
-
-impl Default for Args {
-    fn default() -> Self {
-        Self {
-            pargs: "-".into(),
-            path: Option::default(),
-            quiet: bool::default(),
-            no_kill: bool::default(),
-        }
-    }
-}
-
-impl Parse for Args {
-    fn parse(&mut self, parser: &mut Parser) -> Result<()> {
-        parser.parse_opt_cfg(&mut self.path, "-p", "player")?;
-        parser.parse_cow_string_cfg(&mut self.pargs, "-a", "player-args")?;
-        parser.parse_switch_or(&mut self.quiet, "-q", "--quiet")?;
-        parser.parse_switch(&mut self.no_kill, "--no-kill")?;
-
-        Ok(())
-    }
-}
-
 pub struct Player {
     stdin: ChildStdin,
     process: Child,
-    no_kill: bool,
 }
 
 impl Drop for Player {
     fn drop(&mut self) {
-        if !self.no_kill
+        if !Config::get().player_no_kill
             && let Err(e) = self.process.kill()
         {
             error!("Failed to kill player: {e}");
@@ -93,19 +61,20 @@ impl Write for Player {
 }
 
 impl Player {
-    pub fn new(args: &Args, channel: &str) -> Result<Option<Self>> {
-        let Some(path) = &args.path else {
+    pub fn new() -> Result<Option<Self>> {
+        let cfg = Config::get();
+
+        let Some(path) = &cfg.player_path else {
             return Ok(None);
         };
 
-        info!("Opening player: {path} {}", args.pargs);
+        info!("Opening player: {path} {}", cfg.player_args);
         let mut command = Command::new(path);
-        let player_args = prepare_player_args(&args.pargs, channel);
         command
-            .args(player_args.split_whitespace())
+            .args(cfg.player_args.split_whitespace())
             .stdin(Stdio::piped());
 
-        if args.quiet {
+        if cfg.player_quiet {
             command.stdout(Stdio::null()).stderr(Stdio::null());
         }
 
@@ -115,18 +84,15 @@ impl Player {
             .take()
             .context("Failed to open player stdin")?;
 
-        Ok(Some(Self {
-            stdin,
-            process,
-            no_kill: args.no_kill,
-        }))
+        Ok(Some(Self { stdin, process }))
     }
 
-    pub fn passthrough(args: &mut Args, url: &str, channel: &str) -> Result<()> {
+    pub fn passthrough(url: &str) -> Result<()> {
         info!("Passing through playlist URL to player");
-        if args.pargs.split_whitespace().any(|a| a == "-") {
-            args.pargs = args
-                .pargs
+
+        let cfg = Config::get();
+        let player_args = if cfg.player_args.split_whitespace().any(|a| a == "-") {
+            cfg.player_args
                 .split_whitespace()
                 .map(|a| {
                     if a == "-" {
@@ -137,17 +103,25 @@ impl Player {
                 })
                 .collect::<Vec<String>>()
                 .join(" ")
-                .into();
         } else {
-            args.pargs = format!("{} {url}", args.pargs).into();
-        }
+            format!("{} {url}", cfg.player_args)
+        };
 
-        let Some(mut player) = Self::new(args, channel)? else {
+        let Some(path) = &cfg.player_path else {
             bail!("No player set");
         };
 
-        player
-            .process
+        let mut command = Command::new(path);
+        command
+            .args(player_args.split_whitespace())
+            .stdin(Stdio::piped());
+
+        if cfg.player_quiet {
+            command.stdout(Stdio::null()).stderr(Stdio::null());
+        }
+
+        let mut process = command.spawn().context("Failed to open player")?;
+        process
             .wait()
             .context("Failed to wait for player process")?;
 
@@ -162,8 +136,4 @@ impl Player {
 
         error
     }
-}
-
-fn prepare_player_args(arg_str: &str, channel: &str) -> String {
-    arg_str.replace("[channel]", channel)
 }

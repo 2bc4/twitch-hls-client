@@ -9,7 +9,8 @@ use anyhow::{Context, Result, bail};
 use getrandom::getrandom;
 use log::{debug, error, info};
 
-use super::{Args, OfflineError, Passthrough, cache::Cache, map_if_offline};
+use super::{OfflineError, Passthrough, cache::Cache, map_if_offline};
+use crate::config::Config;
 
 use crate::{
     constants,
@@ -19,73 +20,68 @@ use crate::{
 pub enum Stream {
     Variant(Connection),
     Passthrough(Url),
-    Exit,
+    None,
 }
 
 impl Stream {
-    pub fn new(args: &mut Args, agent: &Agent) -> Result<Self> {
-        if let Some(url) = args.force_playlist_url.take() {
+    pub fn new(agent: &Agent) -> Result<Self> {
+        let cfg = Config::get();
+
+        if let Some(url) = cfg.force_playlist_url.clone() {
             info!("Using forced playlist URL");
             return Ok(Self::Variant(Connection::new(url, agent.text())));
         }
 
-        let cache = Cache::new(&args.playlist_cache_dir, &args.channel, &args.quality);
+        let cache = Cache::new(&cfg.playlist_cache_dir, &cfg.channel, &cfg.quality);
         if let Some(conn) = cache.as_ref().and_then(|c| c.get(agent)) {
-            if args.write_cache_only {
+            if cfg.write_cache_only {
                 info!("Playlist URL is already cached, exiting...");
-                return Ok(Self::Exit);
+                return Ok(Self::None);
             }
 
             info!("Using cached playlist URL");
             return Ok(Self::Variant(conn));
-        } else if args.use_cache_only {
+        } else if cfg.use_cache_only {
             bail!("Playlist URL not found in cache");
         }
 
-        info!("Fetching playlist for channel {}", &args.channel);
-        let (multivariant_url, playlist) =
-            if let Some(channel) = &args.channel.strip_prefix("kick:") {
-                fetch_kick_playlist(channel, agent)?
-            } else if let Some(servers) = &args.servers {
-                fetch_proxy_playlist(
-                    !args.no_low_latency,
-                    servers,
-                    &args.codecs,
-                    &args.channel,
-                    agent,
-                )?
-            } else {
-                let response = fetch_twitch_gql(
-                    args.client_id.take(),
-                    args.auth_token.take(),
-                    &args.channel,
-                    agent,
-                )?;
+        info!("Fetching playlist for channel {}", cfg.channel);
+        let (multivariant_url, playlist) = if let Some(channel) = cfg.channel.strip_prefix("kick:")
+        {
+            fetch_kick_playlist(channel, agent)?
+        } else if let Some(servers) = &cfg.servers {
+            fetch_proxy_playlist(!cfg.no_low_latency, servers, &cfg.codecs, agent)?
+        } else {
+            let response = fetch_twitch_gql(
+                cfg.client_id.clone(),
+                cfg.auth_token.clone(),
+                &cfg.channel,
+                agent,
+            )?;
 
-                fetch_twitch_playlist(
-                    &response,
-                    !args.no_low_latency,
-                    &args.codecs,
-                    &args.channel,
-                    agent,
-                )?
-            };
+            fetch_twitch_playlist(
+                &response,
+                !cfg.no_low_latency,
+                &cfg.codecs,
+                &cfg.channel,
+                agent,
+            )?
+        };
 
-        let Some(url) = choose_stream(&playlist, &args.quality, args.print_streams) else {
+        let Some(url) = choose_stream(&playlist, &cfg.quality, cfg.print_streams) else {
             print_streams(&playlist);
-            return Ok(Self::Exit);
+            return Ok(Self::None);
         };
 
         if let Some(cache) = &cache {
             cache.create(&url);
-
-            if args.write_cache_only {
+            if cfg.write_cache_only {
                 info!("Playlist cache written, exiting...");
-                return Ok(Self::Exit);
+                return Ok(Self::None);
             }
         }
 
-        match args.passthrough {
+        match cfg.passthrough {
             Passthrough::Disabled => Ok(Self::Variant(Connection::new(url, agent.text()))),
             Passthrough::Variant => Ok(Self::Passthrough(url)),
             Passthrough::Multivariant => Ok(Self::Passthrough(multivariant_url)),
@@ -211,7 +207,6 @@ fn fetch_proxy_playlist(
     low_latency: bool,
     servers: &[Url],
     codecs: &str,
-    channel: &str,
     agent: &Agent,
 ) -> Result<(Url, String), OfflineError> {
     let mut request = agent.text();
@@ -223,13 +218,12 @@ fn fetch_proxy_playlist(
         );
 
         let url = format!(
-            "{}?allow_source=true\
+            "{server}?allow_source=true\
             &allow_audio_only=true\
             &fast_bread={low_latency}\
             &warp={low_latency}\
             &supported_codecs={codecs}\
             &platform=web",
-            &server.replace("[channel]", channel),
         )
         .into();
 
