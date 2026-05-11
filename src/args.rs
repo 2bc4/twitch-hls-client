@@ -4,7 +4,6 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail};
-use pico_args::Arguments;
 
 use crate::{
     Args as MainArgs, constants, hls::Args as HlsArgs, http::Args as HttpArgs,
@@ -36,7 +35,7 @@ pub fn parse() -> Result<(MainArgs, HttpArgs, HlsArgs, OutputArgs)> {
 }
 
 pub struct Parser {
-    parser: Arguments,
+    args: Arguments,
     config: Option<String>,
 }
 
@@ -45,7 +44,7 @@ impl Parser {
     where
         <T as FromStr>::Err: Display + Send + Sync + Error + 'static,
     {
-        let arg = self.parser.opt_value_from_str(key)?;
+        let arg = self.take_parsed(key, T::from_str)?;
         Ok(self.resolve(dst, arg, key, T::from_str)?)
     }
 
@@ -69,16 +68,22 @@ impl Parser {
     }
 
     pub fn parse_free(&mut self, dst: &mut Option<String>, cfg_key: &'static str) -> Result<()> {
-        let arg = self.parser.opt_free_from_fn(Self::opt_from_str)?;
+        let arg = self
+            .args
+            .take_free()
+            .as_deref()
+            .map(Self::opt_from_str)
+            .transpose()?;
+
         self.resolve(dst, arg, cfg_key, Self::opt_from_str)
     }
 
     pub fn parse_free_required(&mut self) -> Result<String> {
-        Ok(self.parser.free_from_str()?)
+        self.args.take_free().context("No free argument found")
     }
 
     pub fn parse_switch(&mut self, dst: &mut bool, key: &'static str) -> Result<()> {
-        let arg = self.parser.contains(key).then_some(true);
+        let arg = self.args.contains(key).then_some(true);
         Ok(self.resolve(dst, arg, key, bool::from_str)?)
     }
 
@@ -88,7 +93,7 @@ impl Parser {
         key1: &'static str,
         key2: &'static str,
     ) -> Result<()> {
-        let arg = (self.parser.contains(key1) || self.parser.contains(key2)).then_some(true);
+        let arg = (self.args.contains(key1) | self.args.contains(key2)).then_some(true);
         Ok(self.resolve(dst, arg, key2, bool::from_str)?)
     }
 
@@ -96,9 +101,9 @@ impl Parser {
         &mut self,
         dst: &mut T,
         key: &'static str,
-        f: fn(_: &str) -> Result<T>,
+        f: fn(&str) -> Result<T>,
     ) -> Result<()> {
-        let arg = self.parser.opt_value_from_fn(key, f)?;
+        let arg = self.take_parsed(key, f)?;
         self.resolve(dst, arg, key, f)
     }
 
@@ -107,9 +112,9 @@ impl Parser {
         dst: &mut T,
         key: &'static str,
         cfg_key: &'static str,
-        f: fn(_: &str) -> Result<T>,
+        f: fn(&str) -> Result<T>,
     ) -> Result<()> {
-        let arg = self.parser.opt_value_from_fn(key, f)?;
+        let arg = self.take_parsed(key, f)?;
         self.resolve(dst, arg, cfg_key, f)
     }
 
@@ -120,7 +125,7 @@ impl Parser {
         dst: &mut Cow<'static, str>,
         key: &'static str,
     ) -> Result<()> {
-        let arg = self.parser.opt_value_from_fn(key, Self::cow_string_impl)?;
+        let arg = self.take_parsed(key, Self::cow_string_impl)?;
         self.resolve(dst, arg, key, Self::cow_string_impl)
     }
 
@@ -130,14 +135,13 @@ impl Parser {
         key: &'static str,
         cfg_key: &'static str,
     ) -> Result<()> {
-        let arg = self.parser.opt_value_from_fn(key, Self::cow_string_impl)?;
+        let arg = self.take_parsed(key, Self::cow_string_impl)?;
         self.resolve(dst, arg, cfg_key, Self::cow_string_impl)
     }
 
     pub fn parse_duration(&mut self, dst: &mut Duration, key: &'static str) -> Result<()> {
         let f = |a: &str| Ok(Duration::try_from_secs_f64(a.parse()?)?);
-
-        let arg = self.parser.opt_value_from_fn(key, f)?;
+        let arg = self.take_parsed(key, f)?;
         self.resolve(dst, arg, key, f)
     }
 
@@ -158,12 +162,20 @@ impl Parser {
         self.parse_fn_cfg(dst, key, cfg_key, Self::comma_list_impl)
     }
 
+    fn take_parsed<T, E>(
+        &mut self,
+        key: &'static str,
+        f: fn(&str) -> Result<T, E>,
+    ) -> Result<Option<T>, E> {
+        self.args.take_value(key).as_deref().map(f).transpose()
+    }
+
     fn resolve<T, E>(
         &self,
         dst: &mut T,
         val: Option<T>,
         key: &'static str,
-        f: fn(_: &str) -> Result<T, E>,
+        f: fn(&str) -> Result<T, E>,
     ) -> Result<(), E> {
         //unwrap arg or try to get arg from config file
         if let Some(val) = val {
@@ -220,7 +232,6 @@ impl Parser {
 
     #[cfg(target_os = "macos")]
     fn default_config_path() -> Result<String> {
-        //I have no idea if this is correct
         Ok(format!(
             "{}/Library/Application Support/{}",
             env::var("HOME")?,
@@ -234,8 +245,8 @@ impl Parser {
     }
 
     fn new() -> Result<Self> {
-        let mut parser = Arguments::from_env();
-        if parser.contains("-h") || parser.contains("--help") {
+        let mut args = Arguments::new();
+        if args.contains("-h") | args.contains("--help") {
             print!(
                 include_str!("usage"),
                 default_user_agent = constants::USER_AGENT,
@@ -244,17 +255,17 @@ impl Parser {
             process::exit(0);
         }
 
-        if parser.contains("-V") || parser.contains("--version") {
+        if args.contains("-V") | args.contains("--version") {
             println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
             process::exit(0);
         }
 
         Ok(Self {
             config: {
-                if parser.contains("--no-config") {
+                if args.contains("--no-config") {
                     None
                 } else {
-                    let path = match parser.opt_value_from_str("-c")? {
+                    let path = match args.take_value("-c") {
                         Some(path) => path,
                         None => Self::default_config_path()?,
                     };
@@ -266,11 +277,48 @@ impl Parser {
                     }
                 }
             },
-            parser,
+            args,
         })
     }
 
     fn finish(self) -> Option<String> {
-        self.parser.finish().into_iter().next()?.into_string().ok()
+        self.args.0.into_iter().next()
+    }
+}
+
+struct Arguments(Vec<String>);
+
+impl Arguments {
+    fn new() -> Self {
+        Self(
+            env::args_os()
+                .skip(1)
+                .map(|a| a.to_string_lossy().into_owned())
+                .collect(),
+        )
+    }
+
+    fn contains(&mut self, key: &str) -> bool {
+        if let Some(idx) = self.0.iter().position(|a| a == key) {
+            self.0.remove(idx);
+            true
+        } else {
+            false
+        }
+    }
+
+    fn take_value(&mut self, key: &str) -> Option<String> {
+        let idx = self.0.iter().position(|a| a == key)?;
+        if idx + 1 < self.0.len() {
+            self.0.remove(idx);
+            Some(self.0.remove(idx))
+        } else {
+            None
+        }
+    }
+
+    fn take_free(&mut self) -> Option<String> {
+        let idx = self.0.iter().position(|a| !a.starts_with('-'))?;
+        Some(self.0.remove(idx))
     }
 }
