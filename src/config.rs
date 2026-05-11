@@ -160,7 +160,7 @@ impl Config {
         cfg.parse_values(&mut parser)?;
         cfg.parse_options(&mut parser)?;
 
-        let channel = parser.free().context("Missing channel argument")?;
+        let channel = parser.free(None).context("Missing channel argument")?;
 
         //Accept any URL-like string
         cfg.channel = channel
@@ -168,7 +168,7 @@ impl Config {
             .map_or(channel.as_str(), |s| s.1)
             .to_lowercase();
 
-        cfg.quality = parser.free();
+        cfg.quality = parser.free(Some("quality"));
         if cfg.print_streams {
             cfg.quality = None;
         }
@@ -432,8 +432,10 @@ impl Parser {
         })
     }
 
-    fn free(&mut self) -> Option<String> {
-        self.args.take_free()
+    fn free(&mut self, cfg_key: Option<&str>) -> Option<String> {
+        self.args
+            .take_free()
+            .or_else(|| cfg_key.and_then(|k| self.config_value(k)))
     }
 
     fn remaining(self) -> Option<String> {
