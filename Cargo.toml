@@ -20,9 +20,9 @@ struct_excessive_bools = "allow"
 
 [profile.release]
 codegen-units = 1
-lto = true
 panic = "abort"
-strip = true
+lto = "fat"
+strip = "symbols"
 
 [dependencies]
 anyhow = "1.0"
