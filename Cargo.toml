@@ -20,7 +20,6 @@ module-name-repetitions = "allow"
 # args
 ref-option = "allow"
 struct_excessive_bools = "allow"
-unnecessary_wraps = "allow"
 
 [profile.release]
 codegen-units = 1

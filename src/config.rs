@@ -17,7 +17,6 @@ use anyhow::{Context, Result, bail, ensure};
 
 static CONFIG: OnceLock<Config> = OnceLock::new();
 
-#[derive(Clone)]
 pub struct Config {
     pub debug: bool,
 
@@ -290,7 +289,7 @@ impl Config {
             &mut self.socks5_restrict,
             "--socks5-restrict",
             "socks5-restrict",
-            |h| Ok(Some(h.split(',').map(|h| h.trim().to_string()).collect())),
+            |h| Ok(Some(h.split(',').map(|h| h.trim().to_owned()).collect())),
         )?;
 
         Ok(())
@@ -310,6 +309,7 @@ impl Config {
         Ok(())
     }
 
+    #[allow(clippy::unnecessary_wraps)]
     fn cow(s: &str) -> Result<Cow<'static, str>> {
         Ok(s.to_owned().into())
     }
@@ -380,13 +380,13 @@ impl Parser {
 
         Ok(Self {
             config: {
-                let path = match args.take_value("-c") {
-                    Some(p) => p,
-                    None => Self::default_config_path()?,
-                };
+                let path = args
+                    .take_value("-c")
+                    .or_else(Self::default_config_path)
+                    .unwrap_or_default(); //silently ignore config file if env vars aren't set
 
                 if !args.contains("--no-config") && Path::new(&path).try_exists()? {
-                    Some(fs::read_to_string(path).context("Failed to read config file")?)
+                    Some(fs::read_to_string(&path).context("Failed to read config file")?)
                 } else {
                     None
                 }
@@ -408,6 +408,8 @@ impl Parser {
 
     fn switch(&mut self, dst: &mut bool, key1: &str, key2: &str) -> Result<()> {
         let cfg = key2.trim_start_matches('-');
+
+        //Bitwise OR to remove both keys even if first one is found
         if self.args.contains(key1) | self.args.contains(key2) {
             *dst = true;
         } else if let Some(val) = self.config_value(cfg) {
@@ -435,63 +437,65 @@ impl Parser {
     fn free(&mut self, cfg_key: Option<&str>) -> Option<String> {
         self.args
             .take_free()
-            .or_else(|| cfg_key.and_then(|k| self.config_value(k)))
+            .or_else(|| cfg_key.and_then(|k| self.config_value(k).map(String::from)))
     }
 
     fn remaining(self) -> Option<String> {
         self.args.0.into_iter().next()
     }
 
-    fn raw_value(&mut self, key: &str, cfg_key: &str) -> Result<Option<String>> {
+    fn raw_value(&mut self, key: &str, cfg_key: &str) -> Result<Option<Cow<'_, str>>> {
         if !key.is_empty() && self.args.0.iter().any(|k| k == key) {
             return Ok(Some(
                 self.args
                     .take_value(key)
-                    .with_context(|| format!("Missing value for {key}"))?,
+                    .with_context(|| format!("Missing value for {key}"))?
+                    .into(),
             ));
         }
 
-        Ok(self.config_value(cfg_key))
+        Ok(self.config_value(cfg_key).map(Cow::Borrowed))
     }
 
-    fn config_value(&self, key: &str) -> Option<String> {
+    fn config_value(&self, key: &str) -> Option<&str> {
         self.config.as_ref().and_then(|c| {
             c.lines().find_map(|l| {
                 l.strip_prefix(key)
                     .filter(|r| r.starts_with('='))
-                    .map(|r| r[1..].trim().to_string())
+                    .map(|r| r[1..].trim())
             })
         })
     }
 
     #[cfg(all(unix, not(target_os = "macos")))]
-    fn default_config_path() -> Result<String> {
+    fn default_config_path() -> Option<String> {
         let dir = env::var("XDG_CONFIG_HOME")
-            .unwrap_or_else(|_| format!("{}/.config", env::var("HOME").unwrap_or_default()));
+            .ok()
+            .or_else(|| env::var("HOME").ok().map(|h| format!("{h}/.config")))?;
 
-        Ok(format!("{dir}/{}", constants::DEFAULT_CONFIG_PATH))
+        Some(format!("{dir}/{}", constants::DEFAULT_CONFIG_PATH))
     }
 
     #[cfg(target_os = "windows")]
-    fn default_config_path() -> Result<String> {
-        Ok(format!(
+    fn default_config_path() -> Option<String> {
+        Some(format!(
             "{}/{}",
-            env::var("APPDATA").unwrap_or_default(),
+            env::var("APPDATA")?,
             constants::DEFAULT_CONFIG_PATH,
         ))
     }
 
     #[cfg(target_os = "macos")]
-    fn default_config_path() -> Result<String> {
-        Ok(format!(
+    fn default_config_path() -> Option<String> {
+        Some(format!(
             "{}/Library/Application Support/{}",
-            env::var("HOME").unwrap_or_default(),
+            env::var("HOME")?,
             constants::DEFAULT_CONFIG_PATH,
         ))
     }
 
     #[cfg(not(any(unix, target_os = "windows", target_os = "macos")))]
-    fn default_config_path() -> Result<String> {
-        Ok(constants::DEFAULT_CONFIG_PATH.to_string())
+    fn default_config_path() -> Option<String> {
+        Some(constants::DEFAULT_CONFIG_PATH.to_owned())
     }
 }
