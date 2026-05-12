@@ -1,5 +1,4 @@
 use std::{
-    borrow::Cow,
     fmt::{self, Display, Formatter},
     ops::{Deref, DerefMut},
     str::{self, Utf8Error},
@@ -32,7 +31,12 @@ impl Stream {
             return Ok(Self::Variant(Connection::new(url, agent.text())));
         }
 
-        let cache = Cache::new(&cfg.playlist_cache_dir, &cfg.channel, &cfg.quality);
+        let cache = Cache::new(
+            cfg.playlist_cache_dir.as_ref(),
+            &cfg.channel,
+            cfg.quality.as_ref(),
+        );
+
         if let Some(conn) = cache.as_ref().and_then(|c| c.get(agent)) {
             if cfg.write_cache_only {
                 info!("Playlist URL is already cached, exiting...");
@@ -53,8 +57,8 @@ impl Stream {
             fetch_proxy_playlist(!cfg.no_low_latency, servers, &cfg.codecs, agent)?
         } else {
             let response = fetch_twitch_gql(
-                cfg.client_id.clone(),
-                cfg.auth_token.clone(),
+                cfg.client_id.as_deref(),
+                cfg.auth_token.as_deref(),
                 &cfg.channel,
                 agent,
             )?;
@@ -68,7 +72,7 @@ impl Stream {
             )?
         };
 
-        let Some(url) = choose_stream(&playlist, &cfg.quality, cfg.print_streams) else {
+        let Some(url) = choose_stream(&playlist, cfg.quality.as_ref(), cfg.print_streams) else {
             print_streams(&playlist);
             return Ok(Self::None);
         };
@@ -90,15 +94,15 @@ impl Stream {
 }
 
 fn fetch_twitch_gql(
-    client_id: Option<String>,
-    auth_token: Option<String>,
+    client_id: Option<&str>,
+    auth_token: Option<&str>,
     channel: &str,
     agent: &Agent,
 ) -> Result<String> {
     const GQL_LEN_WITHOUT_CHANNEL: usize = 267;
 
     let mut client_id_buf = ArrayString::<30>::new();
-    let client_id = choose_client_id(&mut client_id_buf, client_id, &auth_token, agent)?;
+    let client_id = choose_client_id(&mut client_id_buf, client_id, auth_token, agent)?;
 
     let mut request = agent.text();
     request.text_fmt(
@@ -327,7 +331,7 @@ fn playlist_iter(playlist: &str) -> impl Iterator<Item = PlaylistItem<'_>> {
         .filter_map(|((media, url), stream_inf)| PlaylistItem::parse(media, stream_inf, url))
 }
 
-fn choose_stream(playlist: &str, quality: &Option<String>, should_print: bool) -> Option<Url> {
+fn choose_stream(playlist: &str, quality: Option<&String>, should_print: bool) -> Option<Url> {
     debug!("Multivariant playlist:\n{playlist}");
     let (Some(quality), false) = (quality, should_print) else {
         return None;
@@ -363,12 +367,12 @@ fn print_streams(playlist: &str) {
 
 fn choose_client_id<'a>(
     buf: &'a mut ArrayString<30>,
-    client_id: Option<String>,
-    auth_token: &Option<String>,
+    client_id: Option<&'a str>,
+    auth_token: Option<&str>,
     agent: &Agent,
-) -> Result<Cow<'a, str>> {
+) -> Result<&'a str> {
     if let Some(client_id) = client_id {
-        Ok(Cow::Owned(client_id))
+        Ok(client_id)
     } else if let Some(auth_token) = auth_token {
         let mut request = agent.text();
         let response = request.text_fmt(
@@ -386,9 +390,9 @@ fn choose_client_id<'a>(
             .zip(buf.iter_mut())
             .for_each(|(src, dst)| *dst = src as u8);
 
-        Ok(Cow::Borrowed(buf.as_str()?))
+        Ok(buf.as_str()?)
     } else {
-        Ok(Cow::Borrowed(constants::DEFAULT_CLIENT_ID))
+        Ok(constants::DEFAULT_CLIENT_ID)
     }
 }
 

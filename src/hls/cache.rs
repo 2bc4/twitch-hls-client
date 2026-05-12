@@ -18,8 +18,8 @@ impl Cache {
     const MAGIC: &str = concat!(env!("CARGO_PKG_NAME"), "\n");
     const EXPIRATION_TIME: Duration = Duration::from_secs(48 * 60 * 60);
 
-    pub fn new(dir: &Option<String>, channel: &str, quality: &Option<String>) -> Option<Self> {
-        let (dir, quality) = (dir.as_ref()?, quality.as_ref()?);
+    pub fn new(dir: Option<&String>, channel: &str, quality: Option<&String>) -> Option<Self> {
+        let (dir, quality) = (dir?, quality?);
 
         match Self::read_dir(dir) {
             Ok(iter) => {
