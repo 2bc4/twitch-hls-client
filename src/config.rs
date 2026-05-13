@@ -480,7 +480,7 @@ impl Parser {
     fn default_config_path() -> Option<String> {
         Some(format!(
             "{}/{}",
-            env::var("APPDATA")?,
+            env::var("APPDATA").ok()?,
             constants::DEFAULT_CONFIG_PATH,
         ))
     }
@@ -489,7 +489,7 @@ impl Parser {
     fn default_config_path() -> Option<String> {
         Some(format!(
             "{}/Library/Application Support/{}",
-            env::var("HOME")?,
+            env::var("HOME").ok()?,
             constants::DEFAULT_CONFIG_PATH,
         ))
     }
