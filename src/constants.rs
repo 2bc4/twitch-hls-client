@@ -5,7 +5,7 @@ pub const PLAYER_VERSION: &str = "1.49.0-rc.3";
 
 pub const TWITCH_GQL_ENDPOINT: &str = "https://gql.twitch.tv/gql";
 pub const TWITCH_OAUTH_ENDPOINT: &str = "https://id.twitch.tv/oauth2/validate";
-pub const TWITCH_HLS_BASE: &str = "https://usher.ttvnw.net/api/channel/hls/";
+pub const TWITCH_HLS_BASE: &str = "https://usher.ttvnw.net/api/v2/channel/hls/";
 
 pub const KICK_CHANNELS_ENDPOINT: &str = "https://kick.com/api/v2/channels";
 
