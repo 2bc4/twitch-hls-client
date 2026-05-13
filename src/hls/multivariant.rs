@@ -276,14 +276,21 @@ struct PlaylistItem<'a> {
 }
 
 impl<'a> PlaylistItem<'a> {
-    pub fn parse(media: &'a str, stream_inf: &'a str, url: &'a str) -> Option<Self> {
-        // #EXT-X-MEDIA:TYPE=VIDEO,GROUP-ID="720p30",NAME="720p",AUTOSELECT=YES,DEFAULT=YES
+    pub fn parse(media: Option<&'a str>, stream_inf: &'a str, url: &'a str) -> Option<Self> {
+        //v1: #EXT-X-MEDIA:TYPE=VIDEO,GROUP-ID="720p30",NAME="720p",AUTOSELECT=YES,DEFAULT=YES
+        //v1: #EXT-X-STREAM-INF:BANDWIDTH=2373000,RESOLUTION=1280x720,CODECS="avc1.4D401F,mp4a.40.2",VIDEO="720p30",FRAME-RATE=30.000
+        //
+        //v2: #EXT-X-STREAM-INF:BANDWIDTH=3422999,RESOLUTION=1280x720,CODECS="avc1.4D401F,mp4a.40.2",FRAME-RATE=60.000,STABLE-VARIANT-ID="720p60",IVS-NAME="720p60",IVS-VARIANT-SOURCE="transcode"
+
         let name = media
-            .split_once("NAME=\"")
+            .map_or_else(
+                || stream_inf.split_once("IVS-NAME=\""),
+                |media| media.split_once("NAME=\""),
+            )
             .map(|s| s.1.split('"'))
             .and_then(|mut s| s.next())
             .map(|s| s.strip_suffix(" (source)").unwrap_or(s))?;
-        // #EXT-X-STREAM-INF:BANDWIDTH=2373000,RESOLUTION=1280x720,CODECS="avc1.4D401F,mp4a.40.2",VIDEO="720p30",FRAME-RATE=30.000
+
         let resolution = stream_inf
             .split_once("RESOLUTION=")
             .and_then(|(_, tail)| tail.split_once(','))
@@ -318,17 +325,42 @@ impl Ord for PlaylistItem<'_> {
     }
 }
 
-fn playlist_iter(playlist: &str) -> impl Iterator<Item = PlaylistItem<'_>> {
-    playlist
-        .lines()
-        .filter(|l| l.starts_with("#EXT-X-MEDIA"))
-        .zip(playlist.lines().filter(|l| l.starts_with("http")))
-        .zip(
-            playlist
-                .lines()
-                .filter(|l| l.starts_with("#EXT-X-STREAM-INF")),
-        )
-        .filter_map(|((media, url), stream_inf)| PlaylistItem::parse(media, stream_inf, url))
+struct PlaylistIter<'a> {
+    lines: std::str::Lines<'a>,
+    media: Option<&'a str>,
+    stream_inf: Option<&'a str>,
+}
+
+impl<'a> Iterator for PlaylistIter<'a> {
+    type Item = PlaylistItem<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        for line in self.lines.by_ref() {
+            //usher v2 doesn't use #EXT-X-MEDIA, support both
+            if line.starts_with("#EXT-X-MEDIA") {
+                self.media = Some(line);
+            } else if line.starts_with("#EXT-X-STREAM-INF") {
+                self.stream_inf = Some(line);
+            } else if line.starts_with("http")
+                && let Some(stream_inf) = self.stream_inf.take()
+                && let Some(item) = PlaylistItem::parse(self.media.take(), stream_inf, line)
+            {
+                return Some(item);
+            }
+        }
+
+        None
+    }
+}
+
+impl<'a> PlaylistIter<'a> {
+    fn new(playlist: &'a str) -> Self {
+        PlaylistIter {
+            lines: playlist.lines(),
+            media: Option::default(),
+            stream_inf: Option::default(),
+        }
+    }
 }
 
 fn choose_stream(playlist: &str, quality: Option<&String>, should_print: bool) -> Option<Url> {
@@ -337,7 +369,7 @@ fn choose_stream(playlist: &str, quality: Option<&String>, should_print: bool) -
         return None;
     };
 
-    let mut iter = playlist_iter(playlist);
+    let mut iter = PlaylistIter::new(playlist);
     if quality == "best" {
         return iter.max().map(|it| it.url.into());
     }
@@ -346,7 +378,7 @@ fn choose_stream(playlist: &str, quality: Option<&String>, should_print: bool) -
 }
 
 fn print_streams(playlist: &str) {
-    let items = playlist_iter(playlist).collect::<Vec<_>>();
+    let items = PlaylistIter::new(playlist).collect::<Vec<_>>();
     let Some((best, _)) = items.iter().enumerate().max_by_key(|it| it.1) else {
         println!();
         return;
