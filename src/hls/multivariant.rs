@@ -374,7 +374,8 @@ fn choose_stream(playlist: &str, quality: Option<&String>, should_print: bool) -
         return iter.max().map(|it| it.url.into());
     }
 
-    iter.find(|it| it.name == quality).map(|it| it.url.into())
+    iter.find(|i| i.name.starts_with(quality))
+        .map(|i| i.url.into())
 }
 
 fn print_streams(playlist: &str) {
