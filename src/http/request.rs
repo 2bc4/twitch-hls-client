@@ -304,7 +304,7 @@ impl Transport {
     fn connect(addrs: &[SocketAddr], force_ipv4: bool, timeout: Duration) -> Result<TcpStream> {
         ensure!(!addrs.is_empty(), "Failed to resolve socket address");
 
-        let mut io_error = None;
+        let mut error = None;
         for addr in addrs
             .iter()
             .filter(|a| !force_ipv4 || SocketAddr::is_ipv4(a))
@@ -317,13 +317,15 @@ impl Transport {
 
                     return Ok(sock);
                 }
-                Err(e) => io_error = Some(e),
+                Err(e) => error = Some(e),
             }
         }
 
-        Err(io_error
-            .expect("Missing IO error while connection failed")
-            .into())
+        let error = error.expect("Missing IO error while connection failed");
+        match error.kind() {
+            io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut => bail!("Connection timed out"),
+            _ => Err(error.into()),
+        }
     }
 }
 
