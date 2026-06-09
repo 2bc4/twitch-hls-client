@@ -69,14 +69,7 @@ impl Player {
         };
 
         info!("Spawning player: {path}");
-        let mut command = Command::new(path);
-        command.args(cfg.player_args.iter()).stdin(Stdio::piped());
-
-        if cfg.player_quiet {
-            command.stdout(Stdio::null()).stderr(Stdio::null());
-        }
-
-        let mut process = command.spawn().context("Failed to open player")?;
+        let mut process = Self::spawn(path, &cfg.player_args, cfg.player_quiet)?;
         let stdin = process
             .stdin
             .take()
@@ -88,38 +81,36 @@ impl Player {
     pub fn passthrough(url: Url) -> Result<()> {
         let cfg = Config::get();
 
-        let mut player_args = cfg.player_args.clone();
-        if cfg.player_args.iter().any(|a| a == "-") {
-            for arg in &mut player_args {
-                if arg == "-" {
-                    *arg = url.into_string();
-                    break;
-                }
-            }
-        } else {
-            player_args.push(url.into_string());
-        }
-
         let Some(path) = &cfg.player_path else {
             bail!("No player set");
         };
 
-        info!("Spawning player with playlist URL: {path}");
-        debug!("Player args: {player_args:?}");
-
-        let mut command = Command::new(path);
-        command.args(player_args.iter()).stdin(Stdio::piped());
-
-        if cfg.player_quiet {
-            command.stdout(Stdio::null()).stderr(Stdio::null());
+        let mut args = cfg.player_args.clone();
+        if let Some(arg) = args.iter_mut().find(|a| *a == "-") {
+            *arg = url.into_string();
+        } else {
+            args.push(url.into_string());
         }
 
-        let mut process = command.spawn().context("Failed to open player")?;
+        info!("Spawning player (passthrough): {path}");
+        debug!("Player args: {args:?}");
+        let mut process = Self::spawn(path, &args, cfg.player_quiet)?;
         process
             .wait()
             .context("Failed to wait for player process")?;
 
         Ok(())
+    }
+
+    fn spawn(path: &str, args: &[String], quiet: bool) -> Result<Child> {
+        let mut command = Command::new(path);
+        command.args(args.iter()).stdin(Stdio::piped());
+
+        if quiet {
+            command.stdout(Stdio::null()).stderr(Stdio::null());
+        }
+
+        command.spawn().context("Failed to spawn player")
     }
 
     fn handle_broken_pipe(&mut self, error: io::Error) -> io::Error {
