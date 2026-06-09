@@ -5,10 +5,10 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail};
-use log::{error, info};
+use log::{debug, error, info};
 
 use super::Output;
-use crate::config::Config;
+use crate::{config::Config, http::Url};
 
 #[derive(Debug)]
 pub struct PlayerClosedError;
@@ -68,11 +68,9 @@ impl Player {
             return Ok(None);
         };
 
-        info!("Opening player: {path} {}", cfg.player_args);
+        info!("Spawning player: {path}");
         let mut command = Command::new(path);
-        command
-            .args(cfg.player_args.split_whitespace())
-            .stdin(Stdio::piped());
+        command.args(cfg.player_args.iter()).stdin(Stdio::piped());
 
         if cfg.player_quiet {
             command.stdout(Stdio::null()).stderr(Stdio::null());
@@ -87,34 +85,30 @@ impl Player {
         Ok(Some(Self { stdin, process }))
     }
 
-    pub fn passthrough(url: &str) -> Result<()> {
-        info!("Passing through playlist URL to player");
-
+    pub fn passthrough(url: Url) -> Result<()> {
         let cfg = Config::get();
-        let player_args = if cfg.player_args.split_whitespace().any(|a| a == "-") {
-            cfg.player_args
-                .split_whitespace()
-                .map(|a| {
-                    if a == "-" {
-                        url.to_owned()
-                    } else {
-                        a.to_owned()
-                    }
-                })
-                .collect::<Vec<String>>()
-                .join(" ")
+
+        let mut player_args = cfg.player_args.clone();
+        if cfg.player_args.iter().any(|a| a == "-") {
+            for arg in &mut player_args {
+                if arg == "-" {
+                    *arg = url.into_string();
+                    break;
+                }
+            }
         } else {
-            format!("{} {url}", cfg.player_args)
-        };
+            player_args.push(url.into_string());
+        }
 
         let Some(path) = &cfg.player_path else {
             bail!("No player set");
         };
 
+        info!("Spawning player with playlist URL: {path}");
+        debug!("Player args: {player_args:?}");
+
         let mut command = Command::new(path);
-        command
-            .args(player_args.split_whitespace())
-            .stdin(Stdio::piped());
+        command.args(player_args.iter()).stdin(Stdio::piped());
 
         if cfg.player_quiet {
             command.stdout(Stdio::null()).stderr(Stdio::null());

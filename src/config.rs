@@ -3,7 +3,7 @@ use std::{
     env,
     error::Error,
     fmt::{self, Display},
-    fs,
+    fs, mem,
     net::{SocketAddr, ToSocketAddrs},
     path::Path,
     process,
@@ -36,7 +36,7 @@ pub struct Config {
     pub quality: Option<String>,
 
     pub player_path: Option<String>,
-    pub player_args: Cow<'static, str>,
+    pub player_args: Vec<String>,
     pub player_quiet: bool,
     pub player_no_kill: bool,
 
@@ -74,7 +74,7 @@ impl Default for Config {
             channel: String::default(),
             quality: Option::default(),
             player_path: Option::default(),
-            player_args: "-".into(),
+            player_args: vec!["-".to_owned()],
             player_quiet: bool::default(),
             player_no_kill: bool::default(),
             tcp_addr: Option::default(),
@@ -190,11 +190,10 @@ impl Config {
             cfg.servers = None;
         }
 
-        if cfg.player_args.contains(Self::CHANNEL_KEYWORD) {
-            cfg.player_args = cfg
-                .player_args
-                .replace(Self::CHANNEL_KEYWORD, &cfg.channel)
-                .into();
+        for arg in &mut cfg.player_args {
+            if arg.contains(Self::CHANNEL_KEYWORD) {
+                *arg = arg.replace(Self::CHANNEL_KEYWORD, &cfg.channel);
+            }
         }
 
         if let Some(servers) = &mut cfg.servers {
@@ -253,7 +252,12 @@ impl Config {
             "force-playlist-url",
             |u| Ok(Some(Url::from_str(u)?)),
         )?;
-        p.with(&mut self.player_args, "-a", "player-args", Self::cow)?;
+        p.with(
+            &mut self.player_args,
+            "-a",
+            "player-args",
+            Self::quoted_split,
+        )?;
         p.with(&mut self.tcp_addr, "-t", "tcp-server", |s| {
             Ok(Some(
                 s.to_socket_addrs()?
@@ -310,12 +314,37 @@ impl Config {
     }
 
     #[allow(clippy::unnecessary_wraps)]
-    fn cow(s: &str) -> Result<Cow<'static, str>> {
-        Ok(s.to_owned().into())
+    pub fn quoted_split(arg: &str) -> Result<Vec<String>> {
+        let mut out = Vec::new();
+
+        let mut current = String::new();
+        let mut in_quotes = false;
+        for c in arg.chars() {
+            if c == '"' || c == '\'' {
+                in_quotes = !in_quotes;
+            } else if c.is_whitespace() && !in_quotes {
+                if !current.is_empty() {
+                    out.push(mem::take(&mut current));
+                }
+            } else {
+                current.push(c);
+            }
+        }
+
+        if !current.is_empty() {
+            out.push(current);
+        }
+
+        Ok(out)
     }
 
-    fn duration(s: &str) -> Result<Duration> {
-        Ok(Duration::try_from_secs_f64(s.parse()?)?)
+    #[allow(clippy::unnecessary_wraps)]
+    fn cow(arg: &str) -> Result<Cow<'static, str>> {
+        Ok(arg.to_owned().into())
+    }
+
+    fn duration(arg: &str) -> Result<Duration> {
+        Ok(Duration::try_from_secs_f64(arg.parse()?)?)
     }
 }
 

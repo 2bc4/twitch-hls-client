@@ -56,7 +56,7 @@ fn main() -> Result<()> {
         let conn = match Stream::new(&agent) {
             Ok(Stream::Variant(conn)) => conn,
             Ok(Stream::Passthrough(url)) => {
-                return Player::passthrough(&url);
+                return Player::passthrough(url);
             }
             Ok(Stream::None) => return Ok(()),
             Err(e) if e.is::<OfflineError>() => {

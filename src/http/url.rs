@@ -90,6 +90,10 @@ impl Url {
             Scheme::Unknown => bail!("Unknown scheme in URL"),
         }
     }
+
+    pub fn into_string(self) -> String {
+        self.inner
+    }
 }
 
 #[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
