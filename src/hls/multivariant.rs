@@ -253,19 +253,16 @@ fn fetch_kick_playlist(channel: &str, agent: &Agent) -> Result<(Url, String)> {
     let url = format!("{}/{channel}/livestream", constants::KICK_CHANNELS_ENDPOINT).into();
 
     request.text(Method::Get, &url).map_err(map_if_offline)?;
-    let response = &request.take();
+    let playlist_url = extract(&request.take(), r#""playback_url":""#, r#"","thumbnail""#)
+        .context("Failed to find kick playlist URL")?
+        .replace('\\', "")
+        .into();
 
     request
-        .text(
-            Method::Get,
-            &extract(response, r#""playback_url":""#, r#"","thumbnail""#)
-                .context("Failed to find kick playlist URL")?
-                .replace('\\', "")
-                .into(),
-        )
+        .text(Method::Get, &playlist_url)
         .map_err(map_if_offline)?;
 
-    Ok((url, request.take()))
+    Ok((playlist_url, request.take()))
 }
 
 #[derive(PartialEq, Eq)]
