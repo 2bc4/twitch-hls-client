@@ -5,15 +5,39 @@ use std::{
     mem,
     net::{SocketAddr, TcpStream, ToSocketAddrs},
     str,
+    sync::{Arc, LazyLock},
     time::Duration,
 };
 
 use anyhow::{Context, Result, bail, ensure};
 use log::{debug, error};
-use rustls::{ClientConnection, StreamOwned};
+use rustls::{ClientConfig, ClientConnection, RootCertStore, StreamOwned};
 
-use super::{Agent, Method, Scheme, StatusError, Url, decoder::Decoder, socks5};
+use super::{Method, Scheme, StatusError, Url, decoder::Decoder, socks5};
 use crate::config::Config;
+
+static TLS_CONFIG: LazyLock<Arc<ClientConfig>> = LazyLock::new(|| {
+    debug!("Loading TLS root certificates...");
+
+    let mut roots = RootCertStore::empty();
+    let res = rustls_native_certs::load_native_certs();
+
+    for error in res.errors {
+        error!("Failed to load certificates: {error}");
+    }
+
+    for cert in res.certs {
+        if let Err(e) = roots.add(cert) {
+            debug!("Invalid certificate: {e}");
+        }
+    }
+
+    Arc::new(
+        ClientConfig::builder()
+            .with_root_certificates(Arc::new(roots))
+            .with_no_client_auth(),
+    )
+});
 
 pub struct Request<W: Write> {
     writer: W,
@@ -26,21 +50,18 @@ pub struct Request<W: Write> {
     decode_buf: Box<[u8]>,
     no_retry: bool,
     retries: u64,
-
-    agent: Agent,
 }
 
 impl<W: Write> Request<W> {
     const HEADERS_BUF_SIZE: usize = 4 * 1024;
     const DECODE_BUF_SIZE: usize = 16 * 1024; //rustls with default settings returns up to 16kb
 
-    pub fn new(writer: W, agent: Agent) -> Self {
+    pub fn new(writer: W) -> Self {
         Self {
             writer,
             headers_buf: vec![0u8; Self::HEADERS_BUF_SIZE].into_boxed_slice(),
             decode_buf: vec![0u8; Self::DECODE_BUF_SIZE].into_boxed_slice(),
             retries: Config::get().retries,
-            agent,
             stream: Option::default(),
             scheme: Scheme::default(),
             host_hash: u64::default(),
@@ -167,7 +188,7 @@ impl<W: Write> Request<W> {
     }
 
     fn connect(&mut self, url: &Url, host: &str, host_hash: u64) -> Result<()> {
-        self.stream = Some(Transport::new(url, host, &self.agent)?);
+        self.stream = Some(Transport::new(url, host)?);
         self.scheme = url.scheme;
         self.host_hash = host_hash;
 
@@ -193,8 +214,8 @@ impl<W: Write> Request<W> {
 pub struct TextRequest(Request<StringWriter>);
 
 impl TextRequest {
-    pub fn new(agent: Agent) -> Self {
-        Self(Request::new(StringWriter::default(), agent))
+    pub fn new() -> Self {
+        Self(Request::new(StringWriter::default()))
     }
 
     pub fn take(&mut self) -> String {
@@ -260,7 +281,7 @@ impl Write for Transport {
 }
 
 impl Transport {
-    fn new(url: &Url, host: &str, agent: &Agent) -> Result<Self> {
+    fn new(url: &Url, host: &str) -> Result<Self> {
         let cfg = Config::get();
 
         ensure!(
@@ -294,7 +315,7 @@ impl Transport {
         match url.scheme {
             Scheme::Http => Ok(Self::Unencrypted(sock)),
             Scheme::Https => Ok(Self::Tls(Box::new(StreamOwned::new(
-                ClientConnection::new(agent.tls_config.clone(), host.to_owned().try_into()?)?,
+                ClientConnection::new(TLS_CONFIG.clone(), host.to_owned().try_into()?)?,
                 sock,
             )))),
             Scheme::Unknown => bail!("Unsupported protocol"),

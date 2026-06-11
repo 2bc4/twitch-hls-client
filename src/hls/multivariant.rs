@@ -9,7 +9,7 @@ use crate::config::Config;
 
 use crate::{
     constants,
-    http::{Agent, Connection, Method, StatusError, Url},
+    http::{Connection, Method, StatusError, TextRequest, Url},
 };
 
 pub enum Stream {
@@ -19,12 +19,12 @@ pub enum Stream {
 }
 
 impl Stream {
-    pub fn new(agent: &Agent) -> Result<Self> {
+    pub fn new() -> Result<Self> {
         let cfg = Config::get();
 
         if let Some(url) = cfg.force_playlist_url.clone() {
             info!("Using forced playlist URL");
-            return Ok(Self::Variant(Connection::new(url, agent.text())));
+            return Ok(Self::Variant(Connection::new(url)));
         }
 
         let cache = Cache::new(
@@ -33,7 +33,7 @@ impl Stream {
             cfg.quality.as_ref(),
         );
 
-        if let Some(conn) = cache.as_ref().and_then(|c| c.get(agent)) {
+        if let Some(conn) = cache.as_ref().and_then(Cache::get) {
             if cfg.write_cache_only {
                 info!("Playlist URL is already cached, exiting...");
                 return Ok(Self::None);
@@ -48,24 +48,17 @@ impl Stream {
         info!("Fetching playlist for channel {}", cfg.channel);
         let (multivariant_url, playlist) = if let Some(channel) = cfg.channel.strip_prefix("kick:")
         {
-            fetch_kick_playlist(channel, agent)?
+            fetch_kick_playlist(channel)?
         } else if let Some(servers) = &cfg.servers {
-            fetch_proxy_playlist(!cfg.no_low_latency, servers, &cfg.codecs, agent)?
+            fetch_proxy_playlist(!cfg.no_low_latency, servers, &cfg.codecs)?
         } else {
             let response = fetch_twitch_gql(
                 cfg.client_id.as_deref(),
                 cfg.auth_token.as_deref(),
                 &cfg.channel,
-                agent,
             )?;
 
-            fetch_twitch_playlist(
-                &response,
-                !cfg.no_low_latency,
-                &cfg.codecs,
-                &cfg.channel,
-                agent,
-            )?
+            fetch_twitch_playlist(&response, !cfg.no_low_latency, &cfg.codecs, &cfg.channel)?
         };
 
         let Some(url) = choose_stream(&playlist, cfg.quality.as_deref(), cfg.print_streams) else {
@@ -82,7 +75,7 @@ impl Stream {
         }
 
         match cfg.passthrough {
-            Passthrough::Disabled => Ok(Self::Variant(Connection::new(url, agent.text()))),
+            Passthrough::Disabled => Ok(Self::Variant(Connection::new(url))),
             Passthrough::Variant => Ok(Self::Passthrough(url)),
             Passthrough::Multivariant => Ok(Self::Passthrough(multivariant_url)),
         }
@@ -93,11 +86,10 @@ fn fetch_twitch_gql(
     client_id: Option<&str>,
     auth_token: Option<&str>,
     channel: &str,
-    agent: &Agent,
 ) -> Result<String> {
     const GQL_LEN_WITHOUT_CHANNEL: usize = 267;
 
-    let mut request = agent.text();
+    let mut request = TextRequest::new();
     request.text_fmt(
         Method::Post,
         &constants::TWITCH_GQL_ENDPOINT.into(),
@@ -126,7 +118,7 @@ fn fetch_twitch_gql(
                 }}\
              }}",
              device_id = random_id()?,
-             client_id = choose_client_id(client_id, auth_token, agent)?,
+             client_id = choose_client_id(client_id, auth_token)?,
              content_length = GQL_LEN_WITHOUT_CHANNEL + channel.len(),
              auth_token_head = if auth_token.is_some() { "Authorization: OAuth " } else { "" },
              auth_token_tail = if auth_token.is_some() { "\r\n" } else { "" },
@@ -150,7 +142,6 @@ fn fetch_twitch_playlist(
     low_latency: bool,
     codecs: &str,
     channel: &str,
-    agent: &Agent,
 ) -> Result<(Url, String)> {
     let url = format!(
         "{base_url}{channel}.m3u8\
@@ -195,7 +186,7 @@ fn fetch_twitch_playlist(
     )
     .into();
 
-    let mut request = agent.text();
+    let mut request = TextRequest::new();
     request.text(Method::Get, &url).map_err(map_if_offline)?;
 
     Ok((url, request.take()))
@@ -205,9 +196,8 @@ fn fetch_proxy_playlist(
     low_latency: bool,
     servers: &[Url],
     codecs: &str,
-    agent: &Agent,
 ) -> Result<(Url, String), OfflineError> {
-    let mut request = agent.text();
+    let mut request = TextRequest::new();
     for server in servers {
         info!(
             "Using playlist proxy: {}://{}",
@@ -242,8 +232,8 @@ fn fetch_proxy_playlist(
     Err(OfflineError)
 }
 
-fn fetch_kick_playlist(channel: &str, agent: &Agent) -> Result<(Url, String)> {
-    let mut request = agent.text();
+fn fetch_kick_playlist(channel: &str) -> Result<(Url, String)> {
+    let mut request = TextRequest::new();
     let url = format!("{}/{channel}/livestream", constants::KICK_CHANNELS_ENDPOINT).into();
 
     request.text(Method::Get, &url).map_err(map_if_offline)?;
@@ -392,12 +382,11 @@ fn print_streams(playlist: &str) {
 fn choose_client_id<'a>(
     client_id: Option<&'a str>,
     auth_token: Option<&str>,
-    agent: &Agent,
 ) -> Result<Cow<'a, str>> {
     if let Some(client_id) = client_id {
         Ok(client_id.into())
     } else if let Some(auth_token) = auth_token {
-        let mut request = agent.text();
+        let mut request = TextRequest::new();
         let response = request.text_fmt(
             Method::Get,
             &constants::TWITCH_OAUTH_ENDPOINT.into(),

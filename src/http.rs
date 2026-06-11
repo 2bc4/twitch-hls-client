@@ -6,15 +6,9 @@ mod url;
 pub use request::{Request, TextRequest};
 pub use url::{Scheme, Url};
 
-use std::{
-    fmt::{self, Display, Formatter},
-    io::Write,
-    sync::Arc,
-};
+use std::fmt::{self, Display, Formatter};
 
 use anyhow::Result;
-use log::{debug, error};
-use rustls::{ClientConfig, RootCertStore};
 
 #[derive(Debug)]
 pub struct StatusError(u16, Url);
@@ -52,53 +46,6 @@ impl Display for Method {
     }
 }
 
-#[derive(Clone)]
-pub struct Agent {
-    tls_config: Arc<ClientConfig>,
-}
-
-impl Agent {
-    pub fn new() -> Self {
-        let mut roots = RootCertStore::empty();
-        let res = rustls_native_certs::load_native_certs();
-
-        for error in res.errors {
-            error!("Failed to load certificates: {error}");
-        }
-
-        for cert in res.certs {
-            if let Err(e) = roots.add(cert) {
-                debug!("Invalid certificate: {e}");
-            }
-        }
-
-        Self {
-            tls_config: Arc::new(
-                ClientConfig::builder()
-                    .with_root_certificates(Arc::new(roots))
-                    .with_no_client_auth(),
-            ),
-        }
-    }
-
-    pub fn text(&self) -> TextRequest {
-        TextRequest::new(self.clone())
-    }
-
-    pub fn binary<W: Write>(&self, writer: W) -> Request<W> {
-        Request::new(writer, self.clone())
-    }
-
-    pub fn exists(&self, url: &Url) -> Option<TextRequest> {
-        let mut request = self.text();
-
-        request
-            .text_no_retry(Method::Head, url)
-            .is_ok()
-            .then_some(request)
-    }
-}
-
 //Helper for passing around a url with a text request
 pub struct Connection {
     pub url: Url,
@@ -106,7 +53,14 @@ pub struct Connection {
 }
 
 impl Connection {
-    pub const fn new(url: Url, request: TextRequest) -> Self {
+    pub fn new(url: Url) -> Self {
+        Self {
+            url,
+            request: TextRequest::new(),
+        }
+    }
+
+    pub const fn new_with_request(url: Url, request: TextRequest) -> Self {
         Self { url, request }
     }
 

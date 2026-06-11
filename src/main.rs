@@ -12,13 +12,13 @@ use log::{debug, info};
 
 use config::Config;
 use hls::{Handler, OfflineError, Playlist, ResetError, Stream};
-use http::{Agent, Method};
+use http::{Method, Request};
 use logger::Logger;
 use output::{Output, Player, PlayerClosedError, Writer};
 
-fn main_loop(mut writer: Writer, mut playlist: Playlist, agent: &Agent) -> Result<()> {
+fn main_loop(mut writer: Writer, mut playlist: Playlist) -> Result<()> {
     if let Some(url) = &playlist.header {
-        let mut request = agent.binary(Vec::new());
+        let mut request = Request::new(Vec::new());
         request.call(Method::Get, url)?;
 
         writer.set_header(&request.into_writer())?;
@@ -28,7 +28,7 @@ fn main_loop(mut writer: Writer, mut playlist: Playlist, agent: &Agent) -> Resul
         writer.wait_for_output()?;
     }
 
-    let mut handler = Handler::new(writer, agent)?;
+    let mut handler = Handler::new(writer)?;
     loop {
         let time = Instant::now();
 
@@ -47,13 +47,12 @@ fn main_loop(mut writer: Writer, mut playlist: Playlist, agent: &Agent) -> Resul
 fn main() -> Result<()> {
     Config::init()?;
 
-    let (writer, playlist, agent) = {
+    let (writer, playlist) = {
         let cfg = Config::get();
         Logger::init(cfg.debug)?;
         debug!("\n{cfg:#?}");
 
-        let agent = Agent::new();
-        let conn = match Stream::new(&agent) {
+        let conn = match Stream::new() {
             Ok(Stream::Variant(conn)) => conn,
             Ok(Stream::Passthrough(url)) => {
                 return Player::passthrough(url);
@@ -66,10 +65,10 @@ fn main() -> Result<()> {
             Err(e) => return Err(e),
         };
 
-        (Writer::new()?, Playlist::new(conn)?, agent)
+        (Writer::new()?, Playlist::new(conn)?)
     };
 
-    let error = main_loop(writer, playlist, &agent).expect_err("Main loop returned Ok");
+    let error = main_loop(writer, playlist).expect_err("Main loop returned Ok");
     if error.is::<OfflineError>() {
         info!("Stream ended, exiting...");
         return Ok(());

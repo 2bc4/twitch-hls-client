@@ -13,7 +13,7 @@ use log::{debug, info};
 
 use super::playlist::{Playlist, QueueRange};
 use crate::{
-    http::{Agent, Method, Request, StatusError, Url},
+    http::{Method, Request, StatusError, Url},
     output::{Output, Writer},
 };
 
@@ -34,9 +34,9 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(writer: Writer, agent: &Agent) -> Result<Self> {
+    pub fn new(writer: Writer) -> Result<Self> {
         Ok(Self {
-            worker: Some(Worker::spawn(agent.binary(writer))?),
+            worker: Some(Worker::spawn(Request::new(writer))?),
             init: true,
         })
     }

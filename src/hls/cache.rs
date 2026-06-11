@@ -8,7 +8,7 @@ use std::{
 use anyhow::{Result, bail};
 use log::{debug, error};
 
-use crate::http::{Agent, Connection, Url};
+use crate::http::{Connection, Method, TextRequest, Url};
 
 pub struct Cache {
     path: PathBuf,
@@ -42,7 +42,7 @@ impl Cache {
         })
     }
 
-    pub fn get(&self, agent: &Agent) -> Option<Connection> {
+    pub fn get(&self) -> Option<Connection> {
         debug!("Trying playlist cache: {}", self.path.display());
 
         let mut file = Self::check_magic(&self.path)?;
@@ -50,12 +50,13 @@ impl Cache {
         file.read_to_string(&mut string).ok()?;
 
         let url = string.into();
-        let Some(request) = agent.exists(&url) else {
+        let mut request = TextRequest::new();
+        if request.text_no_retry(Method::Head, &url).is_ok() {
+            Some(Connection::new_with_request(url, request))
+        } else {
             Self::remove_cache(&self.path);
-            return None;
-        };
-
-        Some(Connection::new(url, request))
+            None
+        }
     }
 
     pub fn create(&self, url: &Url) {
