@@ -7,6 +7,8 @@ use std::{
 use anyhow::Result;
 use log::{Level, LevelFilter, Log, Metadata, Record};
 
+use crate::config::Config;
+
 pub struct Logger {
     enable_debug: bool,
     enable_colors: bool,
@@ -44,7 +46,8 @@ impl Log for Logger {
 }
 
 impl Logger {
-    pub fn init(enable_debug: bool) -> Result<()> {
+    pub fn init() -> Result<()> {
+        let enable_debug = Config::get().debug;
         log::set_boxed_logger(Box::new(Self {
             enable_debug,
             enable_colors: env::var_os("NO_COLOR").is_none() && io::stdout().is_terminal(),
@@ -64,15 +67,6 @@ pub fn is_debug() -> bool {
     log::max_level() == LevelFilter::Debug
 }
 
-fn level_tag_no_color(level: Level) -> &'static str {
-    match level {
-        Level::Error => "[ERROR]",
-        Level::Info => "[INFO]",
-        Level::Debug => "[DEBUG]",
-        _ => unreachable!(),
-    }
-}
-
 fn level_tag(level: Level, enable_colors: bool) -> &'static str {
     if enable_colors {
         match level {
@@ -82,6 +76,11 @@ fn level_tag(level: Level, enable_colors: bool) -> &'static str {
             _ => unreachable!(),
         }
     } else {
-        level_tag_no_color(level)
+        match level {
+            Level::Error => "[ERROR]",
+            Level::Info => "[INFO]",
+            Level::Debug => "[DEBUG]",
+            _ => unreachable!(),
+        }
     }
 }

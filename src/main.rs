@@ -17,12 +17,10 @@ use output::{Player, PlayerClosedError, Writer};
 
 fn main() -> Result<()> {
     Config::init()?;
+    Logger::init()?;
+    debug!("\n{:#?}", Config::get());
 
     let (writer, mut playlist) = {
-        let cfg = Config::get();
-        Logger::init(cfg.debug)?;
-        debug!("\n{cfg:#?}");
-
         let conn = match Stream::new() {
             Ok(Stream::Variant(conn)) => conn,
             Ok(Stream::Passthrough(url)) => {
