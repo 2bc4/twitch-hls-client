@@ -5,49 +5,20 @@ mod http;
 mod logger;
 mod output;
 
-use std::{io, time::Instant};
+use std::io;
 
 use anyhow::Result;
 use log::{debug, info};
 
 use config::Config;
-use hls::{Handler, OfflineError, Playlist, ResetError, Stream};
-use http::{Method, Request};
+use hls::{Handler, OfflineError, Playlist, Stream};
 use logger::Logger;
-use output::{Output, Player, PlayerClosedError, Writer};
-
-fn main_loop(mut writer: Writer, mut playlist: Playlist) -> Result<()> {
-    if let Some(url) = &playlist.header {
-        let mut request = Request::new(Vec::new());
-        request.call(Method::Get, url)?;
-
-        writer.set_header(&request.into_writer())?;
-    }
-
-    if writer.should_wait() {
-        writer.wait_for_output()?;
-    }
-
-    let mut handler = Handler::new(writer)?;
-    loop {
-        let time = Instant::now();
-
-        playlist.reload()?;
-        if let Err(error) = handler.process(&mut playlist, time) {
-            if error.is::<ResetError>() {
-                playlist.reset();
-                continue;
-            }
-
-            return Err(error);
-        }
-    }
-}
+use output::{Player, PlayerClosedError, Writer};
 
 fn main() -> Result<()> {
     Config::init()?;
 
-    let (writer, playlist) = {
+    let (writer, mut playlist) = {
         let cfg = Config::get();
         Logger::init(cfg.debug)?;
         debug!("\n{cfg:#?}");
@@ -68,7 +39,10 @@ fn main() -> Result<()> {
         (Writer::new()?, Playlist::new(conn)?)
     };
 
-    let error = main_loop(writer, playlist).expect_err("Main loop returned Ok");
+    let error = Handler::new(writer, &playlist)?
+        .run(&mut playlist)
+        .expect_err("Handler returned Ok");
+
     if error.is::<OfflineError>() {
         info!("Stream ended, exiting...");
         return Ok(());

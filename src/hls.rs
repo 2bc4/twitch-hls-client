@@ -5,7 +5,7 @@ mod segment;
 
 pub use multivariant::Stream;
 pub use playlist::Playlist;
-pub use segment::{Handler, ResetError};
+pub use segment::Handler;
 
 use std::fmt::{self, Display, Formatter};
 
