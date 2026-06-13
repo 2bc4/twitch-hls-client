@@ -1,5 +1,6 @@
 mod config;
 mod constants;
+mod handler;
 mod hls;
 mod http;
 mod logger;
@@ -11,7 +12,7 @@ use anyhow::Result;
 use log::{debug, info};
 
 use config::Config;
-use hls::{Handler, OfflineError, Playlist, Stream};
+use hls::{OfflineError, Stream};
 use logger::Logger;
 use output::{Player, PlayerClosedError, Writer};
 
@@ -20,24 +21,20 @@ fn main() -> Result<()> {
     Logger::init()?;
     debug!("\n{:#?}", Config::get());
 
-    let mut handler = {
-        let conn = match Stream::new() {
-            Ok(Stream::Variant(conn)) => conn,
-            Ok(Stream::Passthrough(url)) => {
-                return Player::passthrough(url);
-            }
-            Ok(Stream::None) => return Ok(()),
-            Err(e) if e.is::<OfflineError>() => {
-                info!("{e}, exiting...");
-                return Ok(());
-            }
-            Err(e) => return Err(e),
-        };
-
-        Handler::new(Writer::new()?, Playlist::new(conn)?)?
+    let conn = match Stream::new() {
+        Ok(Stream::Variant(conn)) => conn,
+        Ok(Stream::Passthrough(url)) => {
+            return Player::passthrough(url);
+        }
+        Ok(Stream::None) => return Ok(()),
+        Err(e) if e.is::<OfflineError>() => {
+            info!("{e}, exiting...");
+            return Ok(());
+        }
+        Err(e) => return Err(e),
     };
 
-    let error = handler.run().expect_err("Handler returned Ok");
+    let error = handler::run(Writer::new()?, conn).expect_err("Handler loop exited without error");
     if error.is::<OfflineError>() {
         info!("Stream ended, exiting...");
         return Ok(());

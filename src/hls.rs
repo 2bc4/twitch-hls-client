@@ -1,11 +1,9 @@
 mod cache;
 mod multivariant;
 mod playlist;
-mod segment;
 
 pub use multivariant::Stream;
-pub use playlist::Playlist;
-pub use segment::Handler;
+pub use playlist::{Duration, Playlist, QueueRange, Segment};
 
 use std::fmt::{self, Display, Formatter};
 

@@ -1,20 +1,101 @@
 use std::{
+    cmp::Ordering,
     collections::{VecDeque, vec_deque::IterMut},
-    env,
+    env, mem,
+    str::FromStr,
+    thread, time,
 };
 
 use anyhow::{Context, Result, ensure};
 use log::debug;
 
-use super::{
-    OfflineError, map_if_offline,
-    segment::{Duration, Segment},
-};
+use super::{OfflineError, map_if_offline};
 
 use crate::{
     http::{Connection, Url},
     logger,
 };
+
+#[derive(Debug)]
+pub enum Segment {
+    Normal(Duration, Url),
+    Prefetch(Url),
+}
+
+impl Segment {
+    pub fn take_url(&mut self) -> Url {
+        let url = match self {
+            Self::Normal(_, url) | Self::Prefetch(url) => url,
+        };
+
+        mem::take(url)
+    }
+}
+
+#[derive(Default, Copy, Clone, Debug)]
+pub struct Duration {
+    pub is_ad: bool,
+    inner: time::Duration,
+}
+
+impl FromStr for Duration {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self {
+            is_ad: s.contains('|'),
+            inner: time::Duration::try_from_secs_f32(
+                s.split_once(',')
+                    .map(|d| d.0)
+                    .and_then(|d| d.parse().ok())
+                    .context("Invalid segment duration")?,
+            )
+            .context("Failed to parse segment duration")?,
+        })
+    }
+}
+
+impl PartialEq for Duration {
+    fn eq(&self, other: &Self) -> bool {
+        self.inner == other.inner
+    }
+}
+
+impl PartialOrd for Duration {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.inner.cmp(&other.inner))
+    }
+}
+
+impl Duration {
+    //Can't wait too long or the server will close the socket
+    pub const MAX: Self = Self {
+        is_ad: false,
+        inner: time::Duration::from_secs(3),
+    };
+
+    pub fn sleep(&self, elapsed: time::Duration) {
+        if *self >= Self::MAX {
+            self.sleep_half(elapsed);
+            return;
+        }
+
+        Self::sleep_thread(self.inner, elapsed);
+    }
+
+    pub fn sleep_half(&self, elapsed: time::Duration) {
+        if let Some(half) = self.inner.checked_div(2) {
+            Self::sleep_thread(half, elapsed);
+        }
+    }
+
+    fn sleep_thread(duration: time::Duration, elapsed: time::Duration) {
+        if let Some(sleep_time) = duration.checked_sub(elapsed) {
+            debug!("Sleeping thread for {sleep_time:?}");
+            thread::sleep(sleep_time);
+        }
+    }
+}
 
 pub enum QueueRange<'a> {
     Partial(IterMut<'a, Segment>),
@@ -137,7 +218,7 @@ impl Playlist {
         self.added = 0;
     }
 
-    pub(super) fn segment_queue(&mut self) -> QueueRange<'_> {
+    pub fn segment_queue(&mut self) -> QueueRange<'_> {
         if self.added == 0 {
             QueueRange::Empty
         } else if self.added == self.segments.len() {
@@ -147,7 +228,7 @@ impl Playlist {
         }
     }
 
-    pub(super) fn last_duration(&self) -> Option<Duration> {
+    pub fn last_duration(&self) -> Option<Duration> {
         self.segments
             .iter()
             .rev()
