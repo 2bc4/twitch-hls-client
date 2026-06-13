@@ -19,7 +19,7 @@ tcp-server=127.0.0.1:8080
 tcp-client-timeout=30
 
 # HLS
-servers=http://example-proxy-server1.invalid,http://example-proxy-server2.invalid
+servers=http://example-proxy-server1.invalid/live/[channel],httpproxy://example-proxy-server2.invalid
 print-streams=false
 no-low-latency=false
 passthrough=disabled

@@ -67,11 +67,8 @@ impl Url {
         Ok(host.split_once(':').map_or(host, |(s, _)| s))
     }
 
-    pub fn path(&self) -> Result<&str> {
-        self.inner
-            .splitn(4, '/')
-            .nth(3)
-            .context("Failed to parse path in URL")
+    pub fn path(&self) -> &str {
+        self.inner.splitn(4, '/').nth(3).unwrap_or("")
     }
 
     pub fn port(&self) -> Result<u16> {
@@ -87,6 +84,7 @@ impl Url {
         match self.scheme {
             Scheme::Http => Ok(80),
             Scheme::Https => Ok(443),
+            Scheme::HttpProxy => Ok(8080),
             Scheme::Unknown => bail!("Unknown scheme in URL"),
         }
     }
@@ -100,6 +98,7 @@ impl Url {
 pub enum Scheme {
     Http,
     Https,
+    HttpProxy,
 
     #[default]
     Unknown,
@@ -110,6 +109,7 @@ impl Display for Scheme {
         match self {
             Self::Http => f.write_str("http"),
             Self::Https => f.write_str("https"),
+            Self::HttpProxy => f.write_str("httpproxy"),
             Self::Unknown => f.write_str("<unknown>"),
         }
     }
@@ -120,6 +120,7 @@ impl Scheme {
         match url.split(':').next() {
             Some("http") => Self::Http,
             Some("https") => Self::Https,
+            Some("httpproxy") => Self::HttpProxy,
             _ => Self::Unknown,
         }
     }

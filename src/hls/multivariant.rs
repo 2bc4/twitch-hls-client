@@ -9,7 +9,7 @@ use crate::config::Config;
 
 use crate::{
     constants,
-    http::{Connection, Method, StatusError, TextRequest, Url},
+    http::{Connection, Method, Scheme, StatusError, TextRequest, Url},
 };
 
 pub enum Stream {
@@ -50,15 +50,16 @@ impl Stream {
         {
             fetch_kick_playlist(channel)?
         } else if let Some(servers) = &cfg.servers {
-            fetch_proxy_playlist(!cfg.no_low_latency, servers, &cfg.codecs)?
+            fetch_proxy_playlist(servers, !cfg.no_low_latency, &cfg.codecs, &cfg.channel)?
         } else {
-            let response = fetch_twitch_gql(
+            fetch_twitch_playlist(
+                &mut TextRequest::new(),
                 cfg.client_id.as_deref(),
                 cfg.auth_token.as_deref(),
+                !cfg.no_low_latency,
+                &cfg.codecs,
                 &cfg.channel,
-            )?;
-
-            fetch_twitch_playlist(&response, !cfg.no_low_latency, &cfg.codecs, &cfg.channel)?
+            )?
         };
 
         let Some(url) = choose_stream(&playlist, cfg.quality.as_deref(), cfg.print_streams) else {
@@ -82,14 +83,16 @@ impl Stream {
     }
 }
 
-fn fetch_twitch_gql(
+fn fetch_twitch_playlist(
+    request: &mut TextRequest,
     client_id: Option<&str>,
     auth_token: Option<&str>,
+    low_latency: bool,
+    codecs: &str,
     channel: &str,
-) -> Result<String> {
+) -> Result<(Url, String)> {
     const GQL_LEN_WITHOUT_CHANNEL: usize = 267;
 
-    let mut request = TextRequest::new();
     request.text_fmt(
         Method::Post,
         &constants::TWITCH_GQL_ENDPOINT.into(),
@@ -126,23 +129,14 @@ fn fetch_twitch_gql(
         )
     )?;
 
-    let mut response = request.take();
-    response.retain(|c| c != '\\');
+    let mut gql_response = request.take();
+    gql_response.retain(|c| c != '\\');
 
-    debug!("GQL response: {response}");
-    if response.contains(r#"streamPlaybackAccessToken":null"#) {
+    debug!("GQL response: {gql_response}");
+    if gql_response.contains(r#"streamPlaybackAccessToken":null"#) {
         return Err(OfflineError.into());
     }
 
-    Ok(response)
-}
-
-fn fetch_twitch_playlist(
-    gql_response: &str,
-    low_latency: bool,
-    codecs: &str,
-    channel: &str,
-) -> Result<(Url, String)> {
     let url = format!(
         "{base_url}{channel}.m3u8\
         ?allow_source=true\
@@ -173,7 +167,7 @@ fn fetch_twitch_playlist(
         },
         play_session_id = random_id()?,
         sig = {
-            extract(gql_response, r#""signature":""#, r#"","authorization""#)
+            extract(&gql_response, r#""signature":""#, r#"","authorization""#)
                 .context("Failed to find signature in GQL response")?
         },
         token = {
@@ -186,18 +180,17 @@ fn fetch_twitch_playlist(
     )
     .into();
 
-    let mut request = TextRequest::new();
     request.text(Method::Get, &url).map_err(map_if_offline)?;
 
     Ok((url, request.take()))
 }
 
 fn fetch_proxy_playlist(
-    low_latency: bool,
     servers: &[Url],
+    low_latency: bool,
     codecs: &str,
+    channel: &str,
 ) -> Result<(Url, String), OfflineError> {
-    let mut request = TextRequest::new();
     for server in servers {
         info!(
             "Using playlist proxy: {}://{}",
@@ -205,27 +198,43 @@ fn fetch_proxy_playlist(
             server.host().unwrap_or("<unknown>"),
         );
 
-        let url = format!(
-            "{server}?allow_source=true\
-            &allow_audio_only=true\
-            &fast_bread={low_latency}\
-            &warp={low_latency}\
-            &supported_codecs={codecs}\
-            &platform=web",
-        )
-        .into();
+        let mut request = TextRequest::new();
+        match server.scheme {
+            Scheme::Http | Scheme::Https => {
+                let url = format!(
+                    "{server}?allow_source=true\
+                    &allow_audio_only=true\
+                    &fast_bread={low_latency}\
+                    &warp={low_latency}\
+                    &supported_codecs={codecs}\
+                    &platform=web",
+                )
+                .into();
 
-        match request.text_no_retry(Method::Get, &url) {
-            Ok(()) => {
-                let playlist = request.take();
-                if playlist.is_empty() {
-                    return Err(OfflineError);
+                match request.text_no_retry(Method::Get, &url) {
+                    Ok(()) => {
+                        let playlist = request.take();
+                        if playlist.is_empty() {
+                            return Err(OfflineError);
+                        }
+
+                        return Ok((url, playlist));
+                    }
+                    Err(e) if StatusError::is_not_found(&e) => {
+                        error!("Server returned stream offline");
+                    }
+                    Err(e) => error!("{server}: {e}"),
                 }
-
-                return Ok((url, playlist));
             }
-            Err(e) if StatusError::is_not_found(&e) => error!("Server returned stream offline"),
-            Err(e) => error!("{e}"),
+            Scheme::HttpProxy => {
+                request.set_http_proxy(server);
+                match fetch_twitch_playlist(&mut request, None, None, low_latency, codecs, channel)
+                {
+                    Ok(playlist) => return Ok(playlist),
+                    Err(e) => error!("{server}: {e}"),
+                }
+            }
+            Scheme::Unknown => error!("Invalid scheme in server URL: {server}"),
         }
     }
 

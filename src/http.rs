@@ -1,6 +1,6 @@
 mod decoder;
+mod proxy;
 mod request;
-mod socks5;
 mod url;
 
 pub use request::{Request, TextRequest};
@@ -8,7 +8,9 @@ pub use url::{Scheme, Url};
 
 use std::fmt::{self, Display, Formatter};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
+
+const MAX_HEADERS_SIZE: usize = 4 * 1024;
 
 #[derive(Debug)]
 pub struct StatusError(u16, Url);
@@ -17,7 +19,7 @@ impl std::error::Error for StatusError {}
 
 impl Display for StatusError {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "Status code {} on {}", self.0, self.1)
+        write!(f, "HTTP request failed with status {}: {}", self.0, self.1)
     }
 }
 
@@ -67,4 +69,12 @@ impl Connection {
     pub fn text(&mut self) -> Result<&str> {
         self.request.text(Method::Get, &self.url)
     }
+}
+
+fn parse_status(headers: &str) -> Result<u16> {
+    headers
+        .split_whitespace()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .context("Failed to parse HTTP status code")
 }

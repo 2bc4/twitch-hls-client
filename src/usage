@@ -52,7 +52,9 @@ HLS options:
 
           Can be multiple comma separated servers, will try each in order until successful.
           The keyword '[channel]' will be substituted with the channel argument at runtime.
-          Note: This does not support standard HTTP proxies (ie. proxies using the CONNECT request)
+
+          Standard http/https URLs fetch the playlist from the proxy, httpproxy:// URLs
+          route the request to Twitch through an HTTP proxy.
       --print-streams
           Print available streams and exit
       --no-low-latency
@@ -99,8 +101,8 @@ HTTP options:
       --http-timeout <SECONDS>
           HTTP request timeout in seconds [default: 10]
       --socks5 <HOST:PORT>
-          Proxy requests through a SOCKS5 proxy server.
-          Username/password auth is currently unsupported.
+          Proxy requests through a socks5 proxy server.
+          Username/password auth is unsupported.
       --socks5-restrict <HOST1,HOST2>
           Proxy only the specified host(s).
           If not specified all requests will be proxied.
