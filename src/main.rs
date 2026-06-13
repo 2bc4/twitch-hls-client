@@ -20,7 +20,7 @@ fn main() -> Result<()> {
     Logger::init()?;
     debug!("\n{:#?}", Config::get());
 
-    let (writer, mut playlist) = {
+    let mut handler = {
         let conn = match Stream::new() {
             Ok(Stream::Variant(conn)) => conn,
             Ok(Stream::Passthrough(url)) => {
@@ -34,13 +34,10 @@ fn main() -> Result<()> {
             Err(e) => return Err(e),
         };
 
-        (Writer::new()?, Playlist::new(conn)?)
+        Handler::new(Writer::new()?, Playlist::new(conn)?)?
     };
 
-    let error = Handler::new(writer, &playlist)?
-        .run(&mut playlist)
-        .expect_err("Handler returned Ok");
-
+    let error = handler.run().expect_err("Handler returned Ok");
     if error.is::<OfflineError>() {
         info!("Stream ended, exiting...");
         return Ok(());

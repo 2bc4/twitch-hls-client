@@ -17,13 +17,13 @@ use crate::{
 };
 
 pub struct Handler {
+    playlist: Playlist,
     worker: Option<Worker>,
     has_dispatched: bool,
-    should_reset: bool,
 }
 
 impl Handler {
-    pub fn new(mut writer: Writer, playlist: &Playlist) -> Result<Self> {
+    pub fn new(mut writer: Writer, playlist: Playlist) -> Result<Self> {
         if let Some(url) = &playlist.header {
             let mut request = Request::new(Vec::new());
             request.call(Method::Get, url)?;
@@ -36,18 +36,19 @@ impl Handler {
         }
 
         Ok(Self {
+            playlist,
             worker: Some(Worker::spawn(Request::new(writer))?),
             has_dispatched: bool::default(),
-            should_reset: bool::default(),
         })
     }
 
-    pub fn run(&mut self, playlist: &mut Playlist) -> Result<()> {
+    pub fn run(&mut self) -> Result<()> {
         loop {
             let start = Instant::now();
-            playlist.reload()?;
+            self.playlist.reload()?;
 
-            let last_duration = playlist
+            let last_duration = self
+                .playlist
                 .last_duration()
                 .context("Failed to find last segment duration")?;
 
@@ -58,13 +59,14 @@ impl Handler {
                 continue;
             }
 
-            match playlist.segment_queue() {
+            let mut should_reset = false;
+            match self.playlist.segment_queue() {
                 QueueRange::Partial(ref mut segments) => {
                     for segment in segments {
                         debug!("Processing segment:\n{segment:?}");
                         match segment {
                             Segment::Normal(_, url) | Segment::Prefetch(url) => {
-                                self.dispatch(url)?;
+                                should_reset |= Self::dispatch(&mut self.worker, url)?;
                             }
                         }
                     }
@@ -82,10 +84,12 @@ impl Handler {
 
                     match newest {
                         Segment::Normal(duration, url) => {
-                            self.dispatch(url)?;
+                            should_reset = Self::dispatch(&mut self.worker, url)?;
                             duration.sleep(start.elapsed());
                         }
-                        Segment::Prefetch(url) => self.dispatch(url)?,
+                        Segment::Prefetch(url) => {
+                            should_reset = Self::dispatch(&mut self.worker, url)?;
+                        }
                     }
                 }
                 QueueRange::Empty => {
@@ -97,34 +101,31 @@ impl Handler {
                 }
             }
 
-            if self.should_reset {
-                playlist.reset();
+            if should_reset {
+                self.playlist.reset();
                 self.has_dispatched = false;
-                self.should_reset = false;
             }
         }
     }
 
-    fn dispatch(&mut self, url: &mut Url) -> Result<()> {
-        if !self
-            .worker
+    fn dispatch(worker: &mut Option<Worker>, url: &mut Url) -> Result<bool> {
+        if !worker
             .as_mut()
             .expect("Missing worker while sending URL")
             .send(mem::take(url))
         {
-            let mut request = self
-                .worker
+            let mut request = worker
                 .take()
                 .expect("Missing worker while joining")
                 .join()?;
 
             request.get_mut().wait_for_output()?;
 
-            self.worker = Some(Worker::spawn(request)?);
-            self.should_reset = true;
+            *worker = Some(Worker::spawn(request)?);
+            return Ok(true);
         }
 
-        Ok(())
+        Ok(false)
     }
 }
 
