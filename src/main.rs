@@ -19,6 +19,7 @@ use output::{Player, PlayerClosedError, Writer};
 fn main() -> Result<()> {
     Config::init()?;
     Logger::init()?;
+    http::load_certificates()?;
     debug!("\n{:#?}", Config::get());
 
     let conn = match Stream::new() {

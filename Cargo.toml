@@ -31,4 +31,4 @@ flate2 = "1.0"
 getrandom = { version = "0.2", features = ["std"] } # ring still uses 0.2
 log = { version = "0.4", features = ["std", "max_level_debug"] }
 rustls = { version = "0.23", default-features = false, features = ["std", "ring", "tls12", "logging"] }
-rustls-native-certs = "0.8"
+rustls-platform-verifier = "0.7"

@@ -5,13 +5,14 @@ use std::{
     mem,
     net::{SocketAddr, TcpStream, ToSocketAddrs},
     str,
-    sync::{Arc, LazyLock},
+    sync::{Arc, OnceLock},
     time::Duration,
 };
 
-use anyhow::{Result, bail, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use log::{debug, error};
-use rustls::{ClientConfig, ClientConnection, RootCertStore, StreamOwned};
+use rustls::{ClientConfig, ClientConnection, StreamOwned};
+use rustls_platform_verifier::ConfigVerifierExt;
 
 use super::{
     MAX_HEADERS_SIZE, Method, Scheme, StatusError, Url, decoder::Decoder, parse_status, proxy,
@@ -19,30 +20,21 @@ use super::{
 
 use crate::config::Config;
 
-static TLS_CONFIG: LazyLock<Arc<ClientConfig>> = LazyLock::new(|| {
+static TLS_CONFIG: OnceLock<Arc<ClientConfig>> = OnceLock::new();
+
+pub fn load_certificates() -> Result<()> {
     debug!("Loading TLS root certificates...");
-
-    let mut roots = RootCertStore::empty();
-    let res = rustls_native_certs::load_native_certs();
-
-    for error in res.errors {
-        error!("Failed to load certificates: {error}");
-    }
-
-    for cert in res.certs {
-        if let Err(e) = roots.add(cert) {
-            debug!("Invalid certificate: {e}");
-        }
-    }
-
-    let mut config = ClientConfig::builder()
-        .with_root_certificates(Arc::new(roots))
-        .with_no_client_auth();
+    let mut config = ClientConfig::with_platform_verifier()
+        .context("Failed to initialize TLS certificate store")?;
 
     config.alpn_protocols = vec![b"http/1.1".to_vec()];
 
-    Arc::new(config)
-});
+    TLS_CONFIG
+        .set(Arc::new(config))
+        .expect("TLS config already initialized");
+
+    Ok(())
+}
 
 pub struct Request<W: Write> {
     writer: W,
@@ -349,8 +341,13 @@ impl Transport {
         match url.scheme {
             Scheme::Http => Ok(Self::Unencrypted(sock)),
             Scheme::Https => {
-                let tls_conn =
-                    ClientConnection::new(TLS_CONFIG.clone(), host.to_owned().try_into()?)?;
+                let tls_conn = ClientConnection::new(
+                    TLS_CONFIG
+                        .get()
+                        .expect("TLS config not initialized")
+                        .clone(),
+                    host.to_owned().try_into()?,
+                )?;
 
                 Ok(Self::Tls(Box::new(StreamOwned::new(tls_conn, sock))))
             }

@@ -3,7 +3,7 @@ mod proxy;
 mod request;
 mod url;
 
-pub use request::{Request, TextRequest};
+pub use request::{Request, TextRequest, load_certificates};
 pub use url::{Scheme, Url};
 
 use std::fmt::{self, Display, Formatter};
