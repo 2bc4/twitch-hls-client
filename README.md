@@ -186,7 +186,7 @@ Or from [crates.io](https://crates.io/crates/twitch-hls-client):
 cargo install twitch-hls-client
 ```
 
-Building requires a C/C++ compiler for ring (TLS cryptographic primitives). You should prefer clang over gcc due to a gcc bug resulting in worse TLS performance.
+Building requires a C compiler for the `ring` dependency (TLS cryptographic primitives), which should be found automatically.
 
 You can further trim down and optimize the binary by building with `build-std` and `panic=immediate-abort`. This can be seen in the [release build action](https://github.com/2bc4/twitch-hls-client/blob/master/.github/workflows/release.yaml#L80).
 
