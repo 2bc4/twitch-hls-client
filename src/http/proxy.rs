@@ -5,6 +5,7 @@ use std::{
 };
 
 use anyhow::{Result, bail, ensure};
+use log::debug;
 
 use super::{MAX_HEADERS_SIZE, parse_status};
 
@@ -34,6 +35,7 @@ pub fn http_connect(mut sock: TcpStream, target_host: &str, target_port: u16) ->
             "HTTP proxy response exceeded {MAX_HEADERS_SIZE} bytes"
         );
     };
+    debug!("HTTP proxy response:\n{headers}");
 
     let status = parse_status(headers)?;
     ensure!(
