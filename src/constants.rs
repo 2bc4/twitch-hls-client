@@ -1,7 +1,7 @@
 pub const USER_AGENT: &str =
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:152.0) Gecko/20100101 Firefox/152.0";
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:154.0) Gecko/20100101 Firefox/154.0";
 
-pub const PLAYER_VERSION: &str = "1.49.0-rc.3";
+pub const PLAYER_VERSION: &str = "1.54.0-rc.1";
 
 pub const TWITCH_GQL_ENDPOINT: &str = "https://gql.twitch.tv/gql";
 pub const TWITCH_OAUTH_ENDPOINT: &str = "https://id.twitch.tv/oauth2/validate";
